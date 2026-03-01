@@ -1,0 +1,163 @@
+using EdgeGateway.Application.Services;
+using EdgeGateway.Domain.Entities;
+using EdgeGateway.WebApi.DTOs.Request;
+using EdgeGateway.WebApi.DTOs.Response;
+using Microsoft.AspNetCore.Mvc;
+
+namespace EdgeGateway.WebApi.Controllers;
+
+/// <summary>
+/// 发送通道管理接口
+/// 提供通道的增删改查，以及数据点绑定操作
+/// </summary>
+[ApiController]
+[Route("api/[controller]")]
+[Produces("application/json")]
+public class ChannelsController : ControllerBase
+{
+    private readonly DeviceManagementService _deviceService;
+    private readonly ILogger<ChannelsController> _logger;
+
+    public ChannelsController(DeviceManagementService deviceService, ILogger<ChannelsController> logger)
+    {
+        _deviceService = deviceService;
+        _logger        = logger;
+    }
+
+    /// <summary>获取所有发送通道</summary>
+    [HttpGet]
+    [ProducesResponseType(typeof(ApiResponse<List<ChannelResponse>>), 200)]
+    public async Task<IActionResult> GetAll()
+    {
+        var channels = await _deviceService.GetAllChannelsAsync();
+        var result   = channels.Select(MapToResponse).ToList();
+        return Ok(ApiResponse<List<ChannelResponse>>.Ok(result, $"共 {result.Count} 个通道"));
+    }
+
+    /// <summary>新增发送通道</summary>
+    [HttpPost]
+    [ProducesResponseType(typeof(ApiResponse<ChannelResponse>), 201)]
+    [ProducesResponseType(typeof(ApiResponse), 400)]
+    public async Task<IActionResult> Create([FromBody] CreateChannelRequest req)
+    {
+        var channel = new Channel
+        {
+            Name        = req.Name,
+            Code        = req.Code,
+            Description = req.Description,
+            Protocol    = req.Protocol,
+            Endpoint    = req.Endpoint,
+            ConfigJson  = req.ConfigJson,
+            IsEnabled   = req.IsEnabled
+        };
+
+        var created = await _deviceService.CreateChannelAsync(channel);
+        _logger.LogInformation("新增通道: {Name} (ID={Id})", created.Name, created.Id);
+
+        return CreatedAtAction(nameof(GetAll), null,
+            ApiResponse<ChannelResponse>.Ok(MapToResponse(created), "通道创建成功"));
+    }
+
+    /// <summary>
+    /// 批量绑定数据点到通道
+    /// 建立"数据点 → 通道"的发送映射关系
+    /// </summary>
+    /// <param name="channelId">目标通道ID</param>
+    /// <param name="req">包含数据点ID列表</param>
+    [HttpPost("{channelId:int}/bind-datapoints")]
+    [ProducesResponseType(typeof(ApiResponse), 200)]
+    [ProducesResponseType(typeof(ApiResponse), 404)]
+    public async Task<IActionResult> BindDataPoints(int channelId, [FromBody] BindDataPointsRequest req)
+    {
+        await _deviceService.BindDataPointsToChannelAsync(channelId, req.DataPointIds);
+        _logger.LogInformation("通道 ID={ChannelId} 绑定 {Count} 个数据点", channelId, req.DataPointIds.Count);
+        return Ok(ApiResponse.Ok($"成功绑定 {req.DataPointIds.Count} 个数据点"));
+    }
+
+    /// <summary>
+    /// 为通道添加单个数据点映射（支持设置别名）
+    /// </summary>
+    [HttpPost("{channelId:int}/mappings")]
+    [ProducesResponseType(typeof(ApiResponse), 200)]
+    public async Task<IActionResult> AddMapping(int channelId, [FromBody] AddMappingRequest req)
+    {
+        await _deviceService.BindDataPointsToChannelAsync(channelId, [req.DataPointId]);
+        return Ok(ApiResponse.Ok("映射关系添加成功"));
+    }
+
+    /// <summary>获取通道的所有数据点映射关系</summary>
+    [HttpGet("{channelId:int}/mappings")]
+    [ProducesResponseType(typeof(ApiResponse<List<MappingResponse>>), 200)]
+    public async Task<IActionResult> GetMappings(int channelId)
+    {
+        var mappings = await _deviceService.GetChannelMappingsAsync(channelId);
+        var result   = mappings.Select(m => new MappingResponse
+        {
+            Id              = m.Id,
+            ChannelId       = m.ChannelId,
+            ChannelName     = m.Channel?.Name ?? string.Empty,
+            DataPointId     = m.DataPointId,
+            DataPointTag    = m.DataPoint?.Tag ?? string.Empty,
+            DataPointName   = m.DataPoint?.Name ?? string.Empty,
+            AliasName       = m.AliasName,
+            IsEnabled       = m.IsEnabled,
+            CreatedAt       = m.CreatedAt
+        }).ToList();
+
+        return Ok(ApiResponse<List<MappingResponse>>.Ok(result, $"共 {result.Count} 条映射"));
+    }
+
+    /// <summary>删除通道数据点映射</summary>
+    [HttpDelete("{channelId:int}/mappings/{mappingId:int}")]
+    [ProducesResponseType(typeof(ApiResponse), 200)]
+    public async Task<IActionResult> DeleteMapping(int channelId, int mappingId)
+    {
+        await _deviceService.DeleteMappingAsync(mappingId);
+        return Ok(ApiResponse.Ok("映射关系删除成功"));
+    }
+
+    /// <summary>启用/停用发送通道</summary>
+    [HttpPatch("{channelId:int}/toggle")]
+    [ProducesResponseType(typeof(ApiResponse), 200)]
+    [ProducesResponseType(typeof(ApiResponse), 404)]
+    public async Task<IActionResult> Toggle(int channelId)
+    {
+        var channel = await _deviceService.GetAllChannelsAsync();
+        var target = channel.FirstOrDefault(c => c.Id == channelId);
+        
+        if (target == null)
+            return NotFound(ApiResponse.Fail($"通道 ID={channelId} 不存在"));
+
+        if (target.IsEnabled)
+        {
+            // 当前是启用状态，执行停用操作
+            await _deviceService.DisableChannelAsync(channelId);
+            _logger.LogInformation("通道已停用：{Name} (ID={Id})", target.Name, channelId);
+            return Ok(ApiResponse.Ok("通道已停用，发送服务已断开"));
+        }
+        else
+        {
+            // 当前是停用状态，执行启用操作
+            await _deviceService.EnableChannelAsync(channelId);
+            _logger.LogInformation("通道已启用：{Name} (ID={Id})", target.Name, channelId);
+            return Ok(ApiResponse.Ok("通道已启用，发送服务已启动"));
+        }
+    }
+
+    // ==================== 映射方法 ====================
+
+    private static ChannelResponse MapToResponse(Channel c) => new()
+    {
+        Id                   = c.Id,
+        Name                 = c.Name,
+        Code                 = c.Code,
+        Description          = c.Description,
+        Protocol             = c.Protocol.ToString(),
+        ProtocolValue        = (int)c.Protocol,
+        Endpoint             = c.Endpoint,
+        ConfigJson           = c.ConfigJson,
+        IsEnabled            = c.IsEnabled,
+        MappedDataPointCount = c.DataPointMappings.Count,
+        CreatedAt            = c.CreatedAt
+    };
+}

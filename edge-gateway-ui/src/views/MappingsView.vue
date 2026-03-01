@@ -1,0 +1,371 @@
+﻿<template>
+  <div class="mappings-view page-enter">
+    <!-- 页面头部 -->
+    <div class="page-header">
+      <div class="header-left">
+        <el-button text :icon="ArrowLeft" @click="router.back()" class="back-btn">返回通道列表</el-button>
+        <div class="title-block">
+          <h1 class="page-title">数据点映射</h1>
+          <div class="channel-tag mono">{{ route.query.channelName || `通道 #${route.params.id}` }}</div>
+        </div>
+      </div>
+      <el-button type="primary" :icon="Plus" @click="openBindDialog">绑定数据点</el-button>
+    </div>
+
+    <!-- 说明横幅 -->
+    <div class="info-banner">
+      <el-icon><InfoFilled /></el-icon>
+      <span>选择需要通过此通道发出的数据点。采集到的数据将按下方映射关系发送，可为每个数据点设置<strong>别名</strong>以适配目标系统的字段名。</span>
+    </div>
+
+    <!-- 已绑定映射列表 -->
+    <div class="table-wrap">
+      <el-table :data="mappings" v-loading="loading" row-key="id">
+        <el-table-column label="数据点 Tag" min-width="220">
+          <template #default="{ row }">
+            <span class="mono tag-text">{{ row.dataPointTag }}</span>
+          </template>
+        </el-table-column>
+
+        <el-table-column prop="dataPointName" label="名称" width="130" />
+
+        <el-table-column label="发送字段名" min-width="200">
+          <template #default="{ row }">
+            <div class="alias-cell">
+              <span class="mono alias-text">
+                {{ row.aliasName || row.dataPointTag }}
+              </span>
+              <el-tag v-if="row.aliasName" size="small" type="warning" style="margin-left:8px">别名</el-tag>
+            </div>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="状态" width="90" align="center">
+          <template #default="{ row }">
+            <span class="badge" :class="row.isEnabled ? 'good' : 'bad'">
+              {{ row.isEnabled ? 'ON' : 'OFF' }}
+            </span>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="绑定时间" width="160">
+          <template #default="{ row }">
+            <span class="mono time-text">{{ formatDateTime(row.createdAt) }}</span>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="操作" width="100" align="right">
+          <template #default="{ row }">
+            <el-button size="small" text type="danger" @click="confirmUnbind(row)">
+              <el-icon><Delete /></el-icon> 解绑
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <div v-if="mappings.length === 0 && !loading" class="empty-state">
+        <el-icon size="48" color="var(--border-muted)"><Connection /></el-icon>
+        <div style="margin-top:12px;color:var(--text-muted);font-size:14px">尚未绑定任何数据点</div>
+        <el-button type="primary" size="small" style="margin-top:12px" @click="openBindDialog">立即绑定</el-button>
+      </div>
+    </div>
+
+    <!-- 绑定数据点弹窗 -->
+    <el-dialog v-model="bindDialogVisible" title="绑定数据点到通道" width="700px" destroy-on-close>
+      <div class="bind-layout">
+        <!-- 左：设备树选择数据点 -->
+        <div class="device-selector">
+          <div class="selector-title">选择数据点</div>
+          <el-input v-model="dpSearch" placeholder="搜索..." prefix-icon="Search" size="small" clearable />
+
+          <div class="device-tree">
+            <div v-for="dev in filteredDeviceTree" :key="dev.id" class="dev-group">
+              <div class="dev-group-title">
+                <el-checkbox
+                  :model-value="isDeviceAllSelected(dev)"
+                  :indeterminate="isDeviceIndeterminate(dev)"
+                  @change="toggleDevice(dev)"
+                />
+                <el-icon size="13"><Monitor /></el-icon>
+                <span>{{ dev.name }}</span>
+                <span class="mono" style="color:var(--text-muted);font-size:11px">{{ dev.code }}</span>
+              </div>
+              <div class="dp-list">
+                <div
+                  v-for="dp in dev.dataPoints" :key="dp.id"
+                  class="dp-item"
+                  :class="{ already: isMapped(dp.id) }"
+                >
+                  <el-checkbox
+                    :model-value="selectedIds.has(dp.id)"
+                    :disabled="isMapped(dp.id)"
+                    @change="(v) => toggleDp(dp.id, v)"
+                  />
+                  <div class="dp-info">
+                    <span class="mono" style="color:var(--cyan);font-size:12px">{{ dp.tag }}</span>
+                    <span v-if="dp.unit" style="color:var(--text-muted);font-size:11px">· {{ dp.unit }}</span>
+                    <el-tag v-if="isMapped(dp.id)" size="small" type="info" style="margin-left:6px;font-size:10px">已绑定</el-tag>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-if="filteredDeviceTree.length === 0" class="empty-hint">无可用数据点</div>
+          </div>
+        </div>
+
+        <!-- 右：已选预览 -->
+        <div class="selected-preview">
+          <div class="selector-title">已选<span class="mono" style="color:var(--cyan)">{{ selectedIds.size }}</span> 个</div>
+          <div class="selected-list">
+            <div v-for="id in [...selectedIds]" :key="id" class="selected-item">
+              <span class="mono" style="font-size:12px;color:var(--text-secondary)">{{ getTagById(id) }}</span>
+              <el-button size="small" text circle @click="selectedIds.delete(id)">
+                <el-icon size="12"><Close /></el-icon>
+              </el-button>
+            </div>
+            <div v-if="selectedIds.size === 0" class="empty-hint">从左侧选择数据点</div>
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <el-button @click="bindDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="binding" :disabled="selectedIds.size === 0" @click="submitBind">
+          绑定 {{ selectedIds.size > 0 ? `(${selectedIds.size})` : '' }}
+        </el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessageBox, ElMessage } from 'element-plus'
+import { Plus, Delete, ArrowLeft, Connection, InfoFilled, Monitor, Close } from '@element-plus/icons-vue'
+import { getMappings, bindDataPoints, deleteMapping } from '@/api/channel'
+import { getDevices, getDataPoints } from '@/api/device'
+import { formatDateTime } from '@/api/constants'
+
+type MappingItem = {
+  id: number
+  dataPointId: number
+  dataPointTag: string
+  dataPointName: string
+  aliasName?: string
+  isEnabled: boolean
+  createdAt?: string
+}
+
+type DataPointItem = {
+  id: number
+  tag: string
+  name: string
+  unit?: string
+  isEnabled: boolean
+}
+
+type DeviceNode = {
+  id: number
+  name: string
+  code: string
+  dataPoints: DataPointItem[]
+}
+
+const route = useRoute()
+const router = useRouter()
+const channelId = computed(() => Number(route.params.id))
+
+const loading = ref(false)
+const mappings = ref<MappingItem[]>([])
+
+const bindDialogVisible = ref(false)
+const binding = ref(false)
+const dpSearch = ref('')
+const deviceTree = ref<DeviceNode[]>([])
+const selectedIds = ref(new Set<number>())
+const mappedIds = computed(() => new Set(mappings.value.map((item) => item.dataPointId)))
+
+const isMapped = (id: number) => mappedIds.value.has(id)
+
+const filteredDeviceTree = computed(() => {
+  if (!dpSearch.value) return deviceTree.value
+
+  return deviceTree.value
+    .map((device) => ({
+      ...device,
+      dataPoints: device.dataPoints.filter(
+        (dp) =>
+          dp.tag.toLowerCase().includes(dpSearch.value.toLowerCase()) ||
+          dp.name.toLowerCase().includes(dpSearch.value.toLowerCase())
+      )
+    }))
+    .filter((device) => device.dataPoints.length > 0)
+})
+
+const isDeviceAllSelected = (device: DeviceNode) =>
+  device.dataPoints.every((dp) => isMapped(dp.id) || selectedIds.value.has(dp.id))
+
+const isDeviceIndeterminate = (device: DeviceNode) => {
+  const selectable = device.dataPoints.filter((dp) => !isMapped(dp.id))
+  const selectedCount = selectable.filter((dp) => selectedIds.value.has(dp.id)).length
+  return selectedCount > 0 && selectedCount < selectable.length
+}
+
+const toggleDevice = (device: DeviceNode) => {
+  const selectable = device.dataPoints.filter((dp) => !isMapped(dp.id))
+  if (isDeviceAllSelected(device)) {
+    selectable.forEach((dp) => selectedIds.value.delete(dp.id))
+  } else {
+    selectable.forEach((dp) => selectedIds.value.add(dp.id))
+  }
+}
+
+const toggleDp = (id: number, checked: boolean) => {
+  if (checked) selectedIds.value.add(id)
+  else selectedIds.value.delete(id)
+}
+
+const getTagById = (id: number) => {
+  for (const device of deviceTree.value) {
+    const dp = device.dataPoints.find((item) => item.id === id)
+    if (dp) return dp.tag
+  }
+  return String(id)
+}
+
+const fetchMappings = async () => {
+  loading.value = true
+  try {
+    const res = await getMappings(channelId.value)
+    mappings.value = ((res as { data?: MappingItem[] })?.data ?? []) as MappingItem[]
+  } finally {
+    loading.value = false
+  }
+}
+
+const openBindDialog = async () => {
+  selectedIds.value = new Set<number>()
+  dpSearch.value = ''
+
+  const devRes = await getDevices()
+  const devList = ((devRes as { data?: Array<{ id: number; name: string; code: string }> })?.data ?? []) as Array<{
+    id: number
+    name: string
+    code: string
+  }>
+
+  deviceTree.value = await Promise.all(
+    devList.map(async (device) => {
+      const dpRes = await getDataPoints(device.id)
+      const dataPoints = ((dpRes as { data?: DataPointItem[] })?.data ?? []) as DataPointItem[]
+      return {
+        ...device,
+        dataPoints: dataPoints.filter((dp) => dp.isEnabled)
+      }
+    })
+  )
+
+  bindDialogVisible.value = true
+}
+
+const submitBind = async () => {
+  if (selectedIds.value.size === 0) return
+
+  binding.value = true
+  try {
+    await bindDataPoints(channelId.value, [...selectedIds.value])
+    ElMessage.success(`成功绑定 ${selectedIds.value.size} 个数据点`)
+    bindDialogVisible.value = false
+    fetchMappings()
+  } finally {
+    binding.value = false
+  }
+}
+
+const confirmUnbind = (row: MappingItem) => {
+  ElMessageBox.confirm(`确定要解绑数据点 "${row.dataPointTag}" 吗？`, '解绑确认', {
+    type: 'warning',
+    confirmButtonText: '解绑',
+    cancelButtonText: '取消'
+  })
+    .then(async () => {
+      await deleteMapping(channelId.value, row.id)
+      ElMessage.success('解绑成功')
+      fetchMappings()
+    })
+    .catch(() => {})
+}
+
+onMounted(fetchMappings)
+</script>
+
+<style scoped>
+.page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+.header-left { display:flex; align-items:center; gap:14px; }
+.back-btn    { color:var(--text-muted) !important; padding:0 !important; }
+.title-block { display:flex; align-items:baseline; gap:12px; }
+.page-title  { font-size:22px; font-weight:800; color:var(--text-primary); }
+.channel-tag { font-size:12px; color:var(--cyan); background:var(--cyan-dim); padding:2px 10px; border-radius:10px; border:1px solid rgba(56,220,196,0.25); }
+
+.info-banner {
+  display:flex; align-items:center; gap:10px;
+  background:rgba(66,153,225,0.08); border:1px solid rgba(66,153,225,0.2);
+  border-radius:var(--radius); padding:10px 16px; margin-bottom:16px;
+  font-size:13px; color:var(--text-secondary);
+}
+
+.table-wrap { background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:var(--radius-lg); overflow:hidden; }
+.tag-text  { font-size:13px; color:var(--cyan); }
+.alias-cell { display:flex; align-items:center; }
+.alias-text { font-size:13px; }
+.time-text  { font-size:11px; color:var(--text-muted); }
+
+.empty-state { display:flex; flex-direction:column; align-items:center; padding:48px 20px; }
+
+/* 绑定弹窗布局 */
+.bind-layout { display:grid; grid-template-columns:1fr 220px; gap:16px; max-height:480px; }
+.device-selector, .selected-preview {
+  display:flex; flex-direction:column; gap:10px;
+  border:1px solid var(--border-subtle); border-radius:var(--radius); padding:12px;
+  overflow:hidden;
+}
+.selector-title { font-size:12px; font-weight:700; color:var(--text-muted); letter-spacing:0.06em; text-transform:uppercase; }
+.device-tree, .selected-list { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:6px; }
+
+.dev-group { }
+.dev-group-title {
+  display:flex; align-items:center; gap:8px;
+  padding:6px 4px; font-size:13px; font-weight:700; color:var(--text-primary);
+  border-bottom:1px solid var(--border-subtle); margin-bottom:4px;
+}
+.dp-list { display:flex; flex-direction:column; gap:2px; padding-left:12px; }
+.dp-item {
+  display:flex; align-items:center; gap:8px;
+  padding:5px 8px; border-radius:4px; transition:background 0.15s;
+}
+.dp-item:hover { background:var(--bg-hover); }
+.dp-item.already { opacity:0.5; }
+.dp-info { display:flex; align-items:center; gap:6px; flex:1; }
+
+.selected-item {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:5px 8px; border-radius:4px; background:var(--bg-hover);
+}
+.empty-hint { font-size:12px; color:var(--text-muted); text-align:center; padding:20px; }
+
+/* 弹窗样式修复 */
+:deep(.el-dialog) { 
+  background: var(--bg-card) !important; 
+  border: 1px solid var(--border-muted) !important;
+  border-radius: var(--radius-lg) !important;
+}
+:deep(.el-dialog__header) { border-bottom: 1px solid var(--border-subtle); }
+:deep(.el-dialog__title) { color: var(--text-primary) !important; }
+:deep(.el-dialog__body) { color: var(--text-primary); }
+:deep(.el-dialog__footer) { border-top: 1px solid var(--border-subtle); }
+:deep(.el-input__wrapper) { background: var(--bg-base) !important; border-color: var(--border-muted) !important; }
+:deep(.el-checkbox__label) { color: var(--text-primary) !important; }
+:deep(.el-checkbox__input.is-checked .el-checkbox__inner) { background-color: var(--cyan) !important; border-color: var(--cyan) !important; }
+:deep(.el-checkbox__inner) { background-color: var(--bg-base) !important; border-color: var(--border-muted) !important; }
+</style>

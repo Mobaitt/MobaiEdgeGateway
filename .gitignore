@@ -1,0 +1,59 @@
+﻿# Visual Studio / .NET
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.nupkg
+*.snk
+[Dd]efault*.rd.xml
+*.pdb
+*.dll
+*.exe
+
+# Visual Studio Code
+.vscode/
+
+# Rider / JetBrains
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Node.js / npm
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Vite / Frontend build
+dist/
+build/
+*.local
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test results
+[Tt]est[Rr]esult*/
+*.trx
+coverage/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
