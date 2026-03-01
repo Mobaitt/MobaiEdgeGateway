@@ -2,6 +2,7 @@ using EdgeGateway.Application.Services;
 using EdgeGateway.Domain.Enums;
 using EdgeGateway.Domain.Interfaces;
 using EdgeGateway.Infrastructure.Data;
+using EdgeGateway.Infrastructure.Http;
 using EdgeGateway.Infrastructure.Repositories;
 using EdgeGateway.Infrastructure.Strategies.Collection;
 using EdgeGateway.Infrastructure.Strategies.Send;
@@ -49,6 +50,10 @@ public static class ServiceCollectionExtensions
 
         // ========== WebSocket 连接管理器（单例） ==========
         services.AddSingleton<WebSocketConnectionManager>();
+
+        // ========== HTTP 监听服务（单例，供 HTTP 服务端模式使用） ==========
+        services.AddSingleton<HttpListenerService>();
+        services.AddSingleton<IHttpListenerService>(sp => sp.GetRequiredService<HttpListenerService>());
 
         // ========== 策略注册器（工厂） ==========
         // 采集策略注册器：协议枚举 → 策略类型

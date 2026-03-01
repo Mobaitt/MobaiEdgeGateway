@@ -8,8 +8,11 @@ namespace EdgeGateway.Domain.Interfaces;
 /// </summary>
 public interface IChannelRepository
 {
-    /// <summary>根据ID获取通道（含数据点映射导航属性）</summary>
+    /// <summary>根据 ID 获取通道（含数据点映射导航属性）</summary>
     Task<Channel?> GetByIdAsync(int id);
+
+    /// <summary>根据 ID 获取通道（无跟踪，用于获取原始值）</summary>
+    Task<Channel?> GetByIdNoTrackingAsync(int id);
 
     /// <summary>获取所有通道</summary>
     Task<IEnumerable<Channel>> GetAllAsync();

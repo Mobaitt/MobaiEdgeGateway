@@ -206,14 +206,30 @@ public class DeviceManagementService
     /// <summary>更新发送通道</summary>
     public async Task UpdateChannelAsync(Channel channel)
     {
+        // 在更新之前获取旧通道配置（用于对比 endpoint 变化）
+        // 使用 AsNoTracking 确保获取的是原始值，不受 EF Core 跟踪影响
+        var oldChannel = await _channelRepo.GetByIdNoTrackingAsync(channel.Id);
+        var oldEndpoint = oldChannel?.Endpoint;
+        var oldProtocol = oldChannel?.Protocol;
+        
+        _logger.LogInformation("更新发送通道：{ChannelName} (ID={Id}), 旧 Endpoint={OldEndpoint}, 新 Endpoint={NewEndpoint}", 
+            channel.Name, channel.Id, oldEndpoint, channel.Endpoint);
+
         await _channelRepo.UpdateAsync(channel);
-        _logger.LogInformation("更新发送通道：{ChannelName} (ID={Id})", channel.Name, channel.Id);
 
         // 如果通道已启用，重新初始化发送策略
         if (channel.IsEnabled)
         {
-            await _sendService.DisableChannelAsync(channel.Id);
-            await _sendService.EnableChannelAsync(channel.Id);
+            // 如果是 HTTP 服务端模式且路径变化，需要重新注册端点
+            if (channel.Protocol == Domain.Enums.SendProtocol.Http)
+            {
+                await _sendService.ReconfigureChannelEndpointAsync(channel.Id, oldEndpoint);
+            }
+            else
+            {
+                await _sendService.DisableChannelAsync(channel.Id);
+                await _sendService.EnableChannelAsync(channel.Id);
+            }
         }
     }
 

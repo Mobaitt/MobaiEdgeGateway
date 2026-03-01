@@ -95,16 +95,41 @@
             采集数据会自动推送给订阅的客户端。
           </div>
         </el-form-item>
+
+        <!-- HTTP 模式选择 -->
+        <el-form-item v-if="form.protocol === SendProtocol.Http.value" label="运行模式">
+          <el-radio-group v-model="httpMode">
+            <el-radio :label="'client'">客户端模式（主动推送）</el-radio>
+            <el-radio :label="'server'">服务端模式（等待采集）</el-radio>
+          </el-radio-group>
+        </el-form-item>
+
+        <!-- HTTP 模式说明 -->
+        <el-form-item v-if="form.protocol === SendProtocol.Http.value && httpMode === 'client'" label="说明">
+          <div style="font-size:12px;color:var(--text-muted);line-height:1.6">
+            <el-icon size="14"><InfoFilled /></el-icon>
+            作为 HTTP 客户端，主动将数据 <strong>POST</strong> 到目标接口。
+          </div>
+        </el-form-item>
+        <el-form-item v-if="form.protocol === SendProtocol.Http.value && httpMode === 'server'" label="说明">
+          <div style="font-size:12px;color:var(--text-muted);line-height:1.6">
+            <el-icon size="14"><InfoFilled /></el-icon>
+            作为 HTTP 服务端，等待客户端来<strong>GET</strong> 数据。<br/>
+            <strong>复用当前 Web 服务器端口（5000）</strong>，无需额外配置。<br/>
+            数据访问地址：<strong class="mono">http://localhost:5000/api/http-data/xxx</strong>
+          </div>
+        </el-form-item>
+
         <el-form-item label="Endpoint" prop="endpoint">
-          <el-input v-model="form.endpoint" :placeholder="getEndpointPlaceholder(form.protocol)" />
+          <el-input v-model="form.endpoint" :placeholder="getEndpointPlaceholder(form.protocol, httpMode)" />
         </el-form-item>
         <el-form-item label="配置 JSON">
           <el-input
             v-model="form.configJson" type="textarea" :rows="4"
-            :placeholder="getConfigPlaceholder(form.protocol)"
+            :placeholder="getConfigPlaceholder(form.protocol, httpMode)"
             class="mono-input"
           />
-          <div style="font-size:11px;color:var(--text-muted);margin-top:4px">{{ getConfigHint(form.protocol) }}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px">{{ getConfigHint(form.protocol, httpMode) }}</div>
         </el-form-item>
         <el-form-item label="是否启用">
           <el-switch v-model="form.isEnabled" active-color="#38dcc4" />
@@ -134,6 +159,7 @@ type ChannelItem = {
   protocol: string
   protocolValue: number
   endpoint: string
+  configJson?: string
   mappedDataPointCount: number
   isEnabled: boolean
   createdAt?: string
@@ -156,6 +182,7 @@ const channels = ref<ChannelItem[]>([])
 const dialogVisible = ref(false)
 const submitting = ref(false)
 const editingChannel = ref<ChannelItem | null>(null)
+const httpMode = ref<'client' | 'server'>('client')
 const formRef = ref<any>()
 const form = ref<ChannelForm>({
   name: '',
@@ -179,17 +206,23 @@ const getProtoColor = (value: number) => {
   return protocol?.color ?? '#8fa5c5'
 }
 
-const getEndpointPlaceholder = (protocol: number | null) => {
+const getEndpointPlaceholder = (protocol: number | null, mode?: 'client' | 'server') => {
   if (protocol === SendProtocol.Mqtt.value) return 'mqtt://host:1883'
-  if (protocol === SendProtocol.Http.value) return 'https://api.example.com/data'
+  if (protocol === SendProtocol.Http.value) {
+    if (mode === 'server') return '/api/http-data/data (数据访问路径)'
+    return 'https://api.example.com/data/upload'
+  }
   if (protocol === SendProtocol.WebSocket.value) return 'ws://localhost:8080/ws 或 wss://api.example.com/ws'
   if (protocol === SendProtocol.LocalFile.value) return './output/data.json'
   return '请输入端点地址'
 }
 
-const getConfigPlaceholder = (protocol: number | null) => {
+const getConfigPlaceholder = (protocol: number | null, mode?: 'client' | 'server') => {
   if (protocol === SendProtocol.Mqtt.value) return '{"topic":"edge/data","clientId":"device01"}'
-  if (protocol === SendProtocol.Http.value) return '{"token":"Bearer xxx","timeout":5000}'
+  if (protocol === SendProtocol.Http.value) {
+    if (mode === 'server') return '{}'
+    return '{"token":"Bearer xxx","timeout":5000}'
+  }
   if (protocol === SendProtocol.WebSocket.value) {
     return '{"subscribeTopic":"device/data","heartbeatInterval":30000}'
   }
@@ -197,9 +230,12 @@ const getConfigPlaceholder = (protocol: number | null) => {
   return '配置 JSON（可选）'
 }
 
-const getConfigHint = (protocol: number | null) => {
+const getConfigHint = (protocol: number | null, mode?: 'client' | 'server') => {
   if (protocol === SendProtocol.Mqtt.value) return 'MQTT：topic(主题), clientId(客户端 ID), username, password'
-  if (protocol === SendProtocol.Http.value) return 'HTTP：token(认证令牌), timeout(超时毫秒), method'
+  if (protocol === SendProtocol.Http.value) {
+    if (mode === 'server') return 'HTTP 服务端：无需配置，自动使用 Web 端口'
+    return 'HTTP 客户端：token(认证令牌), timeout(超时毫秒), method'
+  }
   if (protocol === SendProtocol.WebSocket.value) return 'WebSocket：subscribeTopic(订阅主题), heartbeatInterval(心跳间隔 ms)'
   if (protocol === SendProtocol.LocalFile.value) return '本地文件：format(json/csv), path(保存路径)'
   return '根据所选协议填写相应配置'
@@ -217,6 +253,7 @@ const fetchChannels = async () => {
 
 const openCreate = () => {
   editingChannel.value = null
+  httpMode.value = 'client'
   form.value = {
     name: '',
     code: '',
@@ -231,13 +268,24 @@ const openCreate = () => {
 
 const openEdit = (channel: ChannelItem) => {
   editingChannel.value = channel
+  // 从配置 JSON 中读取 mode
+  try {
+    if (channel.configJson) {
+      const config = JSON.parse(channel.configJson)
+      httpMode.value = config.mode === 'server' ? 'server' : 'client'
+    } else {
+      httpMode.value = 'client'
+    }
+  } catch {
+    httpMode.value = 'client'
+  }
   form.value = {
     name: channel.name,
     code: channel.code,
     description: channel.description || '',
     protocol: channel.protocolValue,
     endpoint: channel.endpoint,
-    configJson: '',
+    configJson: channel.configJson || '',
     isEnabled: channel.isEnabled
   }
   dialogVisible.value = true
@@ -252,6 +300,15 @@ const buildConfigJson = () => {
     }
   } catch {
     // 如果解析失败，使用空对象
+  }
+
+  // 如果是 HTTP 协议，添加 mode 配置
+  if (form.value.protocol === SendProtocol.Http.value) {
+    config.mode = httpMode.value
+    // 服务端模式且配置了端口才添加 port
+    if (httpMode.value === 'server' && config.port) {
+      config.port = config.port
+    }
   }
 
   return JSON.stringify(config, null, 2)

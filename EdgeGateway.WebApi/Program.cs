@@ -1,5 +1,6 @@
 using EdgeGateway.Application.Services;
 using EdgeGateway.Host;
+using EdgeGateway.Infrastructure.Http;
 using EdgeGateway.Infrastructure.WebSocket;
 using EdgeGateway.WebApi.Middleware;
 using Microsoft.OpenApi.Models;
@@ -77,6 +78,24 @@ app.UseWebSockets();
 app.UseWebSocketServer();
 
 app.UseRouting();
+
+// HTTP 服务端模式数据端点中间件（必须在 MapControllers 之前）
+// 拦截所有以 /api/http-data 开头的请求
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path.Value;
+    
+    // 检查是否是 HTTP 服务端模式的请求
+    if (!string.IsNullOrEmpty(path) && path.StartsWith("/api/http-data", StringComparison.OrdinalIgnoreCase))
+    {
+        var httpListenerService = context.RequestServices.GetRequiredService<HttpListenerService>();
+        await httpListenerService.HandleRequestAsync(context);
+        return;
+    }
+    
+    await next();
+});
+
 app.MapControllers();
 
 // 根路径重定向到Swagger

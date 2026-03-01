@@ -1,5 +1,6 @@
 using EdgeGateway.Domain.Entities;
 using EdgeGateway.Domain.Interfaces;
+using EdgeGateway.Infrastructure.Strategies.Send;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -205,6 +206,43 @@ public class DataSendService
             Quality = DataQuality.Uncertain,
             Timestamp = DateTime.UtcNow
         };
+    }
+
+    /// <summary>
+    /// 重新配置通道的端点路径（用于 HTTP 服务端模式路径更新）
+    /// </summary>
+    public async Task ReconfigureChannelEndpointAsync(int channelId, string? oldEndpoint)
+    {
+        _logger.LogInformation("重新配置通道端点：ChannelId={ChannelId}, OldEndpoint={OldEndpoint}", channelId, oldEndpoint);
+        
+        if (!_strategyCache.TryGetValue(channelId, out var strategy))
+        {
+            _logger.LogWarning("通道策略不在缓存中：ChannelId={ChannelId}", channelId);
+            return;
+        }
+
+        _logger.LogInformation("通道策略类型：{StrategyType}", strategy.GetType().Name);
+
+        if (strategy is HttpSendStrategy httpStrategy)
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var channelRepo = scope.ServiceProvider.GetRequiredService<IChannelRepository>();
+            var channel = await channelRepo.GetByIdAsync(channelId);
+
+            if (channel != null)
+            {
+                _logger.LogInformation("调用 HTTP 策略重新配置：Channel={ChannelName}, Endpoint={Endpoint}", channel.Name, channel.Endpoint);
+                await httpStrategy.ReconfigureEndpointAsync(channel, oldEndpoint ?? string.Empty, CancellationToken.None);
+            }
+            else
+            {
+                _logger.LogWarning("通道不存在：ChannelId={ChannelId}", channelId);
+            }
+        }
+        else
+        {
+            _logger.LogWarning("策略不是 HTTP 类型：{StrategyType}", strategy.GetType().Name);
+        }
     }
 
     /// <summary>

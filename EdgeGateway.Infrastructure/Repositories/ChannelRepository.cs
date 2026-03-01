@@ -21,8 +21,18 @@ public class ChannelRepository : IChannelRepository
             .FirstOrDefaultAsync(c => c.Id == id);
 
     /// <inheritdoc/>
+    /// <summary>无跟踪查询，用于获取原始值进行比较</summary>
+    public async Task<Channel?> GetByIdNoTrackingAsync(int id) =>
+        await _db.Channels
+            .AsNoTracking()
+            .Include(c => c.DataPointMappings)
+            .FirstOrDefaultAsync(c => c.Id == id);
+
+    /// <inheritdoc/>
     public async Task<IEnumerable<Channel>> GetAllAsync() =>
-        await _db.Channels.ToListAsync();
+        await _db.Channels
+            .Include(c => c.DataPointMappings)
+            .ToListAsync();
 
     /// <inheritdoc/>
     public async Task<IEnumerable<Channel>> GetEnabledAsync() =>

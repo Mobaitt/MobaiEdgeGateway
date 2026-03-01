@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using EdgeGateway.Domain.Entities;
 using EdgeGateway.Domain.Interfaces;
+using EdgeGateway.Infrastructure.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -9,41 +10,59 @@ namespace EdgeGateway.Infrastructure.Strategies.Send;
 
 /// <summary>
 /// 【发送策略实现】HTTP REST 发送策略
-/// 将采集数据以 POST 请求发送到指定的 HTTP 接口
+///
+/// 支持两种模式：
+/// 1. 客户端模式：主动将数据 POST 到目标 HTTP 接口
+/// 2. 服务端模式：作为 HTTP 服务器，等待客户端来采集数据（复用 Web 服务器端口）
 ///
 /// 通道配置说明：
-///   Endpoint: 目标 URL，如 "https://api.example.com/data/upload"
-///   ConfigJson: { "method": "POST", "token": "Bearer xxx", "timeout": 5000 }
+///   Endpoint: 
+///     - 客户端模式：目标 URL，如 "https://api.example.com/data/upload"
+///     - 服务端模式：监听路径，如 "/api/data"
+///   ConfigJson: {
+///     "mode": "client",                    // "client" 或 "server"
+///     "method": "POST",                    // 客户端模式：HTTP 方法
+///     "token": "Bearer xxx",               // 客户端模式：认证令牌
+///     "timeout": 5000                      // 客户端模式：超时毫秒
+///   }
 /// </summary>
 public class HttpSendStrategy : ISendStrategy
 {
     private readonly ILogger<HttpSendStrategy> _logger;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IHttpListenerService _httpListenerService;
 
     private string _endpoint = string.Empty;
+    private string _mode = "client"; // "client" 或 "server"
     private string? _authToken;
     private int _timeoutMs = 5000;
 
-    public HttpSendStrategy(ILogger<HttpSendStrategy> logger, IHttpClientFactory httpClientFactory)
+    public HttpSendStrategy(
+        ILogger<HttpSendStrategy> logger,
+        IHttpClientFactory httpClientFactory,
+        IHttpListenerService httpListenerService)
     {
         _logger = logger;
         _httpClientFactory = httpClientFactory;
+        _httpListenerService = httpListenerService;
     }
 
     /// <inheritdoc/>
     public string ProtocolName => "Http";
 
     /// <inheritdoc/>
-    public Task InitializeAsync(Channel channel, CancellationToken cancellationToken = default)
+    public async Task InitializeAsync(Channel channel, CancellationToken cancellationToken = default)
     {
         _endpoint = channel.Endpoint;
 
-        // 解析额外 HTTP 配置（认证 token、超时等）
+        // 解析额外 HTTP 配置
         if (!string.IsNullOrEmpty(channel.ConfigJson))
         {
             var config = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(channel.ConfigJson);
             if (config != null)
             {
+                if (config.TryGetValue("mode", out var modeEl))
+                    _mode = modeEl.GetString() ?? "client";
                 if (config.TryGetValue("token", out var tokenEl))
                     _authToken = tokenEl.GetString();
                 if (config.TryGetValue("timeout", out var timeoutEl))
@@ -51,13 +70,63 @@ public class HttpSendStrategy : ISendStrategy
             }
         }
 
-        _logger.LogInformation("HTTP 通道 [{ChannelName}] 初始化完成 -> {Endpoint}", channel.Name, _endpoint);
-        return Task.CompletedTask;
+        if (_mode == "server")
+        {
+            // 服务端模式：注册端点（复用 Web 服务器端口）
+            // 自动添加 /api/http-data 前缀
+            var endpointPath = _endpoint.StartsWith("/api/http-data/", StringComparison.OrdinalIgnoreCase) 
+                ? _endpoint 
+                : $"/api/http-data/{_endpoint.TrimStart('/')}";
+            
+            _httpListenerService.RegisterEndpoint(endpointPath);
+            _logger.LogInformation(
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+                "HTTP 服务端模式已启动（复用 Web 端口）\n" +
+                "  通道：{ChannelName}\n" +
+                "  数据访问：http://localhost:5000{Endpoint}\n" +
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+                channel.Name, endpointPath);
+        }
+        else
+        {
+            // 客户端模式
+            _logger.LogInformation("HTTP 客户端模式已初始化 -> {Endpoint}", _endpoint);
+        }
+    }
+
+    /// <summary>
+    /// 重新配置端点路径（用于通道更新时）
+    /// </summary>
+    public async Task ReconfigureEndpointAsync(Channel channel, string oldEndpoint, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("HTTP 通道配置更新：旧路径={OldEndpoint}, 新路径={NewEndpoint}, 模式={Mode}", 
+            oldEndpoint, channel.Endpoint, _mode);
+        
+        // 如果是服务端模式且路径发生变化，先注销旧路径
+        if (_mode == "server" && !string.IsNullOrEmpty(oldEndpoint) && oldEndpoint != channel.Endpoint)
+        {
+            var oldPath = oldEndpoint.StartsWith("/api/http-data/", StringComparison.OrdinalIgnoreCase)
+                ? oldEndpoint
+                : $"/api/http-data/{oldEndpoint.TrimStart('/')}";
+
+            _logger.LogInformation("HTTP 服务端模式路径变化，清理旧路径：{OldPath}", oldPath);
+            await _httpListenerService.StopAsync(oldPath);
+        }
+        else
+        {
+            _logger.LogWarning("HTTP 路径未变化或非服务端模式，跳过清理：Mode={Mode}, Old={Old}, New={New}", 
+                _mode, oldEndpoint, channel.Endpoint);
+        }
+
+        // 重新初始化
+        await InitializeAsync(channel, cancellationToken);
     }
 
     /// <inheritdoc/>
     /// <remarks>
     /// 构建发送 Payload（包含所有数据点，不过滤质量）
+    /// 服务端模式：更新缓存数据，等待客户端来取
+    /// 客户端模式：主动 POST 到目标地址
     /// </remarks>
     public async Task<SendResult> SendAsync(SendPackage package, CancellationToken cancellationToken = default)
     {
@@ -72,41 +141,59 @@ public class HttpSendStrategy : ISendStrategy
             {
                 timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                 channelCode = package.Channel.Code,
+                channelName = package.Channel.Name,
                 data = package.DataList
                     .Select(d => new
                     {
                         name = aliasMap.TryGetValue(d.DataPointId, out var alias) && !string.IsNullOrEmpty(alias)
                             ? alias : d.Tag,
                         value = d.Value,
-                        unit = string.Empty, // 可从 DataPoint 获取
+                        unit = string.Empty,
                         quality = d.Quality.ToString()
                     })
             };
 
             var json = JsonSerializer.Serialize(payload);
-            var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            // 使用 HttpClientFactory 获取客户端（支持连接池复用）
-            var httpClient = _httpClientFactory.CreateClient("GatewayHttpClient");
-            httpClient.Timeout = TimeSpan.FromMilliseconds(_timeoutMs);
-
-            // 添加认证头
-            if (!string.IsNullOrEmpty(_authToken))
-                httpClient.DefaultRequestHeaders.Authorization =
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _authToken);
-
-            var response = await httpClient.PostAsync(_endpoint, content, cancellationToken);
-
-            if (response.IsSuccessStatusCode)
+            if (_mode == "server")
             {
-                _logger.LogDebug("HTTP 发送成功 -> {Endpoint}, 状态码：{Code}", _endpoint, (int)response.StatusCode);
+                // 服务端模式：更新缓存数据
+                // 使用与注册时相同的路径
+                var endpointPath = _endpoint.StartsWith("/api/http-data/", StringComparison.OrdinalIgnoreCase) 
+                    ? _endpoint 
+                    : $"/api/http-data/{_endpoint.TrimStart('/')}";
+                
+                _httpListenerService.UpdateData(endpointPath, json);
+                _logger.LogDebug("HTTP 服务端数据已更新 -> {Endpoint}", endpointPath);
                 return SendResult.Success(package.DataList.Count());
             }
             else
             {
-                var error = $"HTTP 响应失败，状态码：{(int)response.StatusCode}";
-                _logger.LogWarning("{Error}", error);
-                return SendResult.Failure(error);
+                // 客户端模式：主动 POST 到目标地址
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                // 使用 HttpClientFactory 获取客户端（支持连接池复用）
+                var httpClient = _httpClientFactory.CreateClient("GatewayHttpClient");
+                httpClient.Timeout = TimeSpan.FromMilliseconds(_timeoutMs);
+
+                // 添加认证头
+                if (!string.IsNullOrEmpty(_authToken))
+                    httpClient.DefaultRequestHeaders.Authorization =
+                        new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _authToken);
+
+                var response = await httpClient.PostAsync(_endpoint, content, cancellationToken);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    _logger.LogDebug("HTTP 发送成功 -> {Endpoint}, 状态码：{Code}", _endpoint, (int)response.StatusCode);
+                    return SendResult.Success(package.DataList.Count());
+                }
+                else
+                {
+                    var error = $"HTTP 响应失败，状态码：{(int)response.StatusCode}";
+                    _logger.LogWarning("{Error}", error);
+                    return SendResult.Failure(error);
+                }
             }
         }
         catch (Exception ex)
@@ -117,9 +204,11 @@ public class HttpSendStrategy : ISendStrategy
     }
 
     /// <inheritdoc/>
-    public Task DisposeAsync()
+    public async Task DisposeAsync()
     {
-        // HttpClient 由 IHttpClientFactory 管理生命周期，无需手动释放
-        return Task.CompletedTask;
+        if (_mode == "server")
+        {
+            await _httpListenerService.StopAsync(_endpoint);
+        }
     }
 }
