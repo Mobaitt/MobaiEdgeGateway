@@ -18,4 +18,8 @@
     <ProjectReference Include="..\EdgeGateway.Infrastructure\EdgeGateway.Infrastructure.csproj" />
     <ProjectReference Include="..\EdgeGateway.Host\EdgeGateway.Host.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="output\" />
+  </ItemGroup>
 </Project>
