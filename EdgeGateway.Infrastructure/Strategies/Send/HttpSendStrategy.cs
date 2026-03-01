@@ -9,10 +9,10 @@ namespace EdgeGateway.Infrastructure.Strategies.Send;
 
 /// <summary>
 /// 【发送策略实现】HTTP REST 发送策略
-/// 将采集数据以POST请求发送到指定的HTTP接口
-/// 
+/// 将采集数据以 POST 请求发送到指定的 HTTP 接口
+///
 /// 通道配置说明：
-///   Endpoint: 目标URL，如 "https://api.example.com/data/upload"
+///   Endpoint: 目标 URL，如 "https://api.example.com/data/upload"
 ///   ConfigJson: { "method": "POST", "token": "Bearer xxx", "timeout": 5000 }
 /// </summary>
 public class HttpSendStrategy : ISendStrategy
@@ -38,7 +38,7 @@ public class HttpSendStrategy : ISendStrategy
     {
         _endpoint = channel.Endpoint;
 
-        // 解析额外HTTP配置（认证token、超时等）
+        // 解析额外 HTTP 配置（认证 token、超时等）
         if (!string.IsNullOrEmpty(channel.ConfigJson))
         {
             var config = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(channel.ConfigJson);
@@ -51,16 +51,19 @@ public class HttpSendStrategy : ISendStrategy
             }
         }
 
-        _logger.LogInformation("HTTP通道 [{ChannelName}] 初始化完成 -> {Endpoint}", channel.Name, _endpoint);
+        _logger.LogInformation("HTTP 通道 [{ChannelName}] 初始化完成 -> {Endpoint}", channel.Name, _endpoint);
         return Task.CompletedTask;
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// 构建发送 Payload（包含所有数据点，不过滤质量）
+    /// </remarks>
     public async Task<SendResult> SendAsync(SendPackage package, CancellationToken cancellationToken = default)
     {
         try
         {
-            // 构建发送Payload（与MQTT类似，支持别名映射）
+            // 构建映射字典：DataPointId → AliasName
             var aliasMap = package.Mappings
                 .Where(m => m.IsEnabled)
                 .ToDictionary(m => m.DataPointId, m => m.AliasName);
@@ -70,21 +73,20 @@ public class HttpSendStrategy : ISendStrategy
                 timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                 channelCode = package.Channel.Code,
                 data = package.DataList
-                    .Where(d => d.Quality == DataQuality.Good)
                     .Select(d => new
                     {
                         name = aliasMap.TryGetValue(d.DataPointId, out var alias) && !string.IsNullOrEmpty(alias)
                             ? alias : d.Tag,
-                        value   = d.Value,
-                        unit    = string.Empty, // 可从DataPoint获取
+                        value = d.Value,
+                        unit = string.Empty, // 可从 DataPoint 获取
                         quality = d.Quality.ToString()
                     })
             };
 
-            var json    = JsonSerializer.Serialize(payload);
+            var json = JsonSerializer.Serialize(payload);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            // 使用HttpClientFactory获取客户端（支持连接池复用）
+            // 使用 HttpClientFactory 获取客户端（支持连接池复用）
             var httpClient = _httpClientFactory.CreateClient("GatewayHttpClient");
             httpClient.Timeout = TimeSpan.FromMilliseconds(_timeoutMs);
 
@@ -97,19 +99,19 @@ public class HttpSendStrategy : ISendStrategy
 
             if (response.IsSuccessStatusCode)
             {
-                _logger.LogDebug("HTTP发送成功 -> {Endpoint}, 状态码: {Code}", _endpoint, (int)response.StatusCode);
+                _logger.LogDebug("HTTP 发送成功 -> {Endpoint}, 状态码：{Code}", _endpoint, (int)response.StatusCode);
                 return SendResult.Success(package.DataList.Count());
             }
             else
             {
-                var error = $"HTTP响应失败，状态码: {(int)response.StatusCode}";
+                var error = $"HTTP 响应失败，状态码：{(int)response.StatusCode}";
                 _logger.LogWarning("{Error}", error);
                 return SendResult.Failure(error);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "HTTP发送异常，Endpoint: {Endpoint}", _endpoint);
+            _logger.LogError(ex, "HTTP 发送异常，Endpoint: {Endpoint}", _endpoint);
             return SendResult.Failure(ex.Message);
         }
     }

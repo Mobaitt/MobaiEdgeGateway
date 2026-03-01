@@ -108,20 +108,6 @@ public class WebSocketServerMiddleware
             var host = context.Request.Host.ToString();
             var path = context.Request.Path;
             var wsUrl = $"{(context.Request.IsHttps ? "wss" : "ws")}://{host}{path}";
-            var subscribeInfo = string.IsNullOrEmpty(subscribeTopic) 
-                ? "未指定订阅主题" 
-                : $"订阅主题：{subscribeTopic}";
-            
-            _logger.LogInformation(
-                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
-                "WebSocket 客户端连接成功\n" +
-                "  客户端 ID: {ClientId}\n" +
-                "  连接地址：{WsUrl}\n" +
-                "  {SubscribeInfo}\n" +
-                "  当前在线客户端数：{Count}\n" +
-                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-                clientId, wsUrl, subscribeInfo, connectionManager.Count);
-
             // 发送欢迎消息
             var welcomeMsg = new
             {

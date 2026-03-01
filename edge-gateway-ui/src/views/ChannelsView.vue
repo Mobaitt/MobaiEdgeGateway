@@ -52,6 +52,12 @@
             <el-button size="small" text @click="goMappings(ch)">
               绑定数据点
             </el-button>
+            <el-button size="small" text @click="openEdit(ch)">
+              编辑
+            </el-button>
+            <el-button size="small" text type="danger" @click="handleDelete(ch)">
+              删除
+            </el-button>
           </div>
         </div>
       </div>
@@ -63,48 +69,8 @@
       </div>
     </div>
 
-    <!-- 通道表格（详细视图） -->
-    <div class="table-wrap" style="margin-top:24px">
-      <div class="table-header-row">
-        <span class="table-section-title">通道详情</span>
-      </div>
-      <el-table :data="channels" row-key="id">
-        <el-table-column label="Status" width="70" align="center">
-          <template #default="{ row }">
-            <div class="pulse-dot" :class="row.isEnabled ? 'online' : 'offline'" style="margin:0 auto" />
-          </template>
-        </el-table-column>
-        <el-table-column prop="name" label="通道名称" min-width="150" />
-        <el-table-column label="协议" width="120">
-          <template #default="{ row }">
-            <span class="badge info" :style="{ color: getProtoColor(row.protocolValue) }">{{ row.protocol }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="Endpoint" min-width="200">
-          <template #default="{ row }">
-            <span class="mono ep-text">{{ row.endpoint }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="绑定点数" width="100" align="center">
-          <template #default="{ row }">
-            <span class="mono" style="color:var(--cyan);font-weight:700">{{ row.mappedDataPointCount }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="创建时间" width="160">
-          <template #default="{ row }">
-            <span class="mono time-text">{{ formatDateTime(row.createdAt) }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="160" align="right">
-          <template #default="{ row }">
-            <el-button size="small" text @click="goMappings(row)">数据点映射</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </div>
-
-    <!-- 新增通道弹窗 -->
-    <el-dialog v-model="dialogVisible" title="新增发送通道" width="580px" destroy-on-close>
+    <!-- 新增/编辑通道弹窗 -->
+    <el-dialog v-model="dialogVisible" :title="editingChannel ? '编辑发送通道' : '新增发送通道'" width="580px" destroy-on-close>
       <el-form ref="formRef" :model="form" :rules="rules" label-width="100px" label-position="left">
         <el-form-item label="通道名称" prop="name">
           <el-input v-model="form.name" placeholder="如：云端 MQTT" />
@@ -146,7 +112,7 @@
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="submitForm">创建通道</el-button>
+        <el-button type="primary" :loading="submitting" @click="submitForm">{{ editingChannel ? '保存修改' : '创建通道' }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -157,7 +123,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Link, Connection, InfoFilled } from '@element-plus/icons-vue'
-import { getChannels, createChannel, toggleChannel } from '@/api/channel'
+import { getChannels, createChannel, updateChannel, deleteChannel, toggleChannel } from '@/api/channel'
 import { SendProtocol, SendProtocolOptions, formatDateTime } from '@/api/constants'
 
 type ChannelItem = {
@@ -189,6 +155,7 @@ const channels = ref<ChannelItem[]>([])
 
 const dialogVisible = ref(false)
 const submitting = ref(false)
+const editingChannel = ref<ChannelItem | null>(null)
 const formRef = ref<any>()
 const form = ref<ChannelForm>({
   name: '',
@@ -249,6 +216,7 @@ const fetchChannels = async () => {
 }
 
 const openCreate = () => {
+  editingChannel.value = null
   form.value = {
     name: '',
     code: '',
@@ -257,6 +225,20 @@ const openCreate = () => {
     endpoint: '',
     configJson: '',
     isEnabled: true
+  }
+  dialogVisible.value = true
+}
+
+const openEdit = (channel: ChannelItem) => {
+  editingChannel.value = channel
+  form.value = {
+    name: channel.name,
+    code: channel.code,
+    description: channel.description || '',
+    protocol: channel.protocolValue,
+    endpoint: channel.endpoint,
+    configJson: '',
+    isEnabled: channel.isEnabled
   }
   dialogVisible.value = true
 }
@@ -283,12 +265,44 @@ const submitForm = async () => {
       ...form.value,
       configJson: buildConfigJson()
     }
-    await createChannel(submitData)
-    ElMessage.success('通道创建成功')
+    
+    if (editingChannel.value) {
+      // 编辑模式
+      await updateChannel(editingChannel.value.id, submitData)
+      ElMessage.success('通道已更新')
+    } else {
+      // 创建模式
+      await createChannel(submitData)
+      ElMessage.success('通道创建成功')
+    }
+    
     dialogVisible.value = false
     fetchChannels()
   } finally {
     submitting.value = false
+  }
+}
+
+const handleDelete = async (channel: ChannelItem) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除发送通道 "${channel.name}" 吗？删除后无法恢复。`,
+      '删除通道',
+      {
+        type: 'warning',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        confirmButtonClass: 'el-button--danger'
+      }
+    )
+
+    await deleteChannel(channel.id)
+    ElMessage.success('通道已删除')
+    fetchChannels()
+  } catch (e: any) {
+    if (e !== 'cancel') {
+      ElMessage.error(`删除失败：${e.message || '未知错误'}`)
+    }
   }
 }
 
@@ -331,49 +345,172 @@ onMounted(fetchChannels)
 /* 卡片网格 */
 .channels-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
 }
 .channel-card {
-  background: var(--bg-card); border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg); padding: 18px 20px;
-  display: flex; flex-direction: column; gap: 10px;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: all 0.25s ease;
+  position: relative;
+  overflow: hidden;
 }
-.channel-card:hover { border-color: var(--border-muted); box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
-.channel-card.disabled { opacity: 0.55; }
+.channel-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+.channel-card:hover {
+  border-color: var(--cyan);
+  box-shadow: 0 8px 32px rgba(0, 255, 255, 0.1);
+  transform: translateY(-2px);
+}
+.channel-card:hover::before {
+  opacity: 1;
+}
+.channel-card.disabled {
+  opacity: 0.5;
+  filter: grayscale(0.3);
+}
+.channel-card.disabled:hover {
+  transform: none;
+}
+
+/* 卡片头部 */
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.protocol-badge {
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 卡片主体 */
+.card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 0;
+}
+.ch-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
+}
+.ch-code {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  background: var(--bg-base);
+  padding: 3px 8px;
+  border-radius: 4px;
+  align-self: flex-start;
+}
+.ch-endpoint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  word-break: break-all;
+  line-height: 1.5;
+}
+.ch-endpoint .el-icon {
+  flex-shrink: 0;
+}
+.ch-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* 卡片底部 */
+.card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 12px;
+  margin-top: 4px;
+}
+.map-count {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--cyan);
+  font-weight: 600;
+}
+.map-count .mono {
+  font-size: 15px;
+}
+.foot-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.foot-actions .el-button {
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+/* 新增卡片 */
 .add-card {
   border: 1px dashed var(--border-muted);
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  cursor: pointer; min-height: 170px;
-  transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  min-height: 180px;
+  transition: all 0.25s;
+  background: transparent;
 }
-.add-card:hover { border-color: var(--cyan); }
-
-.card-head { display:flex; align-items:center; justify-content:space-between; }
-.protocol-badge {
-  padding: 3px 10px; border-radius: 6px; border: 1px solid;
-  font-size: 11px; font-family: var(--font-mono); font-weight: 700; letter-spacing: 0.06em;
+.add-card:hover {
+  border-color: var(--cyan);
+  background: rgba(0, 255, 255, 0.03);
 }
-.card-body { display: flex; flex-direction: column; gap: 4px; }
-.ch-name     { font-size:15px; font-weight:700; color:var(--text-primary); }
-.ch-code     { font-size:11px; color:var(--text-muted); }
-.ch-endpoint { font-size:11px; color:var(--text-secondary); display:flex; align-items:center; gap:4px; word-break:break-all; }
-.ch-desc     { font-size:12px; color:var(--text-muted); }
-.card-foot   { display:flex; align-items:center; justify-content:space-between; border-top:1px solid var(--border-subtle); padding-top:10px; margin-top:4px; }
-.map-count   { display:flex; align-items:center; gap:5px; font-size:13px; color:var(--cyan); }
+.add-card .el-icon {
+  transition: transform 0.25s;
+}
+.add-card:hover .el-icon {
+  transform: scale(1.1) rotate(90deg);
+}
 
-/* 表格 */
-.table-wrap { background:var(--bg-card); border:1px solid var(--border-subtle); border-radius:var(--radius-lg); overflow:hidden; }
-.table-header-row { padding:14px 20px 0; }
-.table-section-title { font-size:11px; color:var(--text-muted); letter-spacing:0.08em; text-transform:uppercase; font-weight:700; }
-.ep-text  { font-size:12px; color:var(--text-secondary); }
-.time-text { font-size:11px; color:var(--text-muted); }
-:deep(.mono-input .el-input__inner) { font-family:var(--font-mono); }
-
-/* 弹窗样式修复 */
-:deep(.el-dialog) { 
-  background: var(--bg-card) !important; 
+/* 弹窗样式 */
+:deep(.el-dialog) {
+  background: var(--bg-card) !important;
   border: 1px solid var(--border-muted) !important;
   border-radius: var(--radius-lg) !important;
 }

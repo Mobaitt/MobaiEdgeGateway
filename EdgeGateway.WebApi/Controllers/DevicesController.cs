@@ -17,14 +17,17 @@ namespace EdgeGateway.WebApi.Controllers;
 public class DevicesController : ControllerBase
 {
     private readonly DeviceManagementService _deviceService;
-    private readonly RealtimeDataService _realtimeDataService;
+    private readonly DataCollectionService _collectionService;
     private readonly ILogger<DevicesController> _logger;
 
-    public DevicesController(DeviceManagementService deviceService, RealtimeDataService realtimeDataService, ILogger<DevicesController> logger)
+    public DevicesController(
+        DeviceManagementService deviceService,
+        DataCollectionService collectionService,
+        ILogger<DevicesController> logger)
     {
-        _deviceService     = deviceService;
-        _realtimeDataService = realtimeDataService;
-        _logger            = logger;
+        _deviceService      = deviceService;
+        _collectionService  = collectionService;
+        _logger             = logger;
     }
 
     /// <summary>获取所有设备列表</summary>
@@ -163,7 +166,8 @@ public class DevicesController : ControllerBase
     [ProducesResponseType(typeof(ApiResponse<List<DataPointRealtimeResponse>>), 200)]
     public IActionResult GetDeviceRealtimeData(int deviceId)
     {
-        var realtimeData = _realtimeDataService.GetDeviceData(deviceId);
+        // 从 DataCollectionService 的全量快照获取数据（保持数据连贯性）
+        var realtimeData = _collectionService.GetDeviceSnapshotData(deviceId);
         var result = realtimeData.Select(d => new DataPointRealtimeResponse
         {
             DataPointId = d.DataPointId,

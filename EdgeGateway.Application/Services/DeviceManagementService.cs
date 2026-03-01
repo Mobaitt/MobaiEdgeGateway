@@ -196,11 +196,37 @@ public class DeviceManagementService
 
         channel.IsEnabled = false;
         await _channelRepo.UpdateAsync(channel);
-        
+
         // 动态停用发送服务
         await _sendService.DisableChannelAsync(channelId);
-        
+
         _logger.LogInformation("停用发送通道：{ChannelName} (ID={Id})", channel.Name, channelId);
+    }
+
+    /// <summary>更新发送通道</summary>
+    public async Task UpdateChannelAsync(Channel channel)
+    {
+        await _channelRepo.UpdateAsync(channel);
+        _logger.LogInformation("更新发送通道：{ChannelName} (ID={Id})", channel.Name, channel.Id);
+
+        // 如果通道已启用，重新初始化发送策略
+        if (channel.IsEnabled)
+        {
+            await _sendService.DisableChannelAsync(channel.Id);
+            await _sendService.EnableChannelAsync(channel.Id);
+        }
+    }
+
+    /// <summary>删除发送通道（级联删除映射关系）</summary>
+    public async Task DeleteChannelAsync(int channelId)
+    {
+        // 先停用通道
+        await _sendService.DisableChannelAsync(channelId);
+
+        // 删除通道（EF Core 会级联删除映射关系）
+        await _channelRepo.DeleteAsync(channelId);
+
+        _logger.LogInformation("删除发送通道 ID={Id}", channelId);
     }
 
     /// <summary>启动设备采集</summary>

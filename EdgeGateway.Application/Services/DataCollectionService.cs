@@ -12,7 +12,13 @@ namespace EdgeGateway.Application.Services;
 /// 1. 从数据库加载所有启用的设备（含数据点）
 /// 2. 根据设备协议类型，通过注册器获取对应采集策略
 /// 3. 建立连接，按设备采集周期定时读取数据
-/// 4. 将采集结果通过事件/回调传递给发送服务
+/// 4. 将采集结果更新到全量快照，按聚合窗口批量推送给发送服务
+///
+/// 数据聚合机制：
+/// - 维护所有数据点的全量最新值快照（带时间戳）
+/// - 按聚合窗口间隔（默认 1 秒）批量推送全量数据
+/// - 数据点超过 1 分钟未更新则自动置为 null（Uncertain 状态）
+/// - 确保同一通道绑定的所有设备数据始终完整发送，不会缺失
 /// </summary>
 public class DataCollectionService
 {
@@ -24,6 +30,23 @@ public class DataCollectionService
 
     // 每个设备的采集任务句柄（设备 Id → CancellationTokenSource）
     private readonly Dictionary<int, CancellationTokenSource> _deviceTasks = new();
+
+    // 全量数据快照：DataPointId → 带时间戳的采集数据
+    private readonly Dictionary<int, TimestampedData> _dataSnapshot = new();
+    private readonly SemaphoreSlim _snapshotLock = new(1, 1);
+    private readonly int _aggregateWindowMs = 1000; // 聚合窗口：1 秒
+    private readonly int _dataTimeoutMinutes = 1;   // 数据超时时间：1 分钟
+    private CancellationTokenSource? _aggregatorCts;
+    private Task? _aggregatorTask;
+
+    /// <summary>
+    /// 带时间戳的数据包装
+    /// </summary>
+    private class TimestampedData
+    {
+        public CollectedData Data { get; set; } = null!;
+        public DateTime LastUpdateTime { get; set; } = DateTime.UtcNow;
+    }
 
     public DataCollectionService(
         IServiceProvider serviceProvider,
@@ -40,6 +63,215 @@ public class DataCollectionService
     }
 
     /// <summary>
+    /// 启动数据聚合器（后台任务，按窗口间隔批量推送全量数据）
+    /// </summary>
+    public void StartAggregator(CancellationToken cancellationToken)
+    {
+        // 预先加载所有通道绑定的数据点，确保即使未采集过也会出现在快照中
+        InitializeSnapshotFromMappings();
+
+        _aggregatorCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _aggregatorTask = Task.Run(async () =>
+        {
+            try
+            {
+                while (!_aggregatorCts.Token.IsCancellationRequested)
+                {
+                    await Task.Delay(_aggregateWindowMs, _aggregatorCts.Token);
+                    await FlushSnapshotAsync(_aggregatorCts.Token);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogDebug("数据聚合器已停止");
+            }
+        }, _aggregatorCts.Token);
+
+        _logger.LogInformation("数据聚合器已启动，窗口间隔：{WindowMs}ms", _aggregateWindowMs);
+    }
+
+    /// <summary>
+    /// 从数据库加载所有通道绑定的数据点，初始化快照（即使未采集过也会出现在快照中）
+    /// </summary>
+    private void InitializeSnapshotFromMappings()
+    {
+        using var scope = _serviceProvider.CreateScope();
+        var channelRepo = scope.ServiceProvider.GetRequiredService<IChannelRepository>();
+
+        var channels = channelRepo.GetEnabledWithMappingsAsync().Result;
+        foreach (var channel in channels)
+        {
+            foreach (var mapping in channel.DataPointMappings.Where(m => m.IsEnabled))
+            {
+                if (!_dataSnapshot.ContainsKey(mapping.DataPointId))
+                {
+                    // 创建初始占位数据
+                    _dataSnapshot[mapping.DataPointId] = new TimestampedData
+                    {
+                        Data = new CollectedData
+                        {
+                            DataPointId = mapping.DataPointId,
+                            Tag = mapping.DataPoint?.Tag ?? "Unknown",
+                            DeviceId = mapping.DataPoint?.DeviceId ?? 0,
+                            DeviceName = mapping.DataPoint?.Device?.Name ?? "Unknown",
+                            Value = null,
+                            Quality = DataQuality.Uncertain,
+                            Timestamp = DateTime.UtcNow
+                        },
+                        LastUpdateTime = DateTime.MinValue // 使用 MinValue，这样会被视为超时
+                    };
+                }
+            }
+        }
+
+        _logger.LogInformation("快照初始化完成，共 {Count} 个数据点", _dataSnapshot.Count);
+    }
+
+    /// <summary>
+    /// 将全量快照数据批量推送给发送服务（超过 1 分钟未更新的数据置为 null）
+    /// </summary>
+    private async Task FlushSnapshotAsync(CancellationToken cancellationToken)
+    {
+        await _snapshotLock.WaitAsync(cancellationToken);
+        try
+        {
+            if (_dataSnapshot.Count == 0)
+                return;
+
+            var now = DateTime.UtcNow;
+            var timeoutThreshold = now.AddMinutes(-_dataTimeoutMinutes);
+
+            // 复制当前全量快照，超时数据置为 null
+            var dataToSend = new List<CollectedData>();
+            foreach (var kvp in _dataSnapshot)
+            {
+                // LastUpdateTime 为 MinValue 表示初始占位数据，保持 Uncertain 状态
+                // 超过 1 分钟未更新的数据也置为 Uncertain
+                if (kvp.Value.LastUpdateTime == DateTime.MinValue)
+                {
+                    // 初始占位数据，保持原样（Uncertain）
+                    dataToSend.Add(kvp.Value.Data);
+                }
+                else if (kvp.Value.LastUpdateTime < timeoutThreshold)
+                {
+                    // 超过 1 分钟未更新，创建 null 占位数据
+                    dataToSend.Add(CreateTimeoutData(kvp.Value.Data));
+                }
+                else
+                {
+                    // 正常数据
+                    dataToSend.Add(kvp.Value.Data);
+                }
+            }
+
+            // 批量推送
+            await _sendService.DispatchAsync(dataToSend, cancellationToken);
+
+            _logger.LogDebug("数据聚合推送：{Count} 条数据", dataToSend.Count);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogError(ex, "数据聚合推送失败");
+        }
+        finally
+        {
+            _snapshotLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// 为超时数据创建占位数据（Value=null, Quality=Uncertain）
+    /// </summary>
+    private static CollectedData CreateTimeoutData(CollectedData original)
+    {
+        return new CollectedData
+        {
+            DataPointId = original.DataPointId,
+            Tag = original.Tag,
+            DeviceId = original.DeviceId,
+            DeviceName = original.DeviceName,
+            Value = null,
+            Quality = DataQuality.Uncertain,
+            Timestamp = DateTime.UtcNow
+        };
+    }
+
+    /// <summary>
+    /// 更新数据点到全量快照（线程安全）
+    /// 只更新质量为 Good 的数据，Bad/Uncertain 数据保持上次成功值
+    /// </summary>
+    public async Task UpdateSnapshotAsync(IEnumerable<CollectedData> data, CancellationToken cancellationToken)
+    {
+        await _snapshotLock.WaitAsync(cancellationToken);
+        try
+        {
+            foreach (var item in data)
+            {
+                // 只更新质量为 Good 的数据
+                if (item.Quality != DataQuality.Good)
+                {
+                    // 采集失败时，保持快照中的上次成功值，不更新
+                    continue;
+                }
+
+                // 更新或添加数据点的最新值
+                if (_dataSnapshot.TryGetValue(item.DataPointId, out var existing))
+                {
+                    existing.Data = item;
+                    existing.LastUpdateTime = DateTime.UtcNow;
+                }
+                else
+                {
+                    _dataSnapshot[item.DataPointId] = new TimestampedData
+                    {
+                        Data = item,
+                        LastUpdateTime = DateTime.UtcNow
+                    };
+                }
+            }
+        }
+        finally
+        {
+            _snapshotLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// 获取指定设备的所有数据点快照数据（用于 realtime 接口）
+    /// 超过 1 分钟未更新的数据返回 null（Uncertain）
+    /// </summary>
+    public List<CollectedData> GetDeviceSnapshotData(int deviceId)
+    {
+        var now = DateTime.UtcNow;
+        var timeoutThreshold = now.AddMinutes(-_dataTimeoutMinutes);
+
+        var results = new List<CollectedData>();
+        foreach (var kvp in _dataSnapshot)
+        {
+            if (kvp.Value.Data.DeviceId != deviceId)
+                continue;
+
+            // LastUpdateTime 为 MinValue 表示初始占位数据，保持 Uncertain 状态
+            if (kvp.Value.LastUpdateTime == DateTime.MinValue)
+            {
+                results.Add(kvp.Value.Data);
+            }
+            else if (kvp.Value.LastUpdateTime < timeoutThreshold)
+            {
+                // 超过 1 分钟未更新，返回 null 占位数据
+                results.Add(CreateTimeoutData(kvp.Value.Data));
+            }
+            else
+            {
+                // 正常数据
+                results.Add(kvp.Value.Data);
+            }
+        }
+
+        return results;
+    }
+
+    /// <summary>
     /// 启动所有启用设备的采集任务
     /// 每个设备独立运行一个后台采集循环（互不阻塞）
     /// </summary>
@@ -47,9 +279,12 @@ public class DataCollectionService
     {
         using var scope = _serviceProvider.CreateScope();
         var deviceRepo = scope.ServiceProvider.GetRequiredService<IDeviceRepository>();
-        
+
         var devices = (await deviceRepo.GetEnabledAsync()).ToList();
         _logger.LogInformation("共发现 {Count} 台启用设备，开始启动采集任务", devices.Count);
+
+        // 启动数据聚合器
+        StartAggregator(cancellationToken);
 
         foreach (var device in devices)
         {
@@ -104,8 +339,8 @@ public class DataCollectionService
                         // 更新实时数据服务
                         _realtimeDataService.UpdateData(collectedData);
 
-                        // 将采集数据推送给发送服务（异步，不阻塞当前采集周期）
-                        _ = _sendService.DispatchAsync(collectedData, cts.Token);
+                        // 更新到全量快照（由聚合器按窗口间隔批量推送）
+                        await UpdateSnapshotAsync(collectedData, cts.Token);
                     }
                     catch (Exception ex) when (ex is not OperationCanceledException)
                     {
@@ -155,6 +390,33 @@ public class DataCollectionService
             cts.Cancel();
         _deviceTasks.Clear();
         _logger.LogInformation("所有采集任务已停止");
+    }
+
+    /// <summary>
+    /// 停止数据聚合器并刷新快照
+    /// </summary>
+    public async Task StopAggregatorAsync()
+    {
+        if (_aggregatorCts != null)
+        {
+            await _aggregatorCts.CancelAsync();
+            _aggregatorCts.Dispose();
+
+            if (_aggregatorTask != null)
+            {
+                try
+                {
+                    await _aggregatorTask;
+                }
+                catch (OperationCanceledException) { }
+            }
+
+            // 刷新剩余快照数据
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            await FlushSnapshotAsync(cts.Token);
+
+            _logger.LogInformation("数据聚合器已停止，快照已刷新");
+        }
     }
 
     /// <summary>

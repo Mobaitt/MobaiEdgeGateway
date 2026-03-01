@@ -124,7 +124,7 @@ public class ChannelsController : ControllerBase
     {
         var channel = await _deviceService.GetAllChannelsAsync();
         var target = channel.FirstOrDefault(c => c.Id == channelId);
-        
+
         if (target == null)
             return NotFound(ApiResponse.Fail($"通道 ID={channelId} 不存在"));
 
@@ -142,6 +142,50 @@ public class ChannelsController : ControllerBase
             _logger.LogInformation("通道已启用：{Name} (ID={Id})", target.Name, channelId);
             return Ok(ApiResponse.Ok("通道已启用，发送服务已启动"));
         }
+    }
+
+    /// <summary>更新发送通道</summary>
+    [HttpPut("{channelId:int}")]
+    [ProducesResponseType(typeof(ApiResponse<ChannelResponse>), 200)]
+    [ProducesResponseType(typeof(ApiResponse), 404)]
+    public async Task<IActionResult> Update(int channelId, [FromBody] CreateChannelRequest req)
+    {
+        var channel = await _deviceService.GetAllChannelsAsync();
+        var target = channel.FirstOrDefault(c => c.Id == channelId);
+
+        if (target == null)
+            return NotFound(ApiResponse.Fail($"通道 ID={channelId} 不存在"));
+
+        target.Name = req.Name;
+        target.Code = req.Code;
+        target.Description = req.Description;
+        target.Protocol = req.Protocol;
+        target.Endpoint = req.Endpoint;
+        target.ConfigJson = req.ConfigJson;
+        target.IsEnabled = req.IsEnabled;
+
+        await _deviceService.UpdateChannelAsync(target);
+        _logger.LogInformation("通道已更新：{Name} (ID={Id})", target.Name, channelId);
+
+        return Ok(ApiResponse<ChannelResponse>.Ok(MapToResponse(target), "通道已更新"));
+    }
+
+    /// <summary>删除发送通道</summary>
+    [HttpDelete("{channelId:int}")]
+    [ProducesResponseType(typeof(ApiResponse), 200)]
+    [ProducesResponseType(typeof(ApiResponse), 404)]
+    public async Task<IActionResult> Delete(int channelId)
+    {
+        var channel = await _deviceService.GetAllChannelsAsync();
+        var target = channel.FirstOrDefault(c => c.Id == channelId);
+
+        if (target == null)
+            return NotFound(ApiResponse.Fail($"通道 ID={channelId} 不存在"));
+
+        await _deviceService.DeleteChannelAsync(channelId);
+        _logger.LogInformation("通道已删除：{Name} (ID={Id})", target.Name, channelId);
+
+        return Ok(ApiResponse.Ok("通道已删除"));
     }
 
     // ==================== 映射方法 ====================

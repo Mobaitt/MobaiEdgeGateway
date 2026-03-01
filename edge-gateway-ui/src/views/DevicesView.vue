@@ -24,70 +24,77 @@
       <span class="total-hint mono">共{{ filteredDevices.length }} 台设备</span>
     </div>
 
-    <!-- 设备表格 -->
-    <div class="table-wrap">
-      <el-table :data="filteredDevices" v-loading="loading" row-key="id">
-        <el-table-column label="状态" width="70" align="center">
-          <template #default="{ row }">
-            <div style="display:flex;justify-content:center">
-              <div class="pulse-dot" :class="row.isEnabled ? 'online' : 'offline'" />
-            </div>
-          </template>
-        </el-table-column>
+    <!-- 设备卡片列表 -->
+    <div v-loading="loading" class="devices-grid">
+      <div
+        v-for="device in filteredDevices" :key="device.id"
+        class="device-card"
+        :class="{ disabled: !device.isEnabled }"
+      >
+        <!-- 卡片顶部：状态开关 -->
+        <div class="card-head">
+          <div class="status-indicator">
+            <div class="pulse-dot" :class="device.isEnabled ? 'online' : 'offline'" />
+            <span class="status-text">{{ device.isEnabled ? '运行中' : '已禁用' }}</span>
+          </div>
+          <el-switch
+            :model-value="device.isEnabled"
+            size="small" active-color="#38dcc4"
+            @change="toggleDevice(device)"
+          />
+        </div>
 
-        <el-table-column prop="name" label="设备名称" min-width="160">
-          <template #default="{ row }">
-            <div class="device-name">{{ row.name }}</div>
-            <div class="device-code mono">{{ row.code }}</div>
-          </template>
-        </el-table-column>
-
-        <el-table-column label="协议" width="130">
-          <template #default="{ row }">
+        <!-- 卡片主体：设备信息 -->
+        <div class="card-body">
+          <div class="device-name">{{ device.name }}</div>
+          <div class="device-code mono">{{ device.code }}</div>
+          <div class="device-protocol">
             <el-tag
-              :style="{ background: getProtocolBg(row.protocolValue), color: getProtocolColor(row.protocolValue), border: 'none' }"
+              :style="{ background: getProtocolBg(device.protocolValue), color: getProtocolColor(device.protocolValue), border: 'none' }"
               size="small"
             >
-              {{ row.protocol }}
+              {{ device.protocol }}
             </el-tag>
-          </template>
-        </el-table-column>
+          </div>
+          <div class="device-address mono">
+            <el-icon size="12"><Location /></el-icon>
+            {{ device.address }}{{ device.port ? `:${device.port}` : '' }}
+          </div>
+          <div v-if="device.description" class="device-desc">{{ device.description }}</div>
+        </div>
 
-        <el-table-column label="地址" min-width="180">
-          <template #default="{ row }">
-            <span class="mono addr-text">{{ row.address }}{{ row.port ? `:${row.port}` : '' }}</span>
-          </template>
-        </el-table-column>
-
-        <el-table-column label="采集周期" width="120" align="center">
-          <template #default="{ row }">
-            <span class="mono badge info">{{ formatInterval(row.pollingIntervalMs) }}</span>
-          </template>
-        </el-table-column>
-
-        <el-table-column label="数据点" width="100" align="center">
-          <template #default="{ row }">
-            <span class="mono dp-count">{{ row.dataPointCount }}</span>
-          </template>
-        </el-table-column>
-
-        <el-table-column label="操作" width="220" align="right">
-          <template #default="{ row }">
-            <el-button size="small" text @click="goDataPoints(row)">
-              <el-icon><DataLine /></el-icon> 数据点
+        <!-- 卡片底部：统计和操作 -->
+        <div class="card-foot">
+          <div class="stats-row">
+            <div class="stat-item">
+              <el-icon size="14"><Timer /></el-icon>
+              <span class="mono">{{ formatInterval(device.pollingIntervalMs) }}</span>
+            </div>
+            <div class="stat-item">
+              <el-icon size="14"><DataLine /></el-icon>
+              <span class="mono dp-count">{{ device.dataPointCount }}</span>
+              <span class="stat-label">数据点</span>
+            </div>
+          </div>
+          <div class="foot-actions">
+            <el-button size="small" text @click="goDataPoints(device)">
+              <el-icon><DataLine /></el-icon>
             </el-button>
-            <el-button size="small" text @click="openEdit(row)">
-              <el-icon><Edit /></el-icon> 编辑
+            <el-button size="small" text @click="openEdit(device)">
+              <el-icon><Edit /></el-icon>
             </el-button>
-            <el-button size="small" text @click="toggleDevice(row)" :loading="row._toggling">
-              {{ row.isEnabled ? '禁用' : '启用' }}
-            </el-button>
-            <el-button size="small" text type="danger" @click="confirmDelete(row)">
+            <el-button size="small" text type="danger" @click="confirmDelete(device)">
               <el-icon><Delete /></el-icon>
             </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 新增占位卡 -->
+      <div class="device-card add-card" @click="openCreate">
+        <el-icon size="36" color="var(--border-muted)"><Plus /></el-icon>
+        <span style="color:var(--text-muted);font-size:13px;margin-top:8px">新增设备</span>
+      </div>
     </div>
 
     <!-- 新增/编辑设备弹窗 -->
@@ -145,7 +152,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
-import { Plus, Edit, Delete, DataLine } from '@element-plus/icons-vue'
+import { Plus, Edit, Delete, DataLine, Location, Timer } from '@element-plus/icons-vue'
 import {
   getDevices,
   createDevice,
@@ -167,7 +174,6 @@ type DeviceItem = {
   pollingIntervalMs: number
   isEnabled: boolean
   dataPointCount: number
-  _toggling?: boolean
 }
 
 type DeviceForm = {
@@ -229,10 +235,7 @@ const fetchDevices = async () => {
   loading.value = true
   try {
     const res = await getDevices()
-    devices.value = (((res as { data?: DeviceItem[] })?.data ?? []) as DeviceItem[]).map((device) => ({
-      ...device,
-      _toggling: false
-    }))
+    devices.value = ((res as { data?: DeviceItem[] })?.data ?? []) as DeviceItem[]
   } finally {
     loading.value = false
   }
@@ -305,13 +308,12 @@ const confirmDelete = (row: DeviceItem) => {
 }
 
 const toggleDevice = async (row: DeviceItem) => {
-  row._toggling = true
   try {
     await apiToggle(row.id)
     row.isEnabled = !row.isEnabled
     ElMessage.success(row.isEnabled ? '设备已启用' : '设备已禁用')
-  } finally {
-    row._toggling = false
+  } catch (e: any) {
+    ElMessage.error(`操作失败：${e.message || '未知错误'}`)
   }
 }
 
@@ -325,21 +327,196 @@ onMounted(fetchDevices)
 <style scoped>
 .page-header {
   display: flex; align-items: flex-start; justify-content: space-between;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 .page-title { font-size: 22px; font-weight: 800; color: var(--text-primary); }
 .page-desc  { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
-.toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-.total-hint { font-size: 12px; color: var(--text-muted); margin-left: auto; }
-.table-wrap { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); overflow: hidden; }
-.device-name { font-size: 14px; font-weight: 600; color: var(--text-primary); }
-.device-code { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
-.addr-text   { font-size: 13px; color: var(--text-secondary); }
-.dp-count    { font-size: 15px; font-weight: 700; color: var(--text-accent); }
 
-/* 弹窗样式修复 */
-:deep(.el-dialog) { 
-  background: var(--bg-card) !important; 
+/* 工具栏 */
+.toolbar {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 20px;
+}
+.total-hint { font-size: 12px; color: var(--text-muted); margin-left: auto; }
+
+/* 卡片网格 */
+.devices-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 20px;
+}
+.device-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: all 0.25s ease;
+  position: relative;
+  overflow: hidden;
+}
+.device-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+.device-card:hover {
+  border-color: var(--cyan);
+  box-shadow: 0 8px 32px rgba(0, 255, 255, 0.1);
+  transform: translateY(-2px);
+}
+.device-card:hover::before {
+  opacity: 1;
+}
+.device-card.disabled {
+  opacity: 0.5;
+  filter: grayscale(0.3);
+}
+.device-card.disabled:hover {
+  transform: none;
+}
+
+/* 卡片头部 */
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.status-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* 卡片主体 */
+.card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0;
+}
+.device-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
+}
+.device-code {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  background: var(--bg-base);
+  padding: 3px 8px;
+  border-radius: 4px;
+  align-self: flex-start;
+}
+.device-protocol {
+  align-self: flex-start;
+}
+.device-address {
+  font-size: 12px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  word-break: break-all;
+}
+.device-address .el-icon {
+  flex-shrink: 0;
+}
+.device-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* 卡片底部 */
+.card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 12px;
+  margin-top: 4px;
+}
+.stats-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.stat-item .mono {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--cyan);
+}
+.stat-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.dp-count {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-accent);
+}
+.foot-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.foot-actions .el-button {
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+/* 新增卡片 */
+.add-card {
+  border: 1px dashed var(--border-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  min-height: 200px;
+  transition: all 0.25s;
+  background: transparent;
+}
+.add-card:hover {
+  border-color: var(--cyan);
+  background: rgba(0, 255, 255, 0.03);
+}
+.add-card .el-icon {
+  transition: transform 0.25s;
+}
+.add-card:hover .el-icon {
+  transform: scale(1.1) rotate(90deg);
+}
+
+/* 弹窗样式 */
+:deep(.el-dialog) {
+  background: var(--bg-card) !important;
   border: 1px solid var(--border-muted) !important;
   border-radius: var(--radius-lg) !important;
 }

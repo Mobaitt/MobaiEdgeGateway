@@ -7,9 +7,9 @@ namespace EdgeGateway.Infrastructure.Strategies.Send;
 
 /// <summary>
 /// 【发送策略实现】本地文件写入策略
-/// 将采集数据追加写入本地JSON文件（每行一条JSON Record，NDJSON格式）
+/// 将采集数据追加写入本地 JSON 文件（每行一条 JSON Record，NDJSON 格式）
 /// 适合离线场景、数据备份、或调试验证
-/// 
+///
 /// 通道配置：
 ///   Endpoint: 输出文件路径，如 "./output/data.json"
 ///   ConfigJson: { "maxFileSizeMB": 100, "rotateDaily": true }
@@ -40,17 +40,18 @@ public class LocalFileSendStrategy : ISendStrategy
         if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
         {
             Directory.CreateDirectory(directory);
-            _logger.LogInformation("已创建输出目录: {Directory}", directory);
+            _logger.LogInformation("已创建输出目录：{Directory}", directory);
         }
 
-        _logger.LogInformation("本地文件通道初始化完成，输出路径: {FilePath}", _filePath);
+        _logger.LogInformation("本地文件通道初始化完成，输出路径：{FilePath}", _filePath);
         return Task.CompletedTask;
     }
 
     /// <inheritdoc/>
     /// <remarks>
     /// 采用 NDJSON（Newline Delimited JSON）格式追加写入
-    /// 每次发送作为一行JSON记录，方便按行解析和流式读取
+    /// 每次发送作为一行 JSON 记录，方便按行解析和流式读取
+    /// 包含所有数据点（即使质量为 Uncertain/Bad），确保数据结构完整
     /// </remarks>
     public async Task<SendResult> SendAsync(SendPackage package, CancellationToken cancellationToken = default)
     {
@@ -67,7 +68,6 @@ public class LocalFileSendStrategy : ISendStrategy
                 timestamp   = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
                 channelCode = package.Channel.Code,
                 data = package.DataList
-                    .Where(d => d.Quality == DataQuality.Good)
                     .ToDictionary(
                         d => aliasMap.TryGetValue(d.DataPointId, out var alias) && !string.IsNullOrEmpty(alias)
                             ? alias : d.Tag,
@@ -75,7 +75,7 @@ public class LocalFileSendStrategy : ISendStrategy
                     )
             };
 
-            // 追加写入一行JSON（NDJSON格式）
+            // 追加写入一行 JSON（NDJSON 格式）
             var line = JsonSerializer.Serialize(record);
             await File.AppendAllTextAsync(_filePath, line + Environment.NewLine, cancellationToken);
 
@@ -84,7 +84,7 @@ public class LocalFileSendStrategy : ISendStrategy
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "文件写入失败，路径: {FilePath}", _filePath);
+            _logger.LogError(ex, "文件写入失败，路径：{FilePath}", _filePath);
             return SendResult.Failure(ex.Message);
         }
         finally

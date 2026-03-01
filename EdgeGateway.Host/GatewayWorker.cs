@@ -41,6 +41,7 @@ public class GatewayWorker : BackgroundService
     {
         _logger.LogInformation("网关正在关闭...");
         _collectionService.StopAll();
+        await _collectionService.StopAggregatorAsync();
         await _sendService.DisposeAllAsync();
         await base.StopAsync(cancellationToken);
         _logger.LogInformation("网关已安全退出");

@@ -6,6 +6,12 @@ export const getChannels = () => request.get('/channels')
 /** 新增发送通道 */
 export const createChannel = (data) => request.post('/channels', data)
 
+/** 更新发送通道 */
+export const updateChannel = (channelId, data) => request.put(`/channels/${channelId}`, data)
+
+/** 删除发送通道 */
+export const deleteChannel = (channelId) => request.delete(`/channels/${channelId}`)
+
 /** 批量绑定数据点到通道 */
 export const bindDataPoints = (channelId, dataPointIds) =>
   request.post(`/channels/${channelId}/bind-datapoints`, { dataPointIds })

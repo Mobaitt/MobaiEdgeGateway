@@ -1,3 +1,4 @@
+using EdgeGateway.Domain.Entities;
 using EdgeGateway.Domain.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -120,8 +121,9 @@ public class DataSendService
     /// 将采集数据分发到各个绑定的通道进行发送
     ///
     /// 分发逻辑：遍历所有启用通道 → 筛选该通道绑定的数据点 → 调用对应发送策略
+    /// 对于快照中不存在的数据点，使用 null 占位，确保数据结构完整
     /// </summary>
-    /// <param name="collectedData">本次采集的数据列表</param>
+    /// <param name="collectedData">本次采集的数据列表（全量数据快照）</param>
     /// <param name="cancellationToken">取消令牌</param>
     public async Task DispatchAsync(
         IEnumerable<CollectedData> collectedData,
@@ -130,11 +132,11 @@ public class DataSendService
         // 每次调用创建新的 Scope，获取独立的 DbContext 实例
         using var scope = _serviceProvider.CreateScope();
         var channelRepo = scope.ServiceProvider.GetRequiredService<IChannelRepository>();
-        
+
         // 加载通道（含数据点映射详情）
         var channels = (await channelRepo.GetEnabledWithMappingsAsync()).ToList();
 
-        // 将采集数据按 DataPointId 建立索引，方便快速查找
+        // 将采集数据按 DataPointId 建立索引（全量快照）
         var dataIndex = collectedData.ToDictionary(d => d.DataPointId);
 
         // 并行向各通道发送（各通道发送互不阻塞）
@@ -147,10 +149,10 @@ public class DataSendService
                     .Where(m => m.IsEnabled)
                     .ToList();
 
-                // 根据映射关系，从本次采集数据中提取对应的数据点数据
+                // 根据映射关系，从快照中提取对应的数据点数据
+                // 如果快照中不存在（设备离线/未采集），使用 null 占位
                 var channelData = enabledMappings
-                    .Where(m => dataIndex.ContainsKey(m.DataPointId))
-                    .Select(m => dataIndex[m.DataPointId])
+                    .Select(m => dataIndex.TryGetValue(m.DataPointId, out var data) ? data : CreatePlaceholderData(m))
                     .ToList();
 
                 if (!channelData.Any())
@@ -186,6 +188,23 @@ public class DataSendService
         });
 
         await Task.WhenAll(sendTasks);
+    }
+
+    /// <summary>
+    /// 为缺失的数据点创建占位数据（用于保持数据结构完整）
+    /// </summary>
+    private static CollectedData CreatePlaceholderData(ChannelDataPointMapping mapping)
+    {
+        return new CollectedData
+        {
+            DataPointId = mapping.DataPointId,
+            Tag = mapping.DataPoint?.Tag ?? string.Empty,
+            DeviceId = mapping.DataPoint?.DeviceId ?? 0,
+            DeviceName = mapping.DataPoint?.Device?.Name ?? "Unknown",
+            Value = null,
+            Quality = DataQuality.Uncertain,
+            Timestamp = DateTime.UtcNow
+        };
     }
 
     /// <summary>
