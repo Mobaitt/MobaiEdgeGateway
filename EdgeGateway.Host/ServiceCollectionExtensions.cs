@@ -5,6 +5,7 @@ using EdgeGateway.Infrastructure.Data;
 using EdgeGateway.Infrastructure.Repositories;
 using EdgeGateway.Infrastructure.Strategies.Collection;
 using EdgeGateway.Infrastructure.Strategies.Send;
+using EdgeGateway.Infrastructure.WebSocket;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -37,13 +38,17 @@ public static class ServiceCollectionExtensions
         // ========== 采集策略实现（Transient：每次获取新实例，避免跨设备状态污染）==========
         services.AddTransient<SimulatorCollectionStrategy>();
         services.AddTransient<ModbusCollectionStrategy>();
-        // 其他策略（OpcUa、S7等）按需在此注册
+        // 其他策略（OpcUa、S7 等）按需在此注册
 
         // ========== 发送策略实现 ==========
         services.AddTransient<LocalFileSendStrategy>();
         services.AddTransient<MqttSendStrategy>();
         services.AddTransient<HttpSendStrategy>();
-        // 其他策略（Kafka、WebSocket等）按需在此注册
+        services.AddTransient<WebSocketSendStrategy>();
+        // 其他策略（Kafka 等）按需在此注册
+
+        // ========== WebSocket 连接管理器（单例） ==========
+        services.AddSingleton<WebSocketConnectionManager>();
 
         // ========== 策略注册器（工厂） ==========
         // 采集策略注册器：协议枚举 → 策略类型
@@ -71,10 +76,14 @@ public static class ServiceCollectionExtensions
             registry.Register<LocalFileSendStrategy>(SendProtocol.LocalFile);
             registry.Register<MqttSendStrategy>(SendProtocol.Mqtt);
             registry.Register<HttpSendStrategy>(SendProtocol.Http);
+            registry.Register<WebSocketSendStrategy>(SendProtocol.WebSocket);
             // registry.Register<KafkaSendStrategy>(SendProtocol.Kafka);
 
             return registry;
         });
+
+        // 注册发送策略注册器接口
+        services.AddSingleton<ISendStrategyRegistry>(sp => sp.GetRequiredService<SendStrategyRegistry>());
 
         // ========== 应用层服务 ==========
         services.AddScoped<DeviceManagementService>();
@@ -82,14 +91,14 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<DataCollectionService>();
         services.AddSingleton<RealtimeDataService>();
 
-        // HTTP客户端（供HttpSendStrategy使用）
+        // HTTP 客户端（供 HttpSendStrategy 使用）
         services.AddHttpClient("GatewayHttpClient");
 
         return services;
     }
 
     /// <summary>
-    /// 确保数据库已创建并应用迁移（开发环境使用EnsureCreated，生产建议用Migrate）
+    /// 确保数据库已创建并应用迁移（开发环境使用 EnsureCreated，生产建议用 Migrate）
     /// </summary>
     public static async Task InitializeDatabaseAsync(this IServiceProvider services)
     {

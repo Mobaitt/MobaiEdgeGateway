@@ -1,5 +1,6 @@
 using EdgeGateway.Application.Services;
 using EdgeGateway.Host;
+using EdgeGateway.Infrastructure.WebSocket;
 using EdgeGateway.WebApi.Middleware;
 using Microsoft.OpenApi.Models;
 
@@ -68,6 +69,13 @@ app.UseSwaggerUI(opt =>
 });
 
 app.UseCors("AllowAll");
+
+// ========== 启用 ASP.NET Core WebSocket 支持（必须在自定义 WebSocket 中间件之前） ==========
+app.UseWebSockets();
+
+// ========== WebSocket 服务端中间件（必须在 UseRouting 之前） ==========
+app.UseWebSocketServer();
+
 app.UseRouting();
 app.MapControllers();
 

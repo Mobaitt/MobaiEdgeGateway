@@ -120,16 +120,25 @@
             <el-option v-for="o in SendProtocolOptions" :key="o.value" :label="o.label" :value="o.value" />
           </el-select>
         </el-form-item>
+        
+        <!-- WebSocket 模式说明 -->
+        <el-form-item v-if="form.protocol === SendProtocol.WebSocket.value" label="说明">
+          <div style="font-size:12px;color:var(--text-muted);line-height:1.6">
+            <el-icon size="14"><InfoFilled /></el-icon>
+            WebSocket 作为<strong>服务端模式</strong>运行，等待客户端连接。
+            采集数据会自动推送给订阅的客户端。
+          </div>
+        </el-form-item>
         <el-form-item label="Endpoint" prop="endpoint">
-          <el-input v-model="form.endpoint" placeholder="mqtt://host:1883 | https://api.xx.com | ./output/data.json" />
+          <el-input v-model="form.endpoint" :placeholder="getEndpointPlaceholder(form.protocol)" />
         </el-form-item>
         <el-form-item label="配置 JSON">
           <el-input
             v-model="form.configJson" type="textarea" :rows="4"
-            placeholder='{"topic":"edge/data","token":"Bearer xxx"}'
+            :placeholder="getConfigPlaceholder(form.protocol)"
             class="mono-input"
           />
-          <div style="font-size:11px;color:var(--text-muted);margin-top:4px">MQTT 填 topic/clientId，HTTP 填 token/timeout 等</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:4px">{{ getConfigHint(form.protocol) }}</div>
         </el-form-item>
         <el-form-item label="是否启用">
           <el-switch v-model="form.isEnabled" active-color="#38dcc4" />
@@ -147,7 +156,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Link, Connection } from '@element-plus/icons-vue'
+import { Plus, Link, Connection, InfoFilled } from '@element-plus/icons-vue'
 import { getChannels, createChannel, toggleChannel } from '@/api/channel'
 import { SendProtocol, SendProtocolOptions, formatDateTime } from '@/api/constants'
 
@@ -203,6 +212,32 @@ const getProtoColor = (value: number) => {
   return protocol?.color ?? '#8fa5c5'
 }
 
+const getEndpointPlaceholder = (protocol: number | null) => {
+  if (protocol === SendProtocol.Mqtt.value) return 'mqtt://host:1883'
+  if (protocol === SendProtocol.Http.value) return 'https://api.example.com/data'
+  if (protocol === SendProtocol.WebSocket.value) return 'ws://localhost:8080/ws 或 wss://api.example.com/ws'
+  if (protocol === SendProtocol.LocalFile.value) return './output/data.json'
+  return '请输入端点地址'
+}
+
+const getConfigPlaceholder = (protocol: number | null) => {
+  if (protocol === SendProtocol.Mqtt.value) return '{"topic":"edge/data","clientId":"device01"}'
+  if (protocol === SendProtocol.Http.value) return '{"token":"Bearer xxx","timeout":5000}'
+  if (protocol === SendProtocol.WebSocket.value) {
+    return '{"subscribeTopic":"device/data","heartbeatInterval":30000}'
+  }
+  if (protocol === SendProtocol.LocalFile.value) return '{"format":"json","path":"./data"}'
+  return '配置 JSON（可选）'
+}
+
+const getConfigHint = (protocol: number | null) => {
+  if (protocol === SendProtocol.Mqtt.value) return 'MQTT：topic(主题), clientId(客户端 ID), username, password'
+  if (protocol === SendProtocol.Http.value) return 'HTTP：token(认证令牌), timeout(超时毫秒), method'
+  if (protocol === SendProtocol.WebSocket.value) return 'WebSocket：subscribeTopic(订阅主题), heartbeatInterval(心跳间隔 ms)'
+  if (protocol === SendProtocol.LocalFile.value) return '本地文件：format(json/csv), path(保存路径)'
+  return '根据所选协议填写相应配置'
+}
+
 const fetchChannels = async () => {
   loading.value = true
   try {
@@ -226,11 +261,29 @@ const openCreate = () => {
   dialogVisible.value = true
 }
 
+const buildConfigJson = () => {
+  let config: Record<string, any> = {}
+
+  try {
+    if (form.value.configJson.trim()) {
+      config = JSON.parse(form.value.configJson)
+    }
+  } catch {
+    // 如果解析失败，使用空对象
+  }
+
+  return JSON.stringify(config, null, 2)
+}
+
 const submitForm = async () => {
   await formRef.value?.validate()
   submitting.value = true
   try {
-    await createChannel(form.value)
+    const submitData = {
+      ...form.value,
+      configJson: buildConfigJson()
+    }
+    await createChannel(submitData)
     ElMessage.success('通道创建成功')
     dialogVisible.value = false
     fetchChannels()

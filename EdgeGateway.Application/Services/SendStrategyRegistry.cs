@@ -10,7 +10,7 @@ namespace EdgeGateway.Application.Services;
 /// 在程序启动时将发送协议枚举与对应的策略实现类型绑定
 /// 运行时根据通道发送协议类型动态从 DI 容器解析策略实例
 /// </summary>
-public class SendStrategyRegistry
+public class SendStrategyRegistry : ISendStrategyRegistry
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<SendStrategyRegistry> _logger;
@@ -35,8 +35,13 @@ public class SendStrategyRegistry
         where TStrategy : ISendStrategy
     {
         _strategyMap[protocol] = typeof(TStrategy);
-        _logger.LogInformation("发送策略注册: {Protocol} -> {Strategy}", protocol, typeof(TStrategy).Name);
+        _logger.LogInformation("发送策略注册：{Protocol} -> {Strategy}", protocol, typeof(TStrategy).Name);
         return this;
+    }
+
+    ISendStrategyRegistry ISendStrategyRegistry.Register<TStrategy>(SendProtocol protocol)
+    {
+        return Register<TStrategy>(protocol);
     }
 
     /// <summary>
@@ -48,7 +53,7 @@ public class SendStrategyRegistry
     {
         if (!_strategyMap.TryGetValue(protocol, out var strategyType))
             throw new NotSupportedException(
-                $"不支持的发送协议: {protocol}，请在启动时通过 Register<T>() 注册对应的策略实现");
+                $"不支持的发送协议：{protocol}，请在启动时通过 Register<T>() 注册对应的策略实现");
 
         return (ISendStrategy)_serviceProvider.GetRequiredService(strategyType);
     }
