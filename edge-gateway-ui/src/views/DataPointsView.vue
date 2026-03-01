@@ -107,31 +107,60 @@
     </div>
 
     <!-- 新增数据点弹窗 -->
-    <el-dialog v-model="dialogVisible" title="新增数据点" width="520px" destroy-on-close>
+    <el-dialog v-model="dialogVisible" title="新增数据点" width="680px" destroy-on-close class="datapoint-dialog" top="8vh">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="90px" label-position="left">
-        <el-form-item label="名称" prop="name">
-          <el-input v-model="form.name" placeholder="如：温度、压力" />
-        </el-form-item>
-        <el-form-item label="Tag" prop="tag">
-          <el-input v-model="form.tag" placeholder="如：DEV001.Temperature" class="mono-input" />
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="form.description" placeholder="可选描述" />
-        </el-form-item>
-        <el-form-item label="地址" prop="address">
-          <el-input v-model="form.address" placeholder="如：40001（Modbus 寄存器）" class="mono-input" />
-        </el-form-item>
-        <el-form-item label="数据类型" prop="dataType">
-          <el-select v-model="form.dataType" placeholder="选择类型" style="width:100%">
-            <el-option v-for="o in DataValueTypeOptions" :key="o.value" :label="o.label" :value="o.value" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="单位">
-          <el-input v-model="form.unit" placeholder="如：℃、MPa（可选）" />
-        </el-form-item>
-        <el-form-item label="是否启用">
-          <el-switch v-model="form.isEnabled" active-color="#38dcc4" />
-        </el-form-item>
+        
+        <!-- 基本信息 -->
+        <div class="form-section">
+          <div class="section-title"><el-icon><Document /></el-icon> 基本信息</div>
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <el-form-item label="名称" prop="name">
+                <el-input v-model="form.name" placeholder="如：温度" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="Tag" prop="tag">
+                <el-input v-model="form.tag" placeholder="DEV001.Temperature" class="mono-input" />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-form-item label="描述">
+            <el-input v-model="form.description" placeholder="可选描述信息" />
+          </el-form-item>
+        </div>
+
+        <!-- 采集配置 -->
+        <div class="form-section">
+          <div class="section-title"><el-icon><Setting /></el-icon> 采集配置</div>
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <el-form-item label="地址" prop="address">
+                <el-input v-model="form.address" placeholder="40001" class="mono-input" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="数据类型" prop="dataType">
+                <el-select v-model="form.dataType" placeholder="选择类型" style="width:100%">
+                  <el-option v-for="o in DataValueTypeOptions" :key="o.value" :label="o.label" :value="o.value" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <el-form-item label="单位">
+                <el-input v-model="form.unit" placeholder="℃、MPa" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="是否启用">
+                <el-switch v-model="form.isEnabled" active-color="#38dcc4" />
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </div>
+
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -391,14 +420,73 @@ onUnmounted(() => {
 .badge.bad { background: rgba(240,89,89,0.15); color: var(--text-danger); border-color: rgba(240,89,89,0.3); }
 .badge.uncertain { background: rgba(250,173,40,0.15); color: var(--text-warning); border-color: rgba(250,173,40,0.3); }
 
-/* 弹窗样式修复 */
+/* 弹窗样式 */
+.datapoint-dialog {
+  max-height: 84vh;
+  display: flex;
+  flex-direction: column;
+}
 :deep(.el-dialog) {
   background: var(--bg-card) !important;
   border: 1px solid var(--border-muted) !important;
   border-radius: var(--radius-lg) !important;
+  max-height: 84vh;
 }
-:deep(.el-dialog__header) { border-bottom: 1px solid var(--border-subtle); }
-:deep(.el-dialog__title) { color: var(--text-primary) !important; }
+:deep(.el-dialog__header) { 
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 14px 20px;
+  flex-shrink: 0;
+}
+:deep(.el-dialog__title) { 
+  color: var(--text-primary) !important;
+  font-weight: 600;
+  font-size: 15px;
+}
+:deep(.el-dialog__body) { 
+  color: var(--text-primary);
+  padding: 16px 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+:deep(.el-dialog__footer) { 
+  border-top: 1px solid var(--border-subtle);
+  padding: 12px 20px;
+  flex-shrink: 0;
+}
+
+/* 表单分组 */
+.form-section {
+  margin-bottom: 16px;
+  padding: 14px;
+  background: var(--bg-base);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+.form-section:last-child {
+  margin-bottom: 0;
+}
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.section-title .el-icon {
+  color: var(--cyan);
+  font-size: 14px;
+}
+
+/* 弹窗样式修复 */
+:deep(.el-form-item__label) { color: var(--text-secondary) !important; font-size: 13px; }
+:deep(.el-input__wrapper) { background: var(--bg-base) !important; border-color: var(--border-muted) !important; }
+:deep(.el-select__wrapper) { background: var(--bg-base) !important; border-color: var(--border-muted) !important; }
+:deep(.el-textarea__inner) { background: var(--bg-base) !important; border-color: var(--border-muted) !important; color: var(--text-primary) !important; }
+:deep(.mono-input .el-input__inner) { font-family: var(--font-mono); }
 :deep(.el-dialog__body) { color: var(--text-primary); }
 :deep(.el-dialog__footer) { border-top: 1px solid var(--border-subtle); }
 :deep(.el-form-item__label) { color: var(--text-secondary) !important; }

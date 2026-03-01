@@ -101,42 +101,92 @@
     <el-dialog
       v-model="dialogVisible"
       :title="editingDevice ? '编辑设备' : '新增设备'"
-      width="560px" destroy-on-close
+      width="720px" destroy-on-close class="device-dialog" top="8vh"
     >
       <el-form
         ref="formRef" :model="form" :rules="rules"
         label-width="100px" label-position="left"
       >
-        <el-form-item label="设备名称" prop="name">
-          <el-input v-model="form.name" placeholder="如：车间 A-PLC01" />
-        </el-form-item>
-        <el-form-item label="设备编码" prop="code" v-if="!editingDevice">
-          <el-input v-model="form.code" placeholder="全局唯一编码，如 DEV_PLC_001" />
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="form.description" type="textarea" :rows="2" placeholder="可选" />
-        </el-form-item>
-        <el-form-item label="通信协议" prop="protocol" v-if="!editingDevice">
-          <el-select v-model="form.protocol" placeholder="选择协议" style="width:100%">
-            <el-option v-for="o in CollectionProtocolOptions" :key="o.value" :label="o.label" :value="o.value" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="设备地址" prop="address">
-          <el-input v-model="form.address" placeholder="IP 地址 或 COM3" />
-        </el-form-item>
-        <el-form-item label="端口">
-          <el-input-number v-model="form.port" :min="1" :max="65535" placeholder="502" style="width:100%" controls-position="right" />
-        </el-form-item>
-        <el-form-item label="采集周期" prop="pollingIntervalMs">
-          <el-input-number
-            v-model="form.pollingIntervalMs" :min="100" :max="60000" :step="500"
-            style="width:100%" controls-position="right"
-          />
-          <span style="margin-left:8px;color:var(--text-muted);font-size:12px">毫秒，100 - 60000</span>
-        </el-form-item>
-        <el-form-item label="是否启用">
-          <el-switch v-model="form.isEnabled" active-color="#38dcc4" />
-        </el-form-item>
+        <!-- 基本信息 -->
+        <div class="form-section">
+          <div class="section-title"><el-icon><Document /></el-icon> 基本信息</div>
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <el-form-item label="设备名称" prop="name">
+                <el-input v-model="form.name" placeholder="如：车间 A-PLC01" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="设备编码" prop="code" v-if="!editingDevice">
+                <el-input v-model="form.code" placeholder="DEV_PLC_001" />
+              </el-form-item>
+              <el-form-item v-else label="设备编码">
+                <el-input v-model="form.code" disabled />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-form-item label="描述">
+            <el-input v-model="form.description" type="textarea" :rows="2" placeholder="可选描述信息" />
+          </el-form-item>
+        </div>
+
+        <!-- 通信配置 -->
+        <div class="form-section">
+          <div class="section-title"><el-icon><Setting /></el-icon> 通信配置</div>
+          <el-form-item label="通信协议" prop="protocol" v-if="!editingDevice">
+            <el-select v-model="form.protocol" placeholder="选择协议" style="width:100%">
+              <el-option v-for="o in CollectionProtocolOptions" :key="o.value" :label="o.label" :value="o.value">
+                <div class="protocol-option">
+                  <span>{{ o.label }}</span>
+                  <span class="protocol-desc">{{ o.desc }}</span>
+                </div>
+              </el-option>
+            </el-select>
+          </el-form-item>
+          <el-form-item v-else label="通信协议">
+            <el-tag>{{ CollectionProtocolOptions.find(o => o.value === form.protocol)?.label || '-' }}</el-tag>
+          </el-form-item>
+
+          <!-- 协议说明 -->
+          <div v-if="form.protocol === CollectionProtocol.Modbus.value" class="protocol-hint">
+            <el-icon class="hint-icon"><InfoFilled /></el-icon>
+            <span>Modbus TCP/RTU 协议，支持功能码 01/02/03/04/05/06/15/16。</span>
+          </div>
+          <div v-else-if="form.protocol === CollectionProtocol.Simulator.value" class="protocol-hint">
+            <el-icon class="hint-icon"><InfoFilled /></el-icon>
+            <span>模拟器用于测试，自动生成随机数据。</span>
+          </div>
+
+          <el-row :gutter="20">
+            <el-col :span="16">
+              <el-form-item label="设备地址" prop="address">
+                <el-input v-model="form.address" placeholder="IP 地址 或 COM3" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="端口">
+                <el-input-number v-model="form.port" :min="1" :max="65535" placeholder="502" style="width:100%" controls-position="right" />
+              </el-form-item>
+            </el-col>
+          </el-row>
+        </div>
+
+        <!-- 采集配置 -->
+        <div class="form-section">
+          <div class="section-title"><el-icon><Timer /></el-icon> 采集配置</div>
+          <el-form-item label="采集周期" prop="pollingIntervalMs">
+            <el-input-number
+              v-model="form.pollingIntervalMs" :min="100" :max="60000" :step="500"
+              style="width:200px" controls-position="right"
+            />
+            <span class="form-hint" style="margin-left: 12px">毫秒 (100-60000)</span>
+          </el-form-item>
+          <el-form-item label="是否启用">
+            <el-switch v-model="form.isEnabled" active-color="#38dcc4" />
+            <span class="form-hint" style="margin-left: 12px">停用后设备将停止采集</span>
+          </el-form-item>
+        </div>
+
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
@@ -152,7 +202,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
-import { Plus, Edit, Delete, DataLine, Location, Timer } from '@element-plus/icons-vue'
+import { Plus, Edit, Delete, DataLine, Location, Timer, Document, Setting, InfoFilled } from '@element-plus/icons-vue'
 import {
   getDevices,
   createDevice,
@@ -160,7 +210,7 @@ import {
   deleteDevice,
   toggleDevice as apiToggle
 } from '@/api/device'
-import { CollectionProtocolOptions, getProtocolConfig, formatInterval } from '@/api/constants'
+import { CollectionProtocol, CollectionProtocolOptions, getProtocolConfig, formatInterval } from '@/api/constants'
 
 type DeviceItem = {
   id: number
@@ -515,18 +565,110 @@ onMounted(fetchDevices)
 }
 
 /* 弹窗样式 */
+.device-dialog {
+  max-height: 84vh;
+  display: flex;
+  flex-direction: column;
+}
 :deep(.el-dialog) {
   background: var(--bg-card) !important;
   border: 1px solid var(--border-muted) !important;
   border-radius: var(--radius-lg) !important;
+  max-height: 84vh;
 }
-:deep(.el-dialog__header) { border-bottom: 1px solid var(--border-subtle); }
-:deep(.el-dialog__title) { color: var(--text-primary) !important; }
-:deep(.el-dialog__body) { color: var(--text-primary); }
-:deep(.el-dialog__footer) { border-top: 1px solid var(--border-subtle); }
-:deep(.el-form-item__label) { color: var(--text-secondary) !important; }
+:deep(.el-dialog__header) { 
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 14px 20px;
+  flex-shrink: 0;
+}
+:deep(.el-dialog__title) { 
+  color: var(--text-primary) !important;
+  font-weight: 600;
+  font-size: 15px;
+}
+:deep(.el-dialog__body) { 
+  color: var(--text-primary);
+  padding: 16px 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+:deep(.el-dialog__footer) { 
+  border-top: 1px solid var(--border-subtle);
+  padding: 12px 20px;
+  flex-shrink: 0;
+}
+
+/* 表单分组 */
+.form-section {
+  margin-bottom: 16px;
+  padding: 14px;
+  background: var(--bg-base);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+.form-section:last-child {
+  margin-bottom: 0;
+}
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.section-title .el-icon {
+  color: var(--cyan);
+  font-size: 14px;
+}
+
+/* 协议选项样式 */
+.protocol-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.protocol-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* 协议提示 */
+.protocol-hint {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: var(--bg-card);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.protocol-hint .hint-icon {
+  color: var(--cyan);
+  font-size: 14px;
+}
+
+/* 表单提示 */
+.form-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+/* 弹窗样式修复 */
+:deep(.el-form-item__label) { color: var(--text-secondary) !important; font-size: 13px; }
 :deep(.el-input__wrapper) { background: var(--bg-base) !important; border-color: var(--border-muted) !important; }
 :deep(.el-select__wrapper) { background: var(--bg-base) !important; border-color: var(--border-muted) !important; }
 :deep(.el-textarea__inner) { background: var(--bg-base) !important; border-color: var(--border-muted) !important; color: var(--text-primary) !important; }
 :deep(.el-input-number) { background: var(--bg-base) !important; border: 1px solid var(--border-muted) !important; }
+:deep(.el-tag) { margin-top: 6px; }
 </style>

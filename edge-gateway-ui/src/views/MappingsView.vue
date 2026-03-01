@@ -71,12 +71,14 @@
     </div>
 
     <!-- 绑定数据点弹窗 -->
-    <el-dialog v-model="bindDialogVisible" title="绑定数据点到通道" width="700px" destroy-on-close>
+    <el-dialog v-model="bindDialogVisible" title="绑定数据点到通道" width="750px" destroy-on-close class="bind-dialog" top="8vh">
       <div class="bind-layout">
         <!-- 左：设备树选择数据点 -->
         <div class="device-selector">
-          <div class="selector-title">选择数据点</div>
-          <el-input v-model="dpSearch" placeholder="搜索..." prefix-icon="Search" size="small" clearable />
+          <div class="selector-title">
+            <el-icon><Monitor /></el-icon> 选择数据点
+          </div>
+          <el-input v-model="dpSearch" placeholder="搜索数据点或设备..." prefix-icon="Search" size="small" clearable />
 
           <div class="device-tree">
             <div v-for="dev in filteredDeviceTree" :key="dev.id" class="dev-group">
@@ -115,7 +117,9 @@
 
         <!-- 右：已选预览 -->
         <div class="selected-preview">
-          <div class="selector-title">已选<span class="mono" style="color:var(--cyan)">{{ selectedIds.size }}</span> 个</div>
+          <div class="selector-title">
+            <el-icon><Connection /></el-icon> 已选<span class="mono" style="color:var(--cyan)">{{ selectedIds.size }}</span> 个
+          </div>
           <div class="selected-list">
             <div v-for="id in [...selectedIds]" :key="id" class="selected-item">
               <span class="mono" style="font-size:12px;color:var(--text-secondary)">{{ getTagById(id) }}</span>
@@ -324,14 +328,46 @@ onMounted(fetchMappings)
 .empty-state { display:flex; flex-direction:column; align-items:center; padding:48px 20px; }
 
 /* 绑定弹窗布局 */
-.bind-layout { display:grid; grid-template-columns:1fr 220px; gap:16px; max-height:480px; }
+.bind-dialog {
+  max-height: 84vh;
+  display: flex;
+  flex-direction: column;
+}
+.bind-layout { 
+  display:grid; 
+  grid-template-columns:1fr 220px; 
+  gap:16px; 
+  max-height:60vh;
+  overflow: hidden;
+}
 .device-selector, .selected-preview {
   display:flex; flex-direction:column; gap:10px;
   border:1px solid var(--border-subtle); border-radius:var(--radius); padding:12px;
   overflow:hidden;
+  background: var(--bg-base);
 }
-.selector-title { font-size:12px; font-weight:700; color:var(--text-muted); letter-spacing:0.06em; text-transform:uppercase; }
-.device-tree, .selected-list { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:6px; }
+.selector-title { 
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px; 
+  font-weight: 700; 
+  color: var(--text-primary);
+  letter-spacing:0.06em; 
+  text-transform:uppercase;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.selector-title .el-icon {
+  color: var(--cyan);
+}
+.device-tree, .selected-list { 
+  flex:1; 
+  overflow-y:auto; 
+  display:flex; 
+  flex-direction:column; 
+  gap:6px; 
+}
 
 .dev-group { }
 .dev-group-title {
@@ -350,20 +386,39 @@ onMounted(fetchMappings)
 
 .selected-item {
   display:flex; align-items:center; justify-content:space-between;
-  padding:5px 8px; border-radius:4px; background:var(--bg-hover);
+  padding:5px 8px; border-radius:4px; background:var(--bg-card);
+  border: 1px solid var(--border-subtle);
 }
 .empty-hint { font-size:12px; color:var(--text-muted); text-align:center; padding:20px; }
 
 /* 弹窗样式修复 */
-:deep(.el-dialog) { 
-  background: var(--bg-card) !important; 
+:deep(.el-dialog) {
+  background: var(--bg-card) !important;
   border: 1px solid var(--border-muted) !important;
   border-radius: var(--radius-lg) !important;
+  max-height: 84vh;
 }
-:deep(.el-dialog__header) { border-bottom: 1px solid var(--border-subtle); }
-:deep(.el-dialog__title) { color: var(--text-primary) !important; }
-:deep(.el-dialog__body) { color: var(--text-primary); }
-:deep(.el-dialog__footer) { border-top: 1px solid var(--border-subtle); }
+:deep(.el-dialog__header) { 
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 14px 20px;
+  flex-shrink: 0;
+}
+:deep(.el-dialog__title) { 
+  color: var(--text-primary) !important;
+  font-weight: 600;
+  font-size: 15px;
+}
+:deep(.el-dialog__body) { 
+  color: var(--text-primary);
+  padding: 16px 20px;
+  overflow: hidden;
+  flex: 1;
+}
+:deep(.el-dialog__footer) { 
+  border-top: 1px solid var(--border-subtle);
+  padding: 12px 20px;
+  flex-shrink: 0;
+}
 :deep(.el-input__wrapper) { background: var(--bg-base) !important; border-color: var(--border-muted) !important; }
 :deep(.el-checkbox__label) { color: var(--text-primary) !important; }
 :deep(.el-checkbox__input.is-checked .el-checkbox__inner) { background-color: var(--cyan) !important; border-color: var(--cyan) !important; }
