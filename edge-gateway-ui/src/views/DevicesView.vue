@@ -148,11 +148,11 @@
           </el-form-item>
 
           <!-- 协议说明 -->
-          <div v-if="form.protocol === CollectionProtocol.Modbus.value" class="protocol-hint">
+          <div v-if="form.protocol === 1" class="protocol-hint">
             <el-icon class="hint-icon"><InfoFilled /></el-icon>
             <span>Modbus TCP/RTU 协议，支持功能码 01/02/03/04/05/06/15/16。</span>
           </div>
-          <div v-else-if="form.protocol === CollectionProtocol.Simulator.value" class="protocol-hint">
+          <div v-else-if="form.protocol === 99" class="protocol-hint">
             <el-icon class="hint-icon"><InfoFilled /></el-icon>
             <span>模拟器用于测试，自动生成随机数据。</span>
           </div>
@@ -210,7 +210,8 @@ import {
   deleteDevice,
   toggleDevice as apiToggle
 } from '@/api/device'
-import { CollectionProtocol, CollectionProtocolOptions, getProtocolConfig, formatInterval } from '@/api/constants'
+import { getCollectionProtocols } from '@/api/enums'
+import { formatInterval } from '@/api/constants'
 
 type DeviceItem = {
   id: number
@@ -240,6 +241,17 @@ type DeviceForm = {
 const router = useRouter()
 const loading = ref(false)
 const devices = ref<DeviceItem[]>([])
+const CollectionProtocolOptions = ref<any[]>([])
+
+// 加载采集协议选项
+const loadCollectionProtocols = async () => {
+  try {
+    const res = await getCollectionProtocols()
+    CollectionProtocolOptions.value = (res as any).data || []
+  } catch (error) {
+    console.error('加载采集协议失败:', error)
+  }
+}
 const searchText = ref('')
 const filterProtocol = ref<number | null>(null)
 
@@ -255,8 +267,14 @@ const filteredDevices = computed(() => {
   })
 })
 
-const getProtocolColor = (value: number) => getProtocolConfig(value).color
-const getProtocolBg = (value: number) => `${getProtocolConfig(value).color}22`
+const getProtocolColor = (value: number) => {
+  const protocol = CollectionProtocolOptions.value.find(p => p.value === value)
+  return protocol ? '#38dcc4' : '#8fa5c5'
+}
+const getProtocolBg = (value: number) => {
+  const protocol = CollectionProtocolOptions.value.find(p => p.value === value)
+  return protocol ? `${protocol.color}22` : '#8fa5c522'
+}
 
 const dialogVisible = ref(false)
 const editingDevice = ref<DeviceItem | null>(null)
@@ -371,7 +389,10 @@ const goDataPoints = (row: DeviceItem) => {
   router.push({ name: 'DataPoints', params: { id: row.id }, query: { deviceName: row.name } })
 }
 
-onMounted(fetchDevices)
+onMounted(() => {
+  fetchDevices()
+  loadCollectionProtocols()
+})
 </script>
 
 <style scoped>

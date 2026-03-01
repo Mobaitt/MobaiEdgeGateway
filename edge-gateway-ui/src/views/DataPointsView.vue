@@ -176,7 +176,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { Plus, Delete, ArrowLeft } from '@element-plus/icons-vue'
 import { getDataPoints, createDataPoint, deleteDataPoint, getDeviceRealtimeData, getDevice } from '@/api/device'
-import { DataValueTypeOptions, formatDateTime } from '@/api/constants'
+import { getDataValueTypes } from '@/api/enums'
+import { formatDateTime } from '@/api/constants'
 
 type DataPointItem = {
   id: number
@@ -210,6 +211,17 @@ type RealtimeDataItem = {
 const route = useRoute()
 const router = useRouter()
 const deviceId = computed(() => Number(route.params.id))
+const DataValueTypeOptions = ref<any[]>([])
+
+// 加载数据类型选项
+const loadDataValueTypes = async () => {
+  try {
+    const res = await getDataValueTypes()
+    DataValueTypeOptions.value = (res as any).data || []
+  } catch (error) {
+    console.error('加载数据类型失败:', error)
+  }
+}
 
 const loading = ref(false)
 const dataPoints = ref<DataPointItem[]>([])
@@ -365,6 +377,7 @@ const confirmDelete = (row: DataPointItem) => {
 onMounted(() => {
   fetchDevice()
   fetchDataPoints()
+  loadDataValueTypes()
   startRealtimePolling()
 })
 

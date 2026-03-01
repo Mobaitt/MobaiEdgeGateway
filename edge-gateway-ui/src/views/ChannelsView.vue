@@ -108,14 +108,14 @@
           </el-form-item>
 
           <!-- WebSocket 模式说明 -->
-          <div v-if="form.protocol === SendProtocol.WebSocket.value" class="protocol-hint">
+          <div v-if="form.protocol === 5" class="protocol-hint">
             <el-icon class="hint-icon"><InfoFilled /></el-icon>
             <span>WebSocket 作为服务端运行，等待客户端连接。数据会自动推送给订阅的客户端。</span>
             <code class="hint-code">ws://localhost:5000/ws?topic=device/data</code>
           </div>
 
           <!-- HTTP 模式选择 -->
-          <template v-if="form.protocol === SendProtocol.Http.value">
+          <template v-if="form.protocol === 2">
             <el-form-item label="运行模式">
               <el-radio-group v-model="httpMode" class="mode-radio-group">
                 <el-radio :label="'client'">
@@ -140,14 +140,14 @@
           </template>
 
           <!-- MQTT 模式说明 -->
-          <div v-if="form.protocol === SendProtocol.Mqtt.value" class="protocol-hint">
+          <div v-if="form.protocol === 1" class="protocol-hint">
             <el-icon class="hint-icon"><InfoFilled /></el-icon>
             <span>将数据发布到 MQTT Broker 的指定主题。支持 QoS 和认证配置。</span>
             <code class="hint-code">edge/device/data</code>
           </div>
 
           <!-- 本地文件模式说明 -->
-          <div v-if="form.protocol === SendProtocol.LocalFile.value" class="protocol-hint">
+          <div v-if="form.protocol === 4" class="protocol-hint">
             <el-icon class="hint-icon"><InfoFilled /></el-icon>
             <span>将数据追加写入本地 JSON 文件（NDJSON 格式），适合离线场景或数据备份。</span>
           </div>
@@ -190,7 +190,8 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Link, Connection, InfoFilled, Document, Setting, Upload, Download } from '@element-plus/icons-vue'
 import { getChannels, createChannel, updateChannel, deleteChannel, toggleChannel } from '@/api/channel'
-import { SendProtocol, SendProtocolOptions, formatDateTime } from '@/api/constants'
+import { getSendProtocols } from '@/api/enums'
+import { formatDateTime } from '@/api/constants'
 
 type ChannelItem = {
   id: number
@@ -219,6 +220,17 @@ type ChannelForm = {
 const router = useRouter()
 const loading = ref(false)
 const channels = ref<ChannelItem[]>([])
+const SendProtocolOptions = ref<any[]>([])
+
+// 加载发送协议选项
+const loadSendProtocols = async () => {
+  try {
+    const res = await getSendProtocols()
+    SendProtocolOptions.value = (res as any).data || []
+  } catch (error) {
+    console.error('加载发送协议失败:', error)
+  }
+}
 
 const dialogVisible = ref(false)
 const submitting = ref(false)
@@ -243,42 +255,42 @@ const rules = {
 }
 
 const getProtoColor = (value: number) => {
-  const protocol = Object.values(SendProtocol).find((item) => item.value === value)
+  const protocol = SendProtocolOptions.value.find((item) => item.value === value)
   return protocol?.color ?? '#8fa5c5'
 }
 
 const getEndpointPlaceholder = (protocol: number | null, mode?: 'client' | 'server') => {
-  if (protocol === SendProtocol.Mqtt.value) return 'mqtt://host:1883'
-  if (protocol === SendProtocol.Http.value) {
+  if (protocol === 1) return 'mqtt://host:1883'
+  if (protocol === 2) {
     if (mode === 'server') return '/api/http-data/data (数据访问路径)'
     return 'https://api.example.com/data/upload'
   }
-  if (protocol === SendProtocol.WebSocket.value) return 'ws://localhost:8080/ws 或 wss://api.example.com/ws'
-  if (protocol === SendProtocol.LocalFile.value) return './output/data.json'
+  if (protocol === 5) return 'ws://localhost:8080/ws 或 wss://api.example.com/ws'
+  if (protocol === 4) return './output/data.json'
   return '请输入端点地址'
 }
 
 const getConfigPlaceholder = (protocol: number | null, mode?: 'client' | 'server') => {
-  if (protocol === SendProtocol.Mqtt.value) return '{"topic":"edge/data","clientId":"device01"}'
-  if (protocol === SendProtocol.Http.value) {
+  if (protocol === 1) return '{"topic":"edge/data","clientId":"device01"}'
+  if (protocol === 2) {
     if (mode === 'server') return '{}'
     return '{"token":"Bearer xxx","timeout":5000}'
   }
-  if (protocol === SendProtocol.WebSocket.value) {
+  if (protocol === 5) {
     return '{"subscribeTopic":"device/data","heartbeatInterval":30000}'
   }
-  if (protocol === SendProtocol.LocalFile.value) return '{"format":"json","path":"./data"}'
+  if (protocol === 4) return '{"format":"json","path":"./data"}'
   return '配置 JSON（可选）'
 }
 
 const getConfigHint = (protocol: number | null, mode?: 'client' | 'server') => {
-  if (protocol === SendProtocol.Mqtt.value) return 'MQTT：topic(主题), clientId(客户端 ID), username, password'
-  if (protocol === SendProtocol.Http.value) {
+  if (protocol === 1) return 'MQTT：topic(主题), clientId(客户端 ID), username, password'
+  if (protocol === 2) {
     if (mode === 'server') return 'HTTP 服务端：无需配置，自动使用 Web 端口'
     return 'HTTP 客户端：token(认证令牌), timeout(超时毫秒), method'
   }
-  if (protocol === SendProtocol.WebSocket.value) return 'WebSocket：subscribeTopic(订阅主题), heartbeatInterval(心跳间隔 ms)'
-  if (protocol === SendProtocol.LocalFile.value) return '本地文件：format(json/csv), path(保存路径)'
+  if (protocol === 5) return 'WebSocket：subscribeTopic(订阅主题), heartbeatInterval(心跳间隔 ms)'
+  if (protocol === 4) return '本地文件：format(json/csv), path(保存路径)'
   return '根据所选协议填写相应配置'
 }
 
@@ -344,7 +356,7 @@ const buildConfigJson = () => {
   }
 
   // 如果是 HTTP 协议，添加 mode 配置
-  if (form.value.protocol === SendProtocol.Http.value) {
+  if (form.value.protocol === 2) {
     config.mode = httpMode.value
     // 服务端模式且配置了端口才添加 port
     if (httpMode.value === 'server' && config.port) {
@@ -432,7 +444,10 @@ const handleToggle = async (channel: ChannelItem) => {
   }
 }
 
-onMounted(fetchChannels)
+onMounted(() => {
+  fetchChannels()
+  loadSendProtocols()
+})
 </script>
 
 <style scoped>
