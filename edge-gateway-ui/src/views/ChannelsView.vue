@@ -70,74 +70,115 @@
     </div>
 
     <!-- 新增/编辑通道弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="editingChannel ? '编辑发送通道' : '新增发送通道'" width="580px" destroy-on-close>
+    <el-dialog v-model="dialogVisible" :title="editingChannel ? '编辑发送通道' : '新增发送通道'" width="720px" destroy-on-close class="channel-dialog" top="8vh">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="100px" label-position="left">
-        <el-form-item label="通道名称" prop="name">
-          <el-input v-model="form.name" placeholder="如：云端 MQTT" />
-        </el-form-item>
-        <el-form-item label="通道编码" prop="code">
-          <el-input v-model="form.code" placeholder="全局唯一编码，如 CH_MQTT_01" />
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="form.description" type="textarea" :rows="2" placeholder="Optional description" />
-        </el-form-item>
-        <el-form-item label="Send Protocol" prop="protocol">
-          <el-select v-model="form.protocol" placeholder="选择协议" style="width:100%">
-            <el-option v-for="o in SendProtocolOptions" :key="o.value" :label="o.label" :value="o.value" />
-          </el-select>
-        </el-form-item>
         
-        <!-- WebSocket 模式说明 -->
-        <el-form-item v-if="form.protocol === SendProtocol.WebSocket.value" label="说明">
-          <div style="font-size:12px;color:var(--text-muted);line-height:1.6">
-            <el-icon size="14"><InfoFilled /></el-icon>
-            WebSocket 作为<strong>服务端模式</strong>运行，等待客户端连接。
-            采集数据会自动推送给订阅的客户端。
-          </div>
-        </el-form-item>
+        <!-- 基本信息 -->
+        <div class="form-section">
+          <div class="section-title"><el-icon><Document /></el-icon> 基本信息</div>
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <el-form-item label="通道名称" prop="name">
+                <el-input v-model="form.name" placeholder="如：云端 MQTT" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="通道编码" prop="code">
+                <el-input v-model="form.code" placeholder="全局唯一编码，如 CH_MQTT_01" />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-form-item label="描述">
+            <el-input v-model="form.description" type="textarea" :rows="2" placeholder="可选描述信息" />
+          </el-form-item>
+        </div>
 
-        <!-- HTTP 模式选择 -->
-        <el-form-item v-if="form.protocol === SendProtocol.Http.value" label="运行模式">
-          <el-radio-group v-model="httpMode">
-            <el-radio :label="'client'">客户端模式（主动推送）</el-radio>
-            <el-radio :label="'server'">服务端模式（等待采集）</el-radio>
-          </el-radio-group>
-        </el-form-item>
+        <!-- 协议配置 -->
+        <div class="form-section">
+          <div class="section-title"><el-icon><Setting /></el-icon> 协议配置</div>
+          <el-form-item label="发送协议" prop="protocol">
+            <el-select v-model="form.protocol" placeholder="选择协议" style="width:100%">
+              <el-option v-for="o in SendProtocolOptions" :key="o.value" :label="o.label" :value="o.value">
+                <div class="protocol-option">
+                  <span>{{ o.label }}</span>
+                  <span class="protocol-desc">{{ o.desc }}</span>
+                </div>
+              </el-option>
+            </el-select>
+          </el-form-item>
 
-        <!-- HTTP 模式说明 -->
-        <el-form-item v-if="form.protocol === SendProtocol.Http.value && httpMode === 'client'" label="说明">
-          <div style="font-size:12px;color:var(--text-muted);line-height:1.6">
-            <el-icon size="14"><InfoFilled /></el-icon>
-            作为 HTTP 客户端，主动将数据 <strong>POST</strong> 到目标接口。
+          <!-- WebSocket 模式说明 -->
+          <div v-if="form.protocol === SendProtocol.WebSocket.value" class="protocol-hint">
+            <el-icon class="hint-icon"><InfoFilled /></el-icon>
+            <span>WebSocket 作为服务端运行，等待客户端连接。数据会自动推送给订阅的客户端。</span>
+            <code class="hint-code">ws://localhost:5000/ws?topic=device/data</code>
           </div>
-        </el-form-item>
-        <el-form-item v-if="form.protocol === SendProtocol.Http.value && httpMode === 'server'" label="说明">
-          <div style="font-size:12px;color:var(--text-muted);line-height:1.6">
-            <el-icon size="14"><InfoFilled /></el-icon>
-            作为 HTTP 服务端，等待客户端来<strong>GET</strong> 数据。<br/>
-            <strong>复用当前 Web 服务器端口（5000）</strong>，无需额外配置。<br/>
-            数据访问地址：<strong class="mono">http://localhost:5000/api/http-data/xxx</strong>
-          </div>
-        </el-form-item>
 
-        <el-form-item label="Endpoint" prop="endpoint">
-          <el-input v-model="form.endpoint" :placeholder="getEndpointPlaceholder(form.protocol, httpMode)" />
-        </el-form-item>
-        <el-form-item label="配置 JSON">
-          <el-input
-            v-model="form.configJson" type="textarea" :rows="4"
-            :placeholder="getConfigPlaceholder(form.protocol, httpMode)"
-            class="mono-input"
-          />
-          <div style="font-size:11px;color:var(--text-muted);margin-top:4px">{{ getConfigHint(form.protocol, httpMode) }}</div>
-        </el-form-item>
-        <el-form-item label="是否启用">
-          <el-switch v-model="form.isEnabled" active-color="#38dcc4" />
-        </el-form-item>
+          <!-- HTTP 模式选择 -->
+          <template v-if="form.protocol === SendProtocol.Http.value">
+            <el-form-item label="运行模式">
+              <el-radio-group v-model="httpMode" class="mode-radio-group">
+                <el-radio :label="'client'">
+                  <el-icon><Upload /></el-icon> 客户端模式（主动推送）
+                </el-radio>
+                <el-radio :label="'server'">
+                  <el-icon><Download /></el-icon> 服务端模式（等待采集）
+                </el-radio>
+              </el-radio-group>
+            </el-form-item>
+
+            <div v-if="httpMode === 'client'" class="protocol-hint">
+              <el-icon class="hint-icon"><InfoFilled /></el-icon>
+              <span>作为 HTTP 客户端，主动将数据 POST 到目标接口。</span>
+            </div>
+
+            <div v-if="httpMode === 'server'" class="protocol-hint">
+              <el-icon class="hint-icon"><InfoFilled /></el-icon>
+              <span>作为 HTTP 服务端，等待客户端来 GET 数据。复用 Web 端口 5000，无需额外配置。</span>
+              <code class="hint-code">http://localhost:5000/api/http-data/xxx</code>
+            </div>
+          </template>
+
+          <!-- MQTT 模式说明 -->
+          <div v-if="form.protocol === SendProtocol.Mqtt.value" class="protocol-hint">
+            <el-icon class="hint-icon"><InfoFilled /></el-icon>
+            <span>将数据发布到 MQTT Broker 的指定主题。支持 QoS 和认证配置。</span>
+            <code class="hint-code">edge/device/data</code>
+          </div>
+
+          <!-- 本地文件模式说明 -->
+          <div v-if="form.protocol === SendProtocol.LocalFile.value" class="protocol-hint">
+            <el-icon class="hint-icon"><InfoFilled /></el-icon>
+            <span>将数据追加写入本地 JSON 文件（NDJSON 格式），适合离线场景或数据备份。</span>
+          </div>
+        </div>
+
+        <!-- 连接配置 -->
+        <div class="form-section">
+          <div class="section-title"><el-icon><Connection /></el-icon> 连接配置</div>
+          <el-form-item label="端点地址" prop="endpoint">
+            <el-input v-model="form.endpoint" :placeholder="getEndpointPlaceholder(form.protocol, httpMode)" />
+          </el-form-item>
+          <el-form-item label="配置 JSON">
+            <el-input
+              v-model="form.configJson" type="textarea" :rows="4"
+              :placeholder="getConfigPlaceholder(form.protocol, httpMode)"
+              class="mono-input"
+            />
+            <div class="form-hint">{{ getConfigHint(form.protocol, httpMode) }}</div>
+          </el-form-item>
+          <el-form-item label="是否启用">
+            <el-switch v-model="form.isEnabled" active-color="#38dcc4" />
+            <span class="form-hint" style="margin-left: 12px">停用后通道将停止发送数据</span>
+          </el-form-item>
+        </div>
+
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="submitForm">{{ editingChannel ? '保存修改' : '创建通道' }}</el-button>
+        <el-button type="primary" :loading="submitting" @click="submitForm">
+          {{ editingChannel ? '保存修改' : '创建通道' }}
+        </el-button>
       </template>
     </el-dialog>
   </div>
@@ -147,7 +188,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Link, Connection, InfoFilled } from '@element-plus/icons-vue'
+import { Plus, Link, Connection, InfoFilled, Document, Setting, Upload, Download } from '@element-plus/icons-vue'
 import { getChannels, createChannel, updateChannel, deleteChannel, toggleChannel } from '@/api/channel'
 import { SendProtocol, SendProtocolOptions, formatDateTime } from '@/api/constants'
 
@@ -566,17 +607,136 @@ onMounted(fetchChannels)
 }
 
 /* 弹窗样式 */
+.channel-dialog {
+  max-height: 84vh;
+  display: flex;
+  flex-direction: column;
+}
 :deep(.el-dialog) {
   background: var(--bg-card) !important;
   border: 1px solid var(--border-muted) !important;
   border-radius: var(--radius-lg) !important;
+  max-height: 84vh;
 }
-:deep(.el-dialog__header) { border-bottom: 1px solid var(--border-subtle); }
-:deep(.el-dialog__title) { color: var(--text-primary) !important; }
-:deep(.el-dialog__body) { color: var(--text-primary); }
-:deep(.el-dialog__footer) { border-top: 1px solid var(--border-subtle); }
-:deep(.el-form-item__label) { color: var(--text-secondary) !important; }
+:deep(.el-dialog__header) { 
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 14px 20px;
+  flex-shrink: 0;
+}
+:deep(.el-dialog__title) { 
+  color: var(--text-primary) !important;
+  font-weight: 600;
+  font-size: 15px;
+}
+:deep(.el-dialog__body) { 
+  color: var(--text-primary);
+  padding: 16px 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+:deep(.el-dialog__footer) { 
+  border-top: 1px solid var(--border-subtle);
+  padding: 12px 20px;
+  flex-shrink: 0;
+}
+
+/* 表单分组 */
+.form-section {
+  margin-bottom: 16px;
+  padding: 14px;
+  background: var(--bg-base);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+.form-section:last-child {
+  margin-bottom: 0;
+}
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.section-title .el-icon {
+  color: var(--cyan);
+  font-size: 14px;
+}
+
+/* 协议选项样式 */
+.protocol-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.protocol-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* 模式单选组 */
+.mode-radio-group {
+  display: flex;
+  gap: 12px;
+}
+.mode-radio-group .el-radio {
+  margin-right: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+}
+
+/* 协议提示 */
+.protocol-hint {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: var(--bg-card);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.protocol-hint .hint-icon {
+  color: var(--cyan);
+  font-size: 14px;
+}
+.protocol-hint .hint-code {
+  background: var(--bg-base);
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--cyan);
+  align-self: flex-start;
+}
+
+/* 表单提示 */
+.form-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+/* 弹窗样式修复 */
+:deep(.el-form-item__label) { color: var(--text-secondary) !important; font-size: 13px; }
 :deep(.el-input__wrapper) { background: var(--bg-base) !important; border-color: var(--border-muted) !important; }
 :deep(.el-select__wrapper) { background: var(--bg-base) !important; border-color: var(--border-muted) !important; }
 :deep(.el-textarea__inner) { background: var(--bg-base) !important; border-color: var(--border-muted) !important; color: var(--text-primary) !important; }
+:deep(.mono-input .el-input__inner) { font-family: var(--font-mono); }
 </style>
+
+
+
+
+

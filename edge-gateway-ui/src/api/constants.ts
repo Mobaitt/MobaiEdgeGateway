@@ -17,15 +17,15 @@ export const CollectionProtocolOptions = Object.values(CollectionProtocol).map(p
 // 发送协议枚举（与后端 SendProtocol 对应）
 // =============================================
 export const SendProtocol = {
-  Mqtt:      { value: 1, label: 'MQTT',       icon: 'Connection', color: '#f6b73c' },
-  Http:      { value: 2, label: 'HTTP',        icon: 'Link',       color: '#4299e1' },
-  Kafka:     { value: 3, label: 'Kafka',       icon: 'MessageBox', color: '#9f7aea' },
-  LocalFile: { value: 4, label: '本地文件',    icon: 'FolderOpened', color: '#48bb78' },
-  WebSocket: { value: 5, label: 'WebSocket',   icon: 'Refresh',    color: '#38dcc4' }
+  Mqtt:      { value: 1, label: 'MQTT',       icon: 'Connection', color: '#f6b73c', desc: '发布/订阅模式' },
+  Http:      { value: 2, label: 'HTTP',        icon: 'Link',       color: '#4299e1', desc: '客户端/服务端模式' },
+  Kafka:     { value: 3, label: 'Kafka',       icon: 'MessageBox', color: '#9f7aea', desc: '消息队列' },
+  LocalFile: { value: 4, label: '本地文件',    icon: 'FolderOpened', color: '#48bb78', desc: 'NDJSON 格式' },
+  WebSocket: { value: 5, label: 'WebSocket',   icon: 'Refresh',    color: '#38dcc4', desc: '服务端推送' }
 }
 
 export const SendProtocolOptions = Object.values(SendProtocol).map(p => ({
-  label: p.label, value: p.value
+  label: p.label, value: p.value, desc: p.desc
 }))
 
 // =============================================
