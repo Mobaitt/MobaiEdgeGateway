@@ -223,6 +223,7 @@ public class DevicesController : ControllerBase
         Code           = d.Code,
         Protocol       = d.Protocol.ToString(),
         Address        = d.Address,
+        PollingIntervalMs = d.PollingIntervalMs,
         IsEnabled      = d.IsEnabled,
         DataPointCount = d.DataPoints.Count
     };

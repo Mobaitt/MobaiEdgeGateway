@@ -9,6 +9,9 @@ public class DeviceListItem
 
     /// <summary>协议名称（如 "Modbus"、"Simulator"）</summary>
     public string Protocol { get; set; } = string.Empty;
+    
+    /// <summary>采集周期（毫秒）</summary>
+    public int PollingIntervalMs { get; set; } = 1000;
 
     public string Address { get; set; } = string.Empty;
     public bool IsEnabled { get; set; }
