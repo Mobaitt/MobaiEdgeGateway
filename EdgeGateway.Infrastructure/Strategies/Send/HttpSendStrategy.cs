@@ -99,9 +99,6 @@ public class HttpSendStrategy : ISendStrategy
     /// </summary>
     public async Task ReconfigureEndpointAsync(Channel channel, string oldEndpoint, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("HTTP 通道配置更新：旧路径={OldEndpoint}, 新路径={NewEndpoint}, 模式={Mode}", 
-            oldEndpoint, channel.Endpoint, _mode);
-        
         // 如果是服务端模式且路径发生变化，先注销旧路径
         if (_mode == "server" && !string.IsNullOrEmpty(oldEndpoint) && oldEndpoint != channel.Endpoint)
         {
@@ -109,13 +106,7 @@ public class HttpSendStrategy : ISendStrategy
                 ? oldEndpoint
                 : $"/api/http-data/{oldEndpoint.TrimStart('/')}";
 
-            _logger.LogInformation("HTTP 服务端模式路径变化，清理旧路径：{OldPath}", oldPath);
             await _httpListenerService.StopAsync(oldPath);
-        }
-        else
-        {
-            _logger.LogWarning("HTTP 路径未变化或非服务端模式，跳过清理：Mode={Mode}, Old={Old}, New={New}", 
-                _mode, oldEndpoint, channel.Endpoint);
         }
 
         // 重新初始化

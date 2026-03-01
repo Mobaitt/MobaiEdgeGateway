@@ -213,15 +213,8 @@ public class DataSendService
     /// </summary>
     public async Task ReconfigureChannelEndpointAsync(int channelId, string? oldEndpoint)
     {
-        _logger.LogInformation("重新配置通道端点：ChannelId={ChannelId}, OldEndpoint={OldEndpoint}", channelId, oldEndpoint);
-        
         if (!_strategyCache.TryGetValue(channelId, out var strategy))
-        {
-            _logger.LogWarning("通道策略不在缓存中：ChannelId={ChannelId}", channelId);
             return;
-        }
-
-        _logger.LogInformation("通道策略类型：{StrategyType}", strategy.GetType().Name);
 
         if (strategy is HttpSendStrategy httpStrategy)
         {
@@ -231,17 +224,8 @@ public class DataSendService
 
             if (channel != null)
             {
-                _logger.LogInformation("调用 HTTP 策略重新配置：Channel={ChannelName}, Endpoint={Endpoint}", channel.Name, channel.Endpoint);
                 await httpStrategy.ReconfigureEndpointAsync(channel, oldEndpoint ?? string.Empty, CancellationToken.None);
             }
-            else
-            {
-                _logger.LogWarning("通道不存在：ChannelId={ChannelId}", channelId);
-            }
-        }
-        else
-        {
-            _logger.LogWarning("策略不是 HTTP 类型：{StrategyType}", strategy.GetType().Name);
         }
     }
 

@@ -58,9 +58,6 @@ public class HttpListenerService : IHttpListenerService, IDisposable
     /// <inheritdoc/>
     public Task StopAsync(string path)
     {
-        _logger.LogInformation("HTTP 服务端点清理开始：{Path}, 当前缓存键：{CacheKeys}", 
-            path, string.Join(", ", _dataCache.Keys));
-        
         // 注销端点
         _registeredEndpoints.Remove(path);
         
@@ -68,11 +65,9 @@ public class HttpListenerService : IHttpListenerService, IDisposable
         if (_dataCache.ContainsKey(path))
         {
             _dataCache.Remove(path);
-            _logger.LogInformation("HTTP 缓存数据已清理：{Path}", path);
         }
         
-        _logger.LogInformation("HTTP 服务端点已注销：{Path}, 剩余缓存键：{CacheKeys}", 
-            path, string.Join(", ", _dataCache.Keys));
+        _logger.LogInformation("HTTP 服务端点已注销：{Path}", path);
         return Task.CompletedTask;
     }
 
@@ -83,8 +78,6 @@ public class HttpListenerService : IHttpListenerService, IDisposable
     {
         var path = context.Request.Path.Value ?? "/";
         var method = context.Request.Method;
-
-        _logger.LogDebug("HTTP 请求：{Method} {Path}", method, path);
 
         // 只处理 GET 请求
         if (method != "GET")
@@ -97,15 +90,11 @@ public class HttpListenerService : IHttpListenerService, IDisposable
         await _cacheLock.WaitAsync();
         try
         {
-            _logger.LogDebug("当前已注册端点：{Endpoints}", string.Join(", ", _registeredEndpoints.Keys));
-            _logger.LogDebug("当前缓存数据路径：{CacheKeys}", string.Join(", ", _dataCache.Keys));
-
             if (_dataCache.TryGetValue(path, out var jsonData))
             {
                 context.Response.ContentType = "application/json";
                 context.Response.StatusCode = 200;
                 await context.Response.WriteAsync(jsonData);
-                _logger.LogInformation("HTTP 请求成功：{Path}, 响应大小：{Length} bytes", path, jsonData.Length);
             }
             else if (_registeredEndpoints.ContainsKey(path))
             {
@@ -114,28 +103,16 @@ public class HttpListenerService : IHttpListenerService, IDisposable
                 {
                     error = "No data available yet",
                     path = path,
-                    timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                    message = "端点已注册，等待数据采集"
+                    timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
                 });
                 context.Response.ContentType = "application/json";
                 context.Response.StatusCode = 404;
                 await context.Response.WriteAsync(noData);
-                _logger.LogWarning("HTTP 请求：端点已注册但无数据 {Path}", path);
             }
             else
             {
-                // 路径不匹配
-                var notFound = JsonSerializer.Serialize(new
-                {
-                    error = "Not Found",
-                    path = path,
-                    message = "未找到匹配的端点，请检查路径是否正确",
-                    registeredEndpoints = _registeredEndpoints.Keys.ToList()
-                });
-                context.Response.ContentType = "application/json";
                 context.Response.StatusCode = 404;
-                await context.Response.WriteAsync(notFound);
-                _logger.LogWarning("HTTP 请求：未找到匹配的端点 {Path}", path);
+                await context.Response.WriteAsync("Not Found");
             }
         }
         finally
