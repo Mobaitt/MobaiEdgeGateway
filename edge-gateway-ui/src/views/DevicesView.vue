@@ -323,7 +323,28 @@ const form = ref<DeviceForm>({
 
 const rules = {
   name: [{ required: true, message: '请输入设备名称' }],
-  code: [{ required: true, message: '请输入设备编码' }],
+  code: [
+    { required: true, message: '请输入设备编码' },
+    { 
+      validator: async (rule, value, callback) => {
+        if (!value) return callback()
+        if (editingDevice.value && value === editingDevice.value.code) return callback()
+        
+        try {
+          const res = await getDevices()
+          const devices = (res as { data?: any[] })?.data || []
+          if (devices.some(d => d.code === value)) {
+            callback(new Error('设备编码已存在'))
+          } else {
+            callback()
+          }
+        } catch (error) {
+          callback()
+        }
+      },
+      trigger: 'blur'
+    }
+  ],
   protocol: [{ required: true, message: '请选择通信协议' }],
   address: [{ required: true, message: '请输入设备地址' }],
   pollingIntervalMs: [{ required: true, message: '请输入采集周期' }]

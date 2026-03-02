@@ -75,10 +75,10 @@ public class SimulatorCollectionStrategy : ICollectionStrategy
 
             results.Add(new CollectedData
             {
-                Tag         = dp.Tag,
+                Tag         = $"{_currentDevice.Code}.{dp.Tag}",  // 使用设备编码。数据点 Tag 格式
                 DataPointId = dp.Id,
                 DeviceId    = _currentDevice.Id,
-                DeviceName  = _currentDevice.Name,
+                DeviceName  = _currentDevice.Code,
                 Value       = value,
                 Quality     = quality,
                 Timestamp   = DateTime.UtcNow

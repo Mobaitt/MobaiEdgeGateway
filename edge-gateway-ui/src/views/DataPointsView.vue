@@ -421,7 +421,32 @@ const form = ref<DataPointForm>({
 
 const rules = {
   name: [{ required: true, message: '请输入名称' }],
-  tag: [{ required: true, message: '请输入标签' }],
+  tag: [
+    { required: true, message: '请输入标签' },
+    { 
+      pattern: /^[A-Z0-9_]+\.[A-Z0-9_]+$/i, 
+      message: 'Tag 格式不正确，应为：设备编码。数据点标识（例：DEV_PLC_001.Temperature）' 
+    },
+    {
+      validator: async (rule, value, callback) => {
+        if (!value) return callback()
+        if (editingDataPoint.value && value === editingDataPoint.value.tag) return callback()
+        
+        try {
+          const res = await getDataPoints(deviceId.value)
+          const points = (res as { data?: any[] })?.data || []
+          if (points.some(p => p.tag === value)) {
+            callback(new Error('该 Tag 已存在'))
+          } else {
+            callback()
+          }
+        } catch (error) {
+          callback()
+        }
+      },
+      trigger: 'blur'
+    }
+  ],
   address: [{ required: true, message: '请输入地址' }],
   dataType: [{ required: true, message: '请选择数据类型' }]
 }

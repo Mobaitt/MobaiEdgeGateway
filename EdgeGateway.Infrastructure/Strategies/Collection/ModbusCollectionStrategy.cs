@@ -83,9 +83,15 @@ public class ModbusCollectionStrategy : ICollectionStrategy
         var results = new List<CollectedData>();
         var dataList = dataPoints.ToList();
         
-        // 获取设备名称（从第一个数据点，同一设备的所有数据点共享同一设备信息）
+        // 获取设备信息（从第一个数据点获取设备信息）
         var firstPoint = dataList.FirstOrDefault();
-        var deviceName = firstPoint?.Device?.Name ?? $"Device_{firstPoint?.DeviceId ?? 0}";
+        if (firstPoint == null)
+        {
+            return results;
+        }
+
+        // 使用设备编码作为标识
+        var deviceCode = firstPoint.Device?.Code ?? $"Device_{firstPoint.DeviceId}";
 
         // 按从站地址和功能码分组，减少通信次数
         var groupedPoints = dataList.GroupBy(dp => new
@@ -98,7 +104,7 @@ public class ModbusCollectionStrategy : ICollectionStrategy
         {
             try
             {
-                var groupResults = await ReadGroupAsync(group, deviceName, cancellationToken);
+                var groupResults = await ReadGroupAsync(group, deviceCode, cancellationToken);
                 results.AddRange(groupResults);
             }
             catch (Exception ex)
@@ -109,7 +115,7 @@ public class ModbusCollectionStrategy : ICollectionStrategy
                 // 为该组所有数据点返回错误结果
                 foreach (var dp in group)
                 {
-                    results.Add(CreateCollectedData(dp, deviceName, null));
+                    results.Add(CreateCollectedData(dp, deviceCode, null));
                 }
             }
         }
@@ -122,7 +128,7 @@ public class ModbusCollectionStrategy : ICollectionStrategy
     /// </summary>
     private async Task<List<CollectedData>> ReadGroupAsync(
         IGrouping<dynamic, DataPoint> group,
-        string deviceName,
+        string deviceCode,
         CancellationToken cancellationToken)
     {
         var results = new List<CollectedData>();
@@ -147,7 +153,7 @@ public class ModbusCollectionStrategy : ICollectionStrategy
                         for (int i = 0; i < range.Points.Count; i++)
                         {
                             var dp = range.Points[i];
-                            results.Add(CreateCollectedData(dp, deviceName, coils[i] ? 1 : 0));
+                            results.Add(CreateCollectedData(dp, deviceCode, coils[i] ? 1 : 0));
                         }
                         continue;
 
@@ -155,7 +161,7 @@ public class ModbusCollectionStrategy : ICollectionStrategy
                         _logger.LogWarning("NModbus4 不支持功能码 2 (离散输入)，跳过读取");
                         foreach (var dp in group)
                         {
-                            results.Add(CreateCollectedData(dp, deviceName, null));
+                            results.Add(CreateCollectedData(dp, deviceCode, null));
                         }
                         continue;
 
@@ -179,7 +185,7 @@ public class ModbusCollectionStrategy : ICollectionStrategy
                 {
                     var dp = range.Points[i];
                     var value = ParseRegisterValue(dp, registers, registerIndex);
-                    results.Add(CreateCollectedData(dp, deviceName, value));
+                    results.Add(CreateCollectedData(dp, deviceCode, value));
 
                     // 累加寄存器索引
                     registerIndex += dp.RegisterLength;
@@ -192,7 +198,7 @@ public class ModbusCollectionStrategy : ICollectionStrategy
 
                 foreach (var dp in range.Points)
                 {
-                    results.Add(CreateCollectedData(dp, deviceName, null));
+                    results.Add(CreateCollectedData(dp, deviceCode, null));
                 }
             }
         }
@@ -404,14 +410,14 @@ public class ModbusCollectionStrategy : ICollectionStrategy
     /// <summary>
     /// 创建采集数据对象
     /// </summary>
-    private static CollectedData CreateCollectedData(DataPoint dp, string deviceName, object? value)
+    private static CollectedData CreateCollectedData(DataPoint dp, string deviceCode, object? value)
     {
         return new CollectedData
         {
-            Tag = dp.Tag,
+            Tag = $"{deviceCode}.{dp.Tag}",  // 使用设备编码。数据点 Tag 格式
             DataPointId = dp.Id,
             DeviceId = dp.DeviceId,
-            DeviceName = deviceName,
+            DeviceName = deviceCode,
             Value = value,
             Quality = value != null ? DataQuality.Good : DataQuality.Bad,
             Timestamp = DateTime.UtcNow

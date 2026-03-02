@@ -48,6 +48,13 @@ public class DeviceManagementService
     /// <summary>新增设备</summary>
     public async Task<Device> CreateDeviceAsync(Device device)
     {
+        // 验证设备编码唯一性
+        var existingDevices = await _deviceRepo.GetAllAsync();
+        if (existingDevices.Any(d => d.Code == device.Code))
+        {
+            throw new InvalidOperationException($"设备编码 '{device.Code}' 已存在，请使用其他编码");
+        }
+
         var created = await _deviceRepo.AddAsync(device);
         _logger.LogInformation("新增设备成功：{DeviceName} (ID={Id})", created.Name, created.Id);
         return created;
@@ -56,6 +63,13 @@ public class DeviceManagementService
     /// <summary>更新设备信息</summary>
     public async Task UpdateDeviceAsync(Device device)
     {
+        // 验证设备编码唯一性（排除当前设备）
+        var existingDevices = await _deviceRepo.GetAllAsync();
+        if (existingDevices.Any(d => d.Code == device.Code && d.Id != device.Id))
+        {
+            throw new InvalidOperationException($"设备编码 '{device.Code}' 已存在，请使用其他编码");
+        }
+
         await _deviceRepo.UpdateAsync(device);
         _logger.LogInformation("更新设备：{DeviceName} (ID={Id})", device.Name, device.Id);
     }
@@ -104,6 +118,13 @@ public class DeviceManagementService
     /// <summary>新增数据点</summary>
     public async Task<DataPoint> CreateDataPointAsync(DataPoint dataPoint)
     {
+        // 验证同一设备下 Tag 唯一性
+        var existingPoints = await _dataPointRepo.GetByDeviceIdAsync(dataPoint.DeviceId);
+        if (existingPoints.Any(p => p.Tag == dataPoint.Tag))
+        {
+            throw new InvalidOperationException($"设备下已存在 Tag 为 '{dataPoint.Tag}' 的数据点");
+        }
+
         var created = await _dataPointRepo.AddAsync(dataPoint);
         _logger.LogInformation("新增数据点：{Tag} (设备 ID={DeviceId})", created.Tag, created.DeviceId);
         return created;
@@ -112,6 +133,13 @@ public class DeviceManagementService
     /// <summary>更新数据点</summary>
     public async Task UpdateDataPointAsync(DataPoint dataPoint)
     {
+        // 验证同一设备下 Tag 唯一性（排除当前数据点）
+        var existingPoints = await _dataPointRepo.GetByDeviceIdAsync(dataPoint.DeviceId);
+        if (existingPoints.Any(p => p.Tag == dataPoint.Tag && p.Id != dataPoint.Id))
+        {
+            throw new InvalidOperationException($"设备下已存在 Tag 为 '{dataPoint.Tag}' 的数据点");
+        }
+
         await _dataPointRepo.UpdateAsync(dataPoint);
         _logger.LogInformation("更新数据点：{Tag} (ID={Id})", dataPoint.Tag, dataPoint.Id);
     }
