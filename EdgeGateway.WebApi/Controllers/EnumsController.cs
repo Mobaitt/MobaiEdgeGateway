@@ -44,7 +44,9 @@ public class EnumsController : ControllerBase
                 label = p.ToString(),
                 desc = GetSendProtocolDescription(p)
             })
-            .ToList();
+            .
+            // 过滤掉没有实现的
+            Where(p => ((List<int>)[2, 5]).Contains(p.value)).ToList();
 
         return Ok(new { data = options, message = "success" });
     }
