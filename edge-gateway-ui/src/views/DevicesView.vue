@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="devices-view page-enter">
     <!-- 页面头部 -->
     <div class="page-header">
@@ -101,7 +101,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="editingDevice ? '编辑设备' : '新增设备'"
-      width="720px" destroy-on-close class="device-dialog" top="8vh"
+      width="720px" destroy-on-close class="device-dialog app-dialog" align-center
     >
       <el-form
         ref="formRef" :model="form" :rules="rules"
@@ -634,40 +634,6 @@ onMounted(() => {
 }
 .add-card:hover .el-icon {
   transform: scale(1.1) rotate(90deg);
-}
-
-/* 弹窗样式 */
-.device-dialog {
-  max-height: 84vh;
-  display: flex;
-  flex-direction: column;
-}
-:deep(.el-dialog) {
-  background: var(--bg-card) !important;
-  border: 1px solid var(--border-muted) !important;
-  border-radius: var(--radius-lg) !important;
-  max-height: 84vh;
-}
-:deep(.el-dialog__header) { 
-  border-bottom: 1px solid var(--border-subtle);
-  padding: 14px 20px;
-  flex-shrink: 0;
-}
-:deep(.el-dialog__title) { 
-  color: var(--text-primary) !important;
-  font-weight: 600;
-  font-size: 15px;
-}
-:deep(.el-dialog__body) { 
-  color: var(--text-primary);
-  padding: 16px 20px;
-  overflow-y: auto;
-  flex: 1;
-}
-:deep(.el-dialog__footer) { 
-  border-top: 1px solid var(--border-subtle);
-  padding: 12px 20px;
-  flex-shrink: 0;
 }
 
 /* 表单分组 */

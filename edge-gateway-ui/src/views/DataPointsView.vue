@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="datapoints-view page-enter">
     <!-- 页面头部 -->
     <div class="page-header">
@@ -149,7 +149,7 @@
     </div>
 
     <!-- 新增/编辑数据点弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="editingDataPoint ? '编辑数据点' : '新增数据点'" width="720px" destroy-on-close class="datapoint-dialog" align-center>
+    <el-dialog v-model="dialogVisible" :title="editingDataPoint ? '编辑数据点' : '新增数据点'" width="720px" destroy-on-close class="datapoint-dialog app-dialog" align-center>
       <el-form ref="formRef" :model="form" :rules="rules" label-width="90px" label-position="left">
         
         <!-- 基本信息 -->
@@ -741,44 +741,6 @@ onUnmounted(() => {
 .badge.bad { background: rgba(240,89,89,0.15); color: var(--text-danger); border-color: rgba(240,89,89,0.3); }
 .badge.uncertain { background: rgba(250,173,40,0.15); color: var(--text-warning); border-color: rgba(250,173,40,0.3); }
 
-/* 弹窗样式 */
-.datapoint-dialog {
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-}
-:deep(.el-dialog) {
-  background: var(--bg-card) !important;
-  border: 1px solid var(--border-muted) !important;
-  border-radius: var(--radius-lg) !important;
-  max-height: 90vh;
-  margin: 0 auto !important;
-  display: flex;
-  flex-direction: column;
-}
-:deep(.el-dialog__header) {
-  border-bottom: 1px solid var(--border-subtle);
-  padding: 14px 20px;
-  flex-shrink: 0;
-}
-:deep(.el-dialog__title) {
-  color: var(--text-primary) !important;
-  font-weight: 600;
-  font-size: 15px;
-}
-:deep(.el-dialog__body) {
-  color: var(--text-primary);
-  padding: 16px 20px;
-  overflow-y: auto;
-  flex: 1;
-  max-height: calc(90vh - 120px);
-}
-:deep(.el-dialog__footer) {
-  border-top: 1px solid var(--border-subtle);
-  padding: 12px 20px;
-  flex-shrink: 0;
-}
-
 /* 表单分组 */
 .form-section {
   margin-bottom: 16px;
@@ -806,18 +768,8 @@ onUnmounted(() => {
   font-size: 14px;
 }
 
-/* 弹窗样式修复 */
-:deep(.el-form-item__label) { color: var(--text-secondary) !important; font-size: 13px; }
-:deep(.el-input__wrapper) { background: var(--bg-base) !important; border-color: var(--border-muted) !important; }
-:deep(.el-select__wrapper) { background: var(--bg-base) !important; border-color: var(--border-muted) !important; }
-:deep(.el-textarea__inner) { background: var(--bg-base) !important; border-color: var(--border-muted) !important; color: var(--text-primary) !important; }
+/* 弹窗内表单覆盖（全局已提供基础样式） */
 :deep(.mono-input .el-input__inner) { font-family: var(--font-mono); }
-:deep(.el-dialog__body) { color: var(--text-primary); }
-:deep(.el-dialog__footer) { border-top: 1px solid var(--border-subtle); }
-:deep(.el-form-item__label) { color: var(--text-secondary) !important; }
-:deep(.el-input__wrapper) { background: var(--bg-base) !important; border-color: var(--border-muted) !important; }
-:deep(.el-select__wrapper) { background: var(--bg-base) !important; border-color: var(--border-muted) !important; }
-:deep(.el-textarea__inner) { background: var(--bg-base) !important; border-color: var(--border-muted) !important; color: var(--text-primary) !important; }
 
 /* 字节序选项样式 */
 .byte-order-option {

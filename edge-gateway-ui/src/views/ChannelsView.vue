@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="channels-view page-enter">
     <!-- 页面头部 -->
     <div class="page-header">
@@ -70,7 +70,7 @@
     </div>
 
     <!-- 新增/编辑通道弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="editingChannel ? '编辑发送通道' : '新增发送通道'" width="720px" destroy-on-close class="channel-dialog" align-center>
+    <el-dialog v-model="dialogVisible" :title="editingChannel ? '编辑发送通道' : '新增发送通道'" width="720px" destroy-on-close class="channel-dialog app-dialog" align-center>
       <el-form ref="formRef" :model="form" :rules="rules" label-width="100px" label-position="left">
         
         <!-- 基本信息 -->
@@ -709,44 +709,6 @@ onMounted(() => {
 }
 .add-card:hover .el-icon {
   transform: scale(1.1) rotate(90deg);
-}
-
-/* 弹窗样式 */
-.channel-dialog {
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-}
-:deep(.el-dialog) {
-  background: var(--bg-card) !important;
-  border: 1px solid var(--border-muted) !important;
-  border-radius: var(--radius-lg) !important;
-  max-height: 90vh;
-  margin: 0 auto !important;
-  display: flex;
-  flex-direction: column;
-}
-:deep(.el-dialog__header) {
-  border-bottom: 1px solid var(--border-subtle);
-  padding: 14px 20px;
-  flex-shrink: 0;
-}
-:deep(.el-dialog__title) {
-  color: var(--text-primary) !important;
-  font-weight: 600;
-  font-size: 15px;
-}
-:deep(.el-dialog__body) {
-  color: var(--text-primary);
-  padding: 16px 20px;
-  overflow-y: auto;
-  flex: 1;
-  max-height: calc(90vh - 120px);
-}
-:deep(.el-dialog__footer) {
-  border-top: 1px solid var(--border-subtle);
-  padding: 12px 20px;
-  flex-shrink: 0;
 }
 
 /* 表单分组 */
