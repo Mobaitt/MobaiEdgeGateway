@@ -1,8 +1,12 @@
 ﻿using System.Net.WebSockets;
+using System.Text;
 using System.Text.Json;
-using EdgeGateway.Infrastructure.WebSocket;
-using Microsoft.AspNetCore.Http;
+using EdgeGateway.Domain.Enums;
+using EdgeGateway.Infrastructure.Data;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace EdgeGateway.Infrastructure.WebSocket;
@@ -54,11 +58,11 @@ public class WebSocketServerMiddleware
                     "  1. 缺少 Connection: Upgrade 头\n" +
                     "  2. 缺少 Upgrade: websocket 头\n" +
                     "  3. 使用了错误的协议（HTTP 而不是 WebSocket）");
-                
+
                 // 返回错误提示
                 context.Response.StatusCode = 400;
                 context.Response.ContentType = "application/json";
-                var error = System.Text.Json.JsonSerializer.Serialize(new
+                var error = JsonSerializer.Serialize(new
                 {
                     error = "Bad Request",
                     message = "This endpoint requires a WebSocket connection",
@@ -80,9 +84,6 @@ public class WebSocketServerMiddleware
 
         try
         {
-            // 接受 WebSocket 连接
-            webSocket = await context.WebSockets.AcceptWebSocketAsync();
-
             // 获取订阅主题（从 Query 或 Header）
             string? subscribeTopic = null;
             if (context.Request.Headers.TryGetValue("X-Subscribe-Topic", out var topicHeader))
@@ -94,6 +95,31 @@ public class WebSocketServerMiddleware
                 subscribeTopic = topicQuery.ToString();
             }
 
+            // 验证订阅主题是否对应已启用的 WebSocket 通道
+            if (!string.IsNullOrEmpty(subscribeTopic))
+            {
+                var isValidTopic = await ValidateSubscribeTopicAsync(context, subscribeTopic);
+                if (!isValidTopic)
+                {
+                    _logger.LogWarning("客户端连接被拒绝：订阅主题 {Topic} 未配置或通道未启用", subscribeTopic);
+
+                    // 返回错误提示
+                    context.Response.StatusCode = 403;
+                    context.Response.ContentType = "application/json";
+                    var error = JsonSerializer.Serialize(new
+                    {
+                        error = "Forbidden",
+                        message = $"订阅主题 '{subscribeTopic}' 未配置或通道未启用",
+                        hint = "请确保已创建 WebSocket 类型的发送通道并启用，且订阅主题匹配"
+                    });
+                    await context.Response.WriteAsync(error);
+                    return;
+                }
+            }
+
+            // 接受 WebSocket 连接
+            webSocket = await context.WebSockets.AcceptWebSocketAsync();
+
             // 创建客户端包装对象
             client = new WebSocketClient(webSocket, clientId, _logger);
             if (!string.IsNullOrEmpty(subscribeTopic))
@@ -103,26 +129,6 @@ public class WebSocketServerMiddleware
 
             // 添加到连接管理器
             connectionManager.AddClient(clientId, client);
-
-            // 打印客户端连接信息
-            var host = context.Request.Host.ToString();
-            var path = context.Request.Path;
-            var wsUrl = $"{(context.Request.IsHttps ? "wss" : "ws")}://{host}{path}";
-            // 发送欢迎消息
-            var welcomeMsg = new
-            {
-                type = "welcome",
-                clientId = clientId,
-                timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                message = "欢迎连接到 EdgeGateway WebSocket 服务器",
-                serverInfo = new
-                {
-                    wsUrl = wsUrl,
-                    subscribeTopic = subscribeTopic ?? "device/data",
-                    availableTopics = new[] { "device/data", "device/command", "device/config" }
-                }
-            };
-            await client.SendAsync(JsonSerializer.Serialize(welcomeMsg));
 
             // 启动接收循环，处理客户端消息
             await ReceiveLoopAsync(client, connectionManager, _logger);
@@ -146,9 +152,49 @@ public class WebSocketServerMiddleware
     }
 
     /// <summary>
+    /// 验证订阅主题是否对应已启用的 WebSocket 通道
+    /// </summary>
+    private async Task<bool> ValidateSubscribeTopicAsync(HttpContext context, string subscribeTopic)
+    {
+        try
+        {
+            // 从服务容器获取数据库上下文
+            using var scope = context.RequestServices.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<GatewayDbContext>();
+
+            // 获取所有 WebSocket 通道到内存中进行比较（避免 EF Core 翻译问题）
+            var channels = await dbContext.Channels
+                .Where(c => c.IsEnabled && c.Protocol == SendProtocol.WebSocket)
+                .ToListAsync();
+
+            // 在内存中检查是否存在匹配的通道
+            var isValid = channels.Any(c =>
+                !string.IsNullOrEmpty(c.WsSubscribeTopic) &&
+                string.Equals(c.WsSubscribeTopic, subscribeTopic, StringComparison.OrdinalIgnoreCase)
+            );
+
+            if (!isValid)
+            {
+                _logger.LogWarning(
+                    "订阅主题验证失败：{Topic}\n可用通道：{Channels}",
+                    subscribeTopic,
+                    string.Join(", ", channels.Select(c => $"{c.Name}(主题：{c.WsSubscribeTopic ?? "未配置"})")));
+            }
+
+            return isValid;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "验证订阅主题时出错：{Topic}", subscribeTopic);
+            return false;
+        }
+    }
+
+    /// <summary>
     /// 接收循环 - 处理客户端发送的消息
     /// </summary>
-    private async Task ReceiveLoopAsync(WebSocketClient client, WebSocketConnectionManager connectionManager, ILogger logger)
+    private async Task ReceiveLoopAsync(WebSocketClient client, WebSocketConnectionManager connectionManager,
+        ILogger logger)
     {
         var buffer = new byte[4096];
 
@@ -168,7 +214,7 @@ public class WebSocketServerMiddleware
 
                 if (result.Count > 0)
                 {
-                    var message = System.Text.Encoding.UTF8.GetString(buffer, 0, result.Count);
+                    var message = Encoding.UTF8.GetString(buffer, 0, result.Count);
                     await HandleClientMessageAsync(client, message, connectionManager, logger);
                 }
             }
@@ -187,8 +233,8 @@ public class WebSocketServerMiddleware
     /// 处理客户端消息
     /// </summary>
     private async Task HandleClientMessageAsync(
-        WebSocketClient client, 
-        string message, 
+        WebSocketClient client,
+        string message,
         WebSocketConnectionManager connectionManager,
         ILogger logger)
     {
@@ -223,6 +269,7 @@ public class WebSocketServerMiddleware
                                 await client.SendAsync(JsonSerializer.Serialize(ack));
                             }
                         }
+
                         break;
 
                     case "unsubscribe":

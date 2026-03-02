@@ -158,12 +158,18 @@
           <el-row :gutter="20">
             <el-col :span="12">
               <el-form-item label="名称" prop="name">
-                <el-input v-model="form.name" placeholder="如：温度" />
+                <el-input v-model="form.name" placeholder="如：温度" @blur="generateTagIfEmpty" />
               </el-form-item>
             </el-col>
             <el-col :span="12">
               <el-form-item label="Tag" prop="tag">
-                <el-input v-model="form.tag" placeholder="DEV001.Temperature" class="mono-input" />
+                <div class="tag-with-btn">
+                  <el-input v-model="form.tag" placeholder="DEV001.Temperature" class="mono-input tag-input" />
+                  <el-button size="small" text class="btn-auto-generate" @click="generateTag">
+                    <el-icon><MagicStick /></el-icon>
+                    <span>自动生成</span>
+                  </el-button>
+                </div>
               </el-form-item>
             </el-col>
           </el-row>
@@ -203,8 +209,8 @@
           </el-row>
         </div>
 
-        <!-- Modbus 高级配置 -->
-        <div class="form-section">
+        <!-- Modbus 配置：仅当设备为 Modbus 时显示 -->
+        <div v-if="isModbusDevice" class="form-section">
           <div class="section-title"><el-icon><Connection /></el-icon> Modbus 配置</div>
           <el-row :gutter="20">
             <el-col :span="8">
@@ -267,10 +273,12 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
-import { Plus, Delete, ArrowLeft, Document, Setting, Connection, InfoFilled, Edit, Refresh, Search } from '@element-plus/icons-vue'
+import { Plus, Delete, ArrowLeft, Document, Setting, Connection, InfoFilled, Edit, Refresh, Search, MagicStick } from '@element-plus/icons-vue'
 import { getDataPoints, createDataPoint, updateDataPoint, toggleDataPoint as apiToggleDataPoint, deleteDataPoint, getDeviceRealtimeData, getDevice } from '@/api/device'
 import { getDataValueTypes, getModbusByteOrders } from '@/api/enums'
 import { formatDateTime } from '@/api/constants'
+import { CollectionProtocol } from '@/api/constants'
+import { nameToCode } from '@/utils/codeGenerate'
 import type { DataPointItem, RealtimeDataItem } from '@/types'
 
 type DataPointForm = {
@@ -318,6 +326,11 @@ const refreshing = ref(false)
 const dataPoints = ref<DataPointItem[]>([])
 const enabledCount = computed(() => dataPoints.value.filter((item) => item.isEnabled).length)
 const deviceEnabled = ref(false)
+/** 当前设备编码，用于生成数据点 Tag（格式：设备编码.数据点标识） */
+const deviceCode = ref('')
+/** 当前设备的采集协议（1=Modbus, 2=OPC UA, 3=S7, 4=HTTP, 99=Simulator），用于按协议显示对应配置项 */
+const deviceProtocol = ref<number | null>(null)
+const isModbusDevice = computed(() => deviceProtocol.value === CollectionProtocol.Modbus.value)
 
 // 搜索和筛选
 const searchText = ref('')
@@ -434,6 +447,8 @@ const fetchDevice = async () => {
     const device = (res as { data?: any })?.data
     if (device) {
       deviceEnabled.value = device.isEnabled
+      deviceProtocol.value = device.protocolValue ?? device.protocol ?? null
+      deviceCode.value = device.code ?? ''
     }
   } catch (e) {
     console.error('获取设备信息失败', e)
@@ -537,6 +552,28 @@ watch(() => form.value.dataType, (newType) => {
     form.value.registerLength = 1
   }
 })
+
+/** 根据名称生成 Tag：设备编码.名称转编码（如 温度 -> DEV001.WD） */
+const generateTag = () => {
+  if (!form.value.name?.trim()) {
+    ElMessage.warning('请先输入数据点名称')
+    return
+  }
+  if (!deviceCode.value) {
+    ElMessage.warning('无法获取设备编码，请稍后重试')
+    return
+  }
+  const suffix = nameToCode(form.value.name, 'TAG')
+  form.value.tag = `${deviceCode.value}.${suffix}`
+  ElMessage.success('Tag 已生成')
+}
+
+const generateTagIfEmpty = () => {
+  if (!form.value.tag && form.value.name && deviceCode.value) {
+    const suffix = nameToCode(form.value.name, 'TAG')
+    form.value.tag = `${deviceCode.value}.${suffix}`
+  }
+}
 
 const openCreate = () => {
   editingDataPoint.value = null
@@ -743,6 +780,25 @@ onUnmounted(() => {
 .section-title .el-icon {
   color: var(--cyan);
   font-size: 14px;
+}
+
+/* Tag 与自动生成按钮同行 */
+.tag-with-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tag-with-btn .tag-input { flex: 1; min-width: 0; }
+.tag-with-btn .btn-auto-generate {
+  flex-shrink: 0;
+  background: var(--bg-base) !important;
+  border: 1px solid var(--border-subtle) !important;
+  color: var(--text-secondary) !important;
+}
+.tag-with-btn .btn-auto-generate:hover {
+  background: var(--bg-hover) !important;
+  border-color: var(--border-muted) !important;
+  color: var(--cyan) !important;
 }
 
 /* 弹窗内表单覆盖（全局已提供基础样式） */

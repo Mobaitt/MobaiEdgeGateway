@@ -67,12 +67,18 @@
           <el-row :gutter="16">
             <el-col :span="12">
               <el-form-item label="通道名称" prop="name">
-                <el-input v-model="form.name" placeholder="如：云端 MQTT" />
+                <el-input v-model="form.name" placeholder="如：云端 MQTT" @blur="generateCodeIfEmpty" />
               </el-form-item>
             </el-col>
             <el-col :span="12">
               <el-form-item label="通道编码" prop="code">
-                <el-input v-model="form.code" placeholder="全局唯一编码，如 CH_MQTT_01" />
+                <div class="channel-code-with-btn">
+                  <el-input v-model="form.code" placeholder="全局唯一编码，如 CH_MQTT_01" class="channel-code-input" />
+                  <el-button size="small" text class="btn-auto-generate" @click="generateCode">
+                    <el-icon><MagicStick /></el-icon>
+                    <span>自动生成</span>
+                  </el-button>
+                </div>
               </el-form-item>
             </el-col>
           </el-row>
@@ -250,12 +256,13 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Link, Connection, InfoFilled, Upload, Download } from '@element-plus/icons-vue'
+import { Plus, Link, Connection, InfoFilled, Upload, Download, MagicStick } from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import FormSection from '@/components/FormSection.vue'
 import AddCard from '@/components/AddCard.vue'
 import { useConfirmDelete } from '@/composables/useConfirmDelete'
 import { getChannels, createChannel, updateChannel, deleteChannel, toggleChannel } from '@/api/channel'
+import { generateCodeWithTimestamp } from '@/utils/codeGenerate'
 import { getSendProtocols } from '@/api/enums'
 import { formatDateTime } from '@/api/constants'
 import type { ChannelItem } from '@/types'
@@ -329,6 +336,22 @@ const rules = {
   code: [{ required: true, message: '请输入通道编码' }],
   protocol: [{ required: true, message: '请选择发送协议' }],
   endpoint: [{ required: true, message: '请输入端点地址' }]
+}
+
+/** 根据通道名称生成通道编码（名称转编码 + 时间戳） */
+const generateCode = () => {
+  if (!form.value.name?.trim()) {
+    ElMessage.warning('请先输入通道名称')
+    return
+  }
+  form.value.code = generateCodeWithTimestamp(form.value.name, 'CH')
+  ElMessage.success('通道编码已生成')
+}
+
+const generateCodeIfEmpty = () => {
+  if (!form.value.code && form.value.name?.trim()) {
+    form.value.code = generateCodeWithTimestamp(form.value.name, 'CH')
+  }
 }
 
 const getProtoColor = (value: number) => {
@@ -706,6 +729,25 @@ onMounted(() => {
   color: var(--text-muted);
   margin-top: 4px;
   line-height: 1.4;
+}
+
+/* 通道编码与自动生成按钮同行 */
+.channel-code-with-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.channel-code-with-btn .channel-code-input { flex: 1; min-width: 0; }
+.channel-code-with-btn .btn-auto-generate {
+  flex-shrink: 0;
+  background: var(--bg-base) !important;
+  border: 1px solid var(--border-subtle) !important;
+  color: var(--text-secondary) !important;
+}
+.channel-code-with-btn .btn-auto-generate:hover {
+  background: var(--bg-hover) !important;
+  border-color: var(--border-muted) !important;
+  color: var(--cyan) !important;
 }
 
 /* 弹窗样式修复 */

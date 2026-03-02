@@ -276,6 +276,46 @@ html, body, #app {
   gap: 8px;
 }
 
+/* 设备弹窗紧凑排版 */
+.device-dialog-compact.el-dialog .el-dialog__body {
+  padding: 14px 20px !important;
+}
+.device-dialog-compact .form-section.compact {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+}
+.device-dialog-compact .form-section.compact .section-title {
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  font-size: 11px;
+}
+.device-dialog-compact .el-form-item {
+  margin-bottom: 12px;
+}
+.device-dialog-compact .el-form-item.form-item-inline {
+  margin-bottom: 8px;
+}
+.device-dialog-compact .form-item-inline .el-form-item__content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 输入框 append 内按钮（如「自动生成」）：统一深色，避免白底突兀 */
+.el-input-group__append .el-button {
+  background: var(--bg-base) !important;
+  border-color: var(--border-subtle) !important;
+  color: var(--text-secondary) !important;
+}
+.el-input-group__append .el-button:hover {
+  background: var(--bg-hover) !important;
+  border-color: var(--border-muted) !important;
+  color: var(--cyan) !important;
+}
+.el-input-group__append .el-button .el-icon {
+  color: inherit;
+}
+
 /* Element Plus 暗色适配补丁（表单、输入等） */
 
 .el-form-item__label { color: var(--text-secondary) !important; font-size: 13px; }
@@ -289,11 +329,47 @@ html, body, #app {
 .el-select__wrapper { background: var(--bg-base) !important; border-color: var(--border-muted) !important; box-shadow: none !important; border-radius: var(--radius) !important; }
 .el-select__wrapper:hover { border-color: var(--border-accent) !important; }
 .el-select__wrapper.is-focused { border-color: var(--cyan) !important; box-shadow: 0 0 0 2px var(--cyan-dim) !important; }
-.el-select-dropdown { background: var(--bg-card) !important; border: 1px solid var(--border-muted) !important; }
-.el-select-dropdown__item { color: var(--text-primary) !important; }
-.el-select-dropdown__item:hover { background: var(--bg-hover) !important; }
-.el-select-dropdown__item.selected { color: var(--cyan) !important; font-weight: 600; }
-.el-select-dropdown__item.hovering { background: var(--bg-hover) !important; }
+/* 下拉框弹层：暗色背景，悬停/选中项保持深色背景+浅色字，避免浅底白字看不清 */
+.el-select-dropdown,
+.el-select-dropdown.is-multiple .el-select-dropdown__item.selected {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-muted) !important;
+}
+.el-select-dropdown__item {
+  color: var(--text-primary) !important;
+  background: transparent !important;
+}
+.el-select-dropdown__item:hover,
+.el-select-dropdown__item.hovering,
+.el-select-dropdown__item.is-hovering {
+  background: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+}
+.el-select-dropdown__item.selected,
+.el-select-dropdown__item.is-selected {
+  color: var(--cyan) !important;
+  font-weight: 600;
+  background: var(--bg-hover) !important;
+}
+.el-select-dropdown__item.selected:hover,
+.el-select-dropdown__item.selected.hovering,
+.el-select-dropdown__item.selected.is-hovering {
+  background: var(--bg-active) !important;
+  color: var(--cyan) !important;
+}
+.el-select-dropdown__item span,
+.el-select-dropdown__item .el-select-dropdown__item-text {
+  color: inherit !important;
+}
+.el-select-dropdown__item .protocol-desc,
+.el-select-dropdown__item .el-select-dropdown__item-text + span {
+  color: var(--text-muted) !important;
+}
+.el-select-dropdown__item:hover .protocol-desc,
+.el-select-dropdown__item:hover .el-select-dropdown__item-text + span,
+.el-select-dropdown__item.selected .protocol-desc {
+  color: var(--text-secondary) !important;
+}
 .el-popper { background: var(--bg-card) !important; border: 1px solid var(--border-muted) !important; }
 .el-popper__arrow { display: none; }
 

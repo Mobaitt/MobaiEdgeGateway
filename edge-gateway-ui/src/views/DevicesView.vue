@@ -88,39 +88,41 @@
       <AddCard class="device-card" text="新增设备" @click="openCreate" />
     </div>
 
-    <!-- 新增/编辑设备弹窗 -->
+    <!-- 新增/编辑设备弹窗：紧凑排版 -->
     <el-dialog
       v-model="dialogVisible"
       :title="editingDevice ? '编辑设备' : '新增设备'"
-      width="720px" destroy-on-close class="device-dialog app-dialog" align-center
+      width="800px" destroy-on-close class="device-dialog app-dialog device-dialog-compact" align-center
     >
       <el-form
         ref="formRef" :model="form" :rules="rules"
-        label-width="100px" label-position="left"
+        label-width="92px" label-position="left" class="device-form"
       >
-        <FormSection title="基本信息" icon="Document">
-          <el-row :gutter="20">
-            <el-col :span="12">
+        <FormSection title="基本信息" icon="Document" class="compact">
+          <el-row :gutter="16">
+            <el-col :span="8">
               <el-form-item label="设备名称" prop="name">
                 <el-input v-model="form.name" placeholder="如：车间 A-PLC01" @blur="generateCodeIfEmpty" />
               </el-form-item>
             </el-col>
-            <el-col :span="12">
+            <el-col :span="16">
               <el-form-item label="设备编码" prop="code">
-                <el-input v-model="form.code" placeholder="DEV_PLC_001">
-                  <template #append>
-                    <el-button :icon="MagicStick" @click="generateCode" title="自动生成" />
-                  </template>
-                </el-input>
+                <div class="device-code-with-btn">
+                  <el-input v-model="form.code" placeholder="DEV_PLC_001" class="device-code-input" />
+                  <el-button size="small" text class="btn-auto-generate" @click="generateCode">
+                    <el-icon><MagicStick /></el-icon>
+                    <span>自动生成</span>
+                  </el-button>
+                </div>
               </el-form-item>
             </el-col>
           </el-row>
           <el-form-item label="描述">
-            <el-input v-model="form.description" type="textarea" :rows="2" placeholder="可选描述信息" />
+            <el-input v-model="form.description" type="textarea" :rows="1" placeholder="可选描述信息" autosize />
           </el-form-item>
         </FormSection>
 
-        <FormSection title="通信配置" icon="Setting">
+        <FormSection title="通信配置" icon="Setting" class="compact">
           <el-form-item label="通信协议" prop="protocol" v-if="!editingDevice">
             <el-select v-model="form.protocol" placeholder="选择协议" style="width:100%">
               <el-option v-for="o in CollectionProtocolOptions" :key="o.value" :label="o.label" :value="o.value">
@@ -135,42 +137,64 @@
             <el-tag>{{ CollectionProtocolOptions.find(o => o.value === form.protocol)?.label || '-' }}</el-tag>
           </el-form-item>
 
-          <!-- 协议说明 -->
-          <div v-if="form.protocol === 1" class="protocol-hint">
+          <!-- 协议说明：单行紧凑 -->
+          <div v-if="isModbusDevice" class="protocol-hint protocol-hint-inline">
             <el-icon class="hint-icon"><InfoFilled /></el-icon>
-            <span>Modbus TCP/RTU 协议，支持功能码 01/02/03/04/05/06/15/16。</span>
+            <span>Modbus TCP/RTU，支持功能码 01/02/03/04/05/06/15/16。</span>
           </div>
-          <div v-else-if="form.protocol === 99" class="protocol-hint">
+          <div v-else-if="form.protocol === CollectionProtocol.OpcUa.value" class="protocol-hint protocol-hint-inline">
             <el-icon class="hint-icon"><InfoFilled /></el-icon>
-            <span>模拟器用于测试，自动生成随机数据。</span>
+            <span>OPC UA，填写服务器端点地址。</span>
+          </div>
+          <div v-else-if="form.protocol === CollectionProtocol.S7.value" class="protocol-hint protocol-hint-inline">
+            <el-icon class="hint-icon"><InfoFilled /></el-icon>
+            <span>S7 协议，填写 PLC IP 与机架/槽号。</span>
+          </div>
+          <div v-else-if="form.protocol === CollectionProtocol.Http.value" class="protocol-hint protocol-hint-inline">
+            <el-icon class="hint-icon"><InfoFilled /></el-icon>
+            <span>HTTP 接口，填写数据源 URL。</span>
+          </div>
+          <div v-else-if="isSimulatorDevice" class="protocol-hint protocol-hint-inline">
+            <el-icon class="hint-icon"><InfoFilled /></el-icon>
+            <span>模拟器自动生成随机数据，无需地址配置。</span>
           </div>
 
-          <el-row :gutter="20">
-            <el-col :span="16">
-              <el-form-item label="设备地址" prop="address">
-                <el-input v-model="form.address" placeholder="IP 地址 或 COM3" />
+          <!-- 设备地址/端口 -->
+          <template v-if="needAddressPort">
+            <el-row :gutter="16">
+              <el-col :span="showPortField ? 16 : 24">
+                <el-form-item label="设备地址" prop="address">
+                  <el-input v-model="form.address" :placeholder="addressPlaceholder" />
+                </el-form-item>
+              </el-col>
+              <el-col v-if="showPortField" :span="8">
+                <el-form-item label="端口">
+                  <el-input-number v-model="form.port" :min="1" :max="65535" placeholder="502" style="width:100%" controls-position="right" />
+                </el-form-item>
+              </el-col>
+            </el-row>
+          </template>
+        </FormSection>
+
+        <FormSection title="采集配置" icon="Timer" class="compact">
+          <el-row :gutter="16">
+            <el-col :span="12">
+              <el-form-item label="采集周期" prop="pollingIntervalMs">
+                <el-input-number
+                  v-model="form.pollingIntervalMs"
+                  :min="100" :max="60000" :step="500"
+                  style="width:80%" controls-position="right"
+                />
+                <span class="form-hint" style="margin-left:8px">ms</span>
               </el-form-item>
             </el-col>
-            <el-col :span="8">
-              <el-form-item label="端口">
-                <el-input-number v-model="form.port" :min="1" :max="65535" placeholder="502" style="width:100%" controls-position="right" />
+            <el-col :span="12">
+              <el-form-item label="是否启用" class="form-item-inline">
+                <el-switch v-model="form.isEnabled" active-color="#38dcc4" />
+                <span class="form-hint">停用后停止采集</span>
               </el-form-item>
             </el-col>
           </el-row>
-        </FormSection>
-
-        <FormSection title="采集配置" icon="Timer">
-          <el-form-item label="采集周期" prop="pollingIntervalMs">
-            <el-input-number
-              v-model="form.pollingIntervalMs" :min="100" :max="60000" :step="500"
-              style="width:200px" controls-position="right"
-            />
-            <span class="form-hint" style="margin-left: 12px">毫秒 (100-60000)</span>
-          </el-form-item>
-          <el-form-item label="是否启用">
-            <el-switch v-model="form.isEnabled" active-color="#38dcc4" />
-            <span class="form-hint" style="margin-left: 12px">停用后设备将停止采集</span>
-          </el-form-item>
         </FormSection>
 
       </el-form>
@@ -200,8 +224,10 @@ import {
   deleteDevice,
   toggleDevice as apiToggle
 } from '@/api/device'
+import { generateCodeWithTimestamp } from '@/utils/codeGenerate'
 import { getCollectionProtocols } from '@/api/enums'
 import { formatInterval } from '@/api/constants'
+import { CollectionProtocol } from '@/api/constants'
 import type { DeviceItem } from '@/types'
 
 type DeviceForm = {
@@ -245,6 +271,31 @@ const filteredDevices = computed(() => {
   })
 })
 
+/** 当前表单所选协议是否为 Modbus */
+const isModbusDevice = computed(() => form.value.protocol === CollectionProtocol.Modbus.value)
+/** 当前表单所选协议是否为模拟器 */
+const isSimulatorDevice = computed(() => form.value.protocol === CollectionProtocol.Simulator.value)
+/** 是否需要显示设备地址/端口（Modbus、OPC UA、S7、HTTP 需要，模拟器不需要） */
+const needAddressPort = computed(() => {
+  const p = form.value.protocol
+  return p !== null && p !== CollectionProtocol.Simulator.value
+})
+/** 设备地址输入框占位文案，按协议区分 */
+const addressPlaceholder = computed(() => {
+  switch (form.value.protocol) {
+    case CollectionProtocol.Modbus.value: return 'IP 地址 或 COM3'
+    case CollectionProtocol.OpcUa.value: return 'opc.tcp://host:4840'
+    case CollectionProtocol.S7.value: return 'PLC IP 地址'
+    case CollectionProtocol.Http.value: return 'https://api.example.com/data'
+    default: return '设备地址或 URL'
+  }
+})
+/** 是否显示端口字段（Modbus、S7 需要端口，OPC UA/HTTP 多为 URL 内含端口） */
+const showPortField = computed(() => {
+  const p = form.value.protocol
+  return p === CollectionProtocol.Modbus.value || p === CollectionProtocol.S7.value
+})
+
 const getProtocolColor = (value: number) => {
   const protocol = CollectionProtocolOptions.value.find(p => p.value === value)
   return protocol ? '#38dcc4' : '#8fa5c5'
@@ -254,25 +305,13 @@ const getProtocolBg = (value: number) => {
   return protocol ? `${protocol.color}22` : '#8fa5c522'
 }
 
-// 根据设备名称生成设备编码
+// 根据设备名称生成设备编码（名称转编码工具）
 const generateCode = () => {
-  if (!form.value.name) {
+  if (!form.value.name?.trim()) {
     ElMessage.warning('请先输入设备名称')
     return
   }
-  
-  // 移除特殊字符，转换为大写，用下划线连接
-  const code = form.value.name
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_|_$/g, '')
-    .substring(0, 30)
-  
-  // 添加时间戳后缀确保唯一性
-  const timestamp = Date.now().toString(36).toUpperCase()
-  form.value.code = `${code}_${timestamp}`
-  
+  form.value.code = generateCodeWithTimestamp(form.value.name, 'DEV')
   ElMessage.success('设备编码已生成')
 }
 
@@ -420,6 +459,38 @@ onMounted(() => {
   display: flex; align-items: center; gap: 12px; margin-bottom: 20px;
 }
 .total-hint { font-size: 12px; color: var(--text-muted); margin-left: auto; }
+
+/* 设备编码：输入框与「自动生成」并排，避免遮挡 */
+.device-code-with-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+.device-code-with-btn .device-code-input {
+  flex: 1;
+  min-width: 0;
+}
+.device-code-with-btn .btn-auto-generate {
+  flex-shrink: 0;
+  padding: 0 10px;
+  font-size: 12px;
+  background: transparent !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: var(--radius) !important;
+  color: var(--text-secondary) !important;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.device-code-with-btn .btn-auto-generate:hover {
+  background: var(--bg-hover) !important;
+  border-color: var(--border-muted) !important;
+  color: var(--cyan) !important;
+}
+.device-code-with-btn .btn-auto-generate .el-icon {
+  margin-right: 4px;
+  font-size: 14px;
+  color: inherit;
+}
 
 /* 卡片网格 */
 .devices-grid {
@@ -607,6 +678,20 @@ onMounted(() => {
 .protocol-hint .hint-icon {
   color: var(--cyan);
   font-size: 14px;
+}
+/* 协议说明单行紧凑（设备弹窗内） */
+.protocol-hint-inline {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px !important;
+  padding: 5px 10px !important;
+  font-size: 11px !important;
+  line-height: 1.4;
+}
+.protocol-hint-inline .hint-icon {
+  font-size: 12px;
+  flex-shrink: 0;
 }
 
 /* 表单提示 */
