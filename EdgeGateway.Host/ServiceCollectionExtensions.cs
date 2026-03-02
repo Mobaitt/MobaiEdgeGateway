@@ -30,6 +30,11 @@ public static class ServiceCollectionExtensions
             options.UseSqlite($"Data Source={dbPath}")
                    .EnableSensitiveDataLogging(false));
 
+        // 注册 IDbContextFactory（供 RuleEngine 等使用）
+        services.AddDbContextFactory<GatewayDbContext>(options =>
+            options.UseSqlite($"Data Source={dbPath}")
+                   .EnableSensitiveDataLogging(false));
+
         // ========== 仓储层 ==========
         services.AddScoped<IDeviceRepository, DeviceRepository>();
         services.AddScoped<IDataPointRepository, DataPointRepository>();
@@ -95,6 +100,12 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<DataSendService>();
         services.AddSingleton<DataCollectionService>();
         services.AddSingleton<RealtimeDataService>();
+        services.AddScoped<RuleManagementService>();
+        services.AddScoped<VirtualNodeManagementService>();
+
+        // ========== 规则引擎和虚拟节点引擎 ==========
+        services.AddSingleton<IRuleEngine, EdgeGateway.Infrastructure.Rules.RuleEngine>();
+        services.AddSingleton<IVirtualNodeEngine, EdgeGateway.Infrastructure.VirtualNodes.VirtualNodeEngine>();
 
         // HTTP 客户端（供 HttpSendStrategy 使用）
         services.AddHttpClient("GatewayHttpClient");

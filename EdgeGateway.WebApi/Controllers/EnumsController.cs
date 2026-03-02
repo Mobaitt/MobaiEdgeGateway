@@ -26,7 +26,7 @@ public class EnumsController : ControllerBase
                 desc = GetProtocolDescription(p)
             })
             // 过滤掉没有实现的
-            .Where(p => ((List<int>)[1, 99]).Contains(p.value))
+            .Where(p => ((List<int>)[1, 0]).Contains(p.value))
             .ToList();
 
         return Ok(new { data = options, message = "success" });
@@ -109,8 +109,8 @@ public class EnumsController : ControllerBase
             CollectionProtocol.Modbus => "Modbus TCP/RTU 工业协议",
             CollectionProtocol.OpcUa => "OPC UA 工业自动化",
             CollectionProtocol.S7 => "西门子 S7 PLC",
-            CollectionProtocol.Http => "HTTP 接口采集",
             CollectionProtocol.Simulator => "模拟器（测试用）",
+            CollectionProtocol.Virtual => "虚拟设备（计算节点）",
             _ => protocol.ToString()
         };
     }

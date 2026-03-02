@@ -301,6 +301,14 @@ html, body, #app {
   gap: 8px;
 }
 
+/* 规则管理弹窗紧凑排版 */
+.rule-dialog-compact.el-dialog .el-dialog__body {
+  padding: 14px 20px !important;
+}
+.rule-dialog-compact .el-form-item {
+  margin-bottom: 12px;
+}
+
 /* 输入框 append 内按钮（如「自动生成」）：统一深色，避免白底突兀 */
 .el-input-group__append .el-button {
   background: var(--bg-base) !important;
@@ -410,6 +418,15 @@ html, body, #app {
 .el-table th.el-table__cell { background: rgba(56, 220, 196, 0.06) !important; color: var(--text-accent) !important; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; border-bottom: 1px solid var(--border-muted) !important; }
 .el-table td.el-table__cell { border-bottom: 1px solid var(--border-subtle) !important; color: var(--text-primary); }
 .el-table__row:hover td { background: var(--bg-hover) !important; }
+/* 当前行高亮：深色背景+浅色字，避免白底看不清 */
+.el-table__row.current-row td {
+  background: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+}
+.el-table__row.current-row:hover td {
+  background: var(--bg-active) !important;
+  color: var(--text-primary) !important;
+}
 .el-table__empty-block { background: transparent; }
 
 /* 分页 */

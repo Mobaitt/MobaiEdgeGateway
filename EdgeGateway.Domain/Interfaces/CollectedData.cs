@@ -6,20 +6,23 @@ namespace EdgeGateway.Domain.Interfaces;
 /// </summary>
 public class CollectedData
 {
-    /// <summary>数据点Tag（全局唯一标识，如 "Device01.Temperature"）</summary>
+    /// <summary>数据点 Tag（全局唯一标识，如 "Device01.Temperature"）</summary>
     public string Tag { get; set; } = string.Empty;
 
-    /// <summary>数据点ID（对应 DataPoint.Id）</summary>
+    /// <summary>数据点 ID（对应 DataPoint.Id）</summary>
     public int DataPointId { get; set; }
 
-    /// <summary>所属设备ID</summary>
+    /// <summary>所属设备 ID</summary>
     public int DeviceId { get; set; }
 
     /// <summary>所属设备名称</summary>
     public string DeviceName { get; set; } = string.Empty;
 
-    /// <summary>采集到的值（统一用object存储，后续按DataType转换）</summary>
+    /// <summary>采集到的值（统一用 object 存储，后续按 DataType 转换）</summary>
     public object? Value { get; set; }
+
+    /// <summary>工程量单位（如 "℃"、"MPa"）</summary>
+    public string? Unit { get; set; }
 
     /// <summary>采集质量（Good/Bad/Uncertain）</summary>
     public DataQuality Quality { get; set; } = DataQuality.Good;

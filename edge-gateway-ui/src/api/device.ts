@@ -22,6 +22,10 @@ export const toggleDevice = (id) => request.patch(`/devices/${id}/toggle`)
 export const getDataPoints = (deviceId) =>
   request.get(`/devices/${deviceId}/datapoints`)
 
+/** 获取所有数据点 */
+export const getAllDataPoints = () =>
+  request.get('/devices/datapoints')
+
 /** 新增数据点 */
 export const createDataPoint = (deviceId, data) =>
   request.post(`/devices/${deviceId}/datapoints`, data)

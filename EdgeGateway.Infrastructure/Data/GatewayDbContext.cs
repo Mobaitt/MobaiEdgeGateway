@@ -22,6 +22,12 @@ public class GatewayDbContext : DbContext
     /// <summary>通道与数据点映射关系表</summary>
     public DbSet<ChannelDataPointMapping> ChannelDataPointMappings => Set<ChannelDataPointMapping>();
 
+    /// <summary>数据点规则表</summary>
+    public DbSet<DataPointRule> DataPointRules => Set<DataPointRule>();
+
+    /// <summary>虚拟数据点表</summary>
+    public DbSet<VirtualDataPoint> VirtualDataPoints => Set<VirtualDataPoint>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -75,6 +81,12 @@ public class GatewayDbContext : DbContext
                   .WithOne(m => m.Channel)
                   .HasForeignKey(m => m.ChannelId)
                   .OnDelete(DeleteBehavior.Cascade);
+
+            // 通道与虚拟数据点映射 - 使用相同的导航属性，但配置不同的外键集合
+            entity.HasMany(e => e.VirtualDataPointMappings)
+                  .WithOne()
+                  .HasForeignKey(m => m.ChannelId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         // ============ 映射关系表配置 ============
@@ -84,8 +96,55 @@ public class GatewayDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.AliasName).HasMaxLength(100);
 
-            // 同一通道不能重复添加同一数据点
+            // DataPointId 和 VirtualDataPointId 至少有一个有值
+            entity.HasCheckConstraint("CK_ChannelDataPointMapping_DataPoint", "DataPointId IS NOT NULL OR VirtualDataPointId IS NOT NULL");
+
+            // 同一通道不能重复添加同一数据点（包括普通数据点和虚拟数据点）
             entity.HasIndex(e => new { e.ChannelId, e.DataPointId }).IsUnique();
+            entity.HasIndex(e => new { e.ChannelId, e.VirtualDataPointId }).IsUnique();
+        });
+
+        // ============ 数据点规则表配置 ============
+        modelBuilder.Entity<DataPointRule>(entity =>
+        {
+            entity.ToTable("DataPointRules");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.RuleConfig).IsRequired();
+
+            // 外键关系
+            entity.HasOne(r => r.DataPoint)
+                  .WithMany()
+                  .HasForeignKey(r => r.DataPointId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(r => r.Device)
+                  .WithMany()
+                  .HasForeignKey(r => r.DeviceId)
+                  .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ============ 虚拟数据点表配置 ============
+        modelBuilder.Entity<VirtualDataPoint>(entity =>
+        {
+            entity.ToTable("VirtualDataPoints");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Tag).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Expression).IsRequired();
+            entity.HasIndex(e => e.Tag).IsUnique(); // Tag 全局唯一
+
+            // 虚拟数据点属于某个设备
+            entity.HasOne(vp => vp.Device)
+                  .WithMany()
+                  .HasForeignKey(vp => vp.DeviceId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            // 虚拟数据点与通道映射
+            entity.HasMany(e => e.ChannelMappings)
+                  .WithOne(m => m.VirtualDataPoint)
+                  .HasForeignKey(m => m.VirtualDataPointId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         // ============ 种子数据（测试用）============
@@ -112,12 +171,12 @@ public class GatewayDbContext : DbContext
             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc)
         });
 
-        // 添加数据点
+        // 添加数据点（Tag 不包含设备编码，采集时添加）
         modelBuilder.Entity<DataPoint>().HasData(
             new DataPoint
             {
                 Id = 1, DeviceId = 1,
-                Name = "温度", Tag = "DEV_SIMULATOR_001.Temperature",
+                Name = "温度", Tag = "Temperature",
                 Address = "40001", DataType = Domain.Enums.DataValueType.Float,
                 Unit = "℃", IsEnabled = true, RegisterLength = 2,
                 ModbusSlaveId = 1, ModbusFunctionCode = 3, ModbusByteOrder = Domain.Enums.ModbusByteOrder.ABCD,
@@ -126,7 +185,7 @@ public class GatewayDbContext : DbContext
             new DataPoint
             {
                 Id = 2, DeviceId = 1,
-                Name = "压力", Tag = "DEV_SIMULATOR_001.Pressure",
+                Name = "压力", Tag = "Pressure",
                 Address = "40002", DataType = Domain.Enums.DataValueType.Float,
                 Unit = "MPa", IsEnabled = true, RegisterLength = 2,
                 ModbusSlaveId = 1, ModbusFunctionCode = 3, ModbusByteOrder = Domain.Enums.ModbusByteOrder.ABCD,
@@ -152,5 +211,40 @@ public class GatewayDbContext : DbContext
             new ChannelDataPointMapping { Id = 1, ChannelId = 1, DataPointId = 1, IsEnabled = true, CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
             new ChannelDataPointMapping { Id = 2, ChannelId = 1, DataPointId = 2, IsEnabled = true, CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc) }
         );
+
+        // 添加虚拟数据点（表达式使用全局唯一 Tag 格式：DeviceCode.Tag）
+        modelBuilder.Entity<VirtualDataPoint>().HasData(new VirtualDataPoint
+        {
+            Id = 1,
+            DeviceId = 1,
+            Name = "温度压力平均值",
+            Tag = "DEV_SIMULATOR_001.Virtual.TempPressAvg",
+            Description = "温度和压力的平均值",
+            Expression = "(DEV_SIMULATOR_001.Temperature + DEV_SIMULATOR_001.Pressure) / 2",
+            CalculationType = Domain.Enums.CalculationType.Custom,
+            DataType = Domain.Enums.DataValueType.Float,
+            Unit = "",
+            IsEnabled = true,
+            DependencyTags = "[\"DEV_SIMULATOR_001.Temperature\", \"DEV_SIMULATOR_001.Pressure\"]",
+            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+        });
+
+        // 添加数据点规则（温度范围校验）
+        modelBuilder.Entity<DataPointRule>().HasData(new DataPointRule
+        {
+            Id = 1,
+            DataPointId = 1, // 温度数据点
+            DeviceId = null,
+            Name = "温度范围校验",
+            Description = "校验温度值在合理范围内",
+            RuleType = Domain.Enums.RuleType.Validation,
+            IsEnabled = true,
+            Priority = 10,
+            RuleConfig = "{\"ValidationType\":2,\"MinValue\":-50,\"MaxValue\":150}",
+            OnFailure = FailureAction.Pass,
+            DefaultValueJson = null,
+            CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+        });
     }
 }

@@ -46,17 +46,20 @@ public class MqttSendStrategy : ISendStrategy
                 .Where(m => m.IsEnabled)
                 .ToDictionary(m => m.DataPointId, m => m.AliasName);
 
-            // 将采集数据按别名（或 Tag）组装为 JSON Payload
-            var payload = new Dictionary<string, object?>
+            // 将采集数据按统一格式组装为 JSON Payload
+            // 格式：{ "name": "DEV_SIMULATOR_001.DEV_SIMULATOR_001.Temperature", "value": 61.42, "unit": "℃", "quality": "Good" }
+            var payload = new
             {
-                ["timestamp"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                ["gatewayId"] = "edge-gateway-001",
-                ["data"]      = package.DataList
-                    .ToDictionary(
-                        d => aliasMap.TryGetValue(d.DataPointId, out var alias) && !string.IsNullOrEmpty(alias)
-                            ? alias : d.Tag,
-                        d => d.Value
-                    )
+                timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                gatewayId = "edge-gateway-001",
+                data = package.DataList
+                    .Select(d => new
+                    {
+                        name = d.Tag,  // 使用完整 Tag（设备编码。数据点 Tag）
+                        value = d.Value,
+                        unit = d.Unit ?? string.Empty,
+                        quality = d.Quality.ToString()
+                    })
             };
 
             var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = false });

@@ -77,6 +77,7 @@ public class WebSocketSendStrategy : ISendStrategy
                 .ToDictionary(m => m.DataPointId, m => m.AliasName);
 
             // 构建推送数据（包含所有数据点，不过滤质量）
+            // 格式统一为：{ "name": "DEV_SIMULATOR_001.DEV_SIMULATOR_001.Temperature", "value": 61.42, "unit": "℃", "quality": "Good" }
             var payload = new
             {
                 type = "data",
@@ -86,9 +87,9 @@ public class WebSocketSendStrategy : ISendStrategy
                 data = package.DataList
                     .Select(d => new
                     {
-                        name = aliasMap.TryGetValue(d.DataPointId, out var alias) && !string.IsNullOrEmpty(alias)
-                            ? alias : d.Tag,
+                        name = d.Tag,  // 使用完整 Tag（设备编码。数据点 Tag）
                         value = d.Value,
+                        unit = d.Unit ?? string.Empty,
                         quality = d.Quality.ToString()
                     })
             };

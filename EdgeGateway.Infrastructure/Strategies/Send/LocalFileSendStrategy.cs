@@ -63,16 +63,20 @@ public class LocalFileSendStrategy : ISendStrategy
                 .Where(m => m.IsEnabled)
                 .ToDictionary(m => m.DataPointId, m => m.AliasName);
 
+            // 构建统一格式的数据
+            // 格式：{ "name": "DEV_SIMULATOR_001.DEV_SIMULATOR_001.Temperature", "value": 61.42, "unit": "℃", "quality": "Good" }
             var record = new
             {
                 timestamp   = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
                 channelCode = package.Channel.Code,
                 data = package.DataList
-                    .ToDictionary(
-                        d => aliasMap.TryGetValue(d.DataPointId, out var alias) && !string.IsNullOrEmpty(alias)
-                            ? alias : d.Tag,
-                        d => d.Value
-                    )
+                    .Select(d => new
+                    {
+                        name = d.Tag,  // 使用完整 Tag（设备编码。数据点 Tag）
+                        value = d.Value,
+                        unit = d.Unit ?? string.Empty,
+                        quality = d.Quality.ToString()
+                    })
             };
 
             // 追加写入一行 JSON（NDJSON 格式）

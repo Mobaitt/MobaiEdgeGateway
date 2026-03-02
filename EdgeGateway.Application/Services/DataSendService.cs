@@ -205,16 +205,27 @@ public class DataSendService
         {
             try
             {
-                // 筛选该通道绑定且启用的映射
-                var enabledMappings = channel.DataPointMappings
-                    .Where(m => m.IsEnabled)
+                // 筛选该通道绑定且启用的映射（包括普通数据点和虚拟数据点）
+                var enabledDataMappings = channel.DataPointMappings
+                    .Where(m => m.IsEnabled && m.DataPointId.HasValue)
+                    .ToList();
+                
+                var enabledVirtualMappings = channel.VirtualDataPointMappings
+                    .Where(m => m.IsEnabled && m.VirtualDataPointId.HasValue)
                     .ToList();
 
                 // 根据映射关系，从快照中提取对应的数据点数据
                 // 如果快照中不存在（设备离线/未采集），使用 null 占位
-                var channelData = enabledMappings
-                    .Select(m => dataIndex.TryGetValue(m.DataPointId, out var data) ? data : CreatePlaceholderData(m))
+                var channelData = enabledDataMappings
+                    .Select(m => dataIndex.TryGetValue(m.DataPointId!.Value, out var data) ? data : CreatePlaceholderData(m))
                     .ToList();
+                
+                // 添加虚拟数据点
+                var virtualData = enabledVirtualMappings
+                    .Select(m => dataIndex.TryGetValue(-m.VirtualDataPointId!.Value, out var data) ? data : CreateVirtualPlaceholderData(m))
+                    .ToList();
+                
+                channelData.AddRange(virtualData);
 
                 if (!channelData.Any())
                 {
@@ -227,7 +238,7 @@ public class DataSendService
                 {
                     Channel  = channel,
                     DataList = channelData,
-                    Mappings = enabledMappings
+                    Mappings = enabledDataMappings.Concat(enabledVirtualMappings).ToList()
                 };
 
                 // 获取（或懒加载）该通道的发送策略
@@ -258,10 +269,27 @@ public class DataSendService
     {
         return new CollectedData
         {
-            DataPointId = mapping.DataPointId,
+            DataPointId = mapping.DataPointId ?? 0,
             Tag = mapping.DataPoint?.Tag ?? string.Empty,
             DeviceId = mapping.DataPoint?.DeviceId ?? 0,
             DeviceName = mapping.DataPoint?.Device?.Name ?? "Unknown",
+            Value = null,
+            Quality = DataQuality.Uncertain,
+            Timestamp = DateTime.UtcNow
+        };
+    }
+    
+    /// <summary>
+    /// 为缺失的虚拟数据点创建占位数据
+    /// </summary>
+    private static CollectedData CreateVirtualPlaceholderData(ChannelDataPointMapping mapping)
+    {
+        return new CollectedData
+        {
+            DataPointId = -mapping.VirtualDataPointId!.Value, // 虚拟数据点使用负 ID
+            Tag = mapping.VirtualDataPoint?.Tag ?? string.Empty,
+            DeviceId = mapping.VirtualDataPoint?.DeviceId ?? 0,
+            DeviceName = mapping.VirtualDataPoint?.Device?.Name ?? "Unknown",
             Value = null,
             Quality = DataQuality.Uncertain,
             Timestamp = DateTime.UtcNow

@@ -146,6 +146,16 @@ public class DevicesController : ControllerBase
     // 数据点子路由（归属于设备下）
     // =============================================
 
+    /// <summary>获取所有数据点</summary>
+    [HttpGet("datapoints")]
+    [ProducesResponseType(typeof(ApiResponse<List<DataPointResponse>>), 200)]
+    public async Task<IActionResult> GetAllDataPoints()
+    {
+        var devices = await _deviceService.GetAllDevicesAsync();
+        var allDataPoints = devices.SelectMany(d => d.DataPoints.Select(dp => MapDataPointToResponse(dp, d.Name))).ToList();
+        return Ok(ApiResponse<List<DataPointResponse>>.Ok(allDataPoints, $"共 {allDataPoints.Count} 个数据点"));
+    }
+
     /// <summary>获取设备下的所有数据点</summary>
     [HttpGet("{deviceId:int}/datapoints")]
     [ProducesResponseType(typeof(ApiResponse<List<DataPointResponse>>), 200)]

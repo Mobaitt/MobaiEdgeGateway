@@ -77,4 +77,7 @@ public class Channel
 
     /// <summary>该通道绑定的数据点映射列表</summary>
     public ICollection<ChannelDataPointMapping> DataPointMappings { get; set; } = new List<ChannelDataPointMapping>();
+
+    /// <summary>该通道绑定的虚拟数据点映射列表</summary>
+    public ICollection<ChannelDataPointMapping> VirtualDataPointMappings { get; set; } = new List<ChannelDataPointMapping>();
 }

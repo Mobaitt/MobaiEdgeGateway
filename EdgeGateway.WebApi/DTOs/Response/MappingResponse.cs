@@ -6,7 +6,7 @@ public class MappingResponse
     public int Id { get; set; }
     public int ChannelId { get; set; }
     public string ChannelName { get; set; } = string.Empty;
-    public int DataPointId { get; set; }
+    public int? DataPointId { get; set; }
 
     /// <summary>数据点Tag（如 "Device01.Temperature"）</summary>
     public string DataPointTag { get; set; } = string.Empty;

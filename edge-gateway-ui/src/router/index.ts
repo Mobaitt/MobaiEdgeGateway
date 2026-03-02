@@ -35,6 +35,18 @@ const routes: RouteRecordRaw[] = [
         name: 'Mappings',
         component: () => import('@/views/MappingsView.vue'),
         meta: { title: '数据点映射', hidden: true }
+      },
+      {
+        path: 'rules',
+        name: 'Rules',
+        component: () => import('@/views/RulesView.vue'),
+        meta: { title: '规则管理', icon: 'Setting' }
+      },
+      {
+        path: 'virtual-nodes',
+        name: 'VirtualNodes',
+        component: () => import('@/views/VirtualNodesView.vue'),
+        meta: { title: '虚拟节点', icon: 'Cpu' }
       }
     ]
   }

@@ -414,11 +414,12 @@ public class ModbusCollectionStrategy : ICollectionStrategy
     {
         return new CollectedData
         {
-            Tag = $"{deviceCode}.{dp.Tag}",  // 使用设备编码。数据点 Tag 格式
+            Tag = $"{deviceCode}.{dp.Tag}",  // 设备编码。数据点 Tag = 全局唯一 Tag
             DataPointId = dp.Id,
             DeviceId = dp.DeviceId,
             DeviceName = deviceCode,
             Value = value,
+            Unit = dp.Unit,
             Quality = value != null ? DataQuality.Good : DataQuality.Bad,
             Timestamp = DateTime.UtcNow
         };
