@@ -255,7 +255,8 @@ public class ChannelsController : ControllerBase
         FileFormat = c.FileFormat,
         FilePath = c.FilePath,
         IsEnabled            = c.IsEnabled,
-        MappedDataPointCount = c.DataPointMappings.Count,
+        // 计算总映射数（包括普通数据点和虚拟数据点）
+        MappedDataPointCount = c.DataPointMappings.Count + c.VirtualDataPointMappings.Count,
         CreatedAt            = c.CreatedAt
     };
 }
