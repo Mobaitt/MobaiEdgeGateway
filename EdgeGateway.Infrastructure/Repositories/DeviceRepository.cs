@@ -34,6 +34,12 @@ public class DeviceRepository : IDeviceRepository
             .ToListAsync();
 
     /// <inheritdoc/>
+    public async Task<Device?> GetByIdWithDetailsAsync(int id) =>
+        await _db.Devices
+            .Include(d => d.DataPoints)
+            .FirstOrDefaultAsync(d => d.Id == id);
+
+    /// <inheritdoc/>
     public async Task<Device> AddAsync(Device device)
     {
         device.CreatedAt = DateTime.UtcNow;

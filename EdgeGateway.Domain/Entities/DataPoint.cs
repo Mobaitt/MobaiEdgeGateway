@@ -31,6 +31,18 @@ public class DataPoint
     /// <summary>工程量单位（如 "℃"、"MPa"）</summary>
     public string? Unit { get; set; }
 
+    /// <summary>Modbus 从站地址（仅 Modbus 协议使用，默认 1）</summary>
+    public byte? ModbusSlaveId { get; set; } = 1;
+
+    /// <summary>Modbus 功能码（01=线圈，02=离散输入，03=保持寄存器，04=输入寄存器）</summary>
+    public int? ModbusFunctionCode { get; set; } = 3;
+
+    /// <summary>Modbus 字节顺序（仅 32 位数据类型使用）</summary>
+    public ModbusByteOrder? ModbusByteOrder { get; set; }
+
+    /// <summary>寄存器长度（1=16 位，2=32 位，4=64 位）</summary>
+    public byte RegisterLength { get; set; } = 1;
+
     /// <summary>是否启用采集</summary>
     public bool IsEnabled { get; set; } = true;
 

@@ -9,7 +9,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdgeGateway.Application", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdgeGateway.Host", "EdgeGateway.Host\EdgeGateway.Host.csproj", "{A1B2C3D4-0004-0000-0000-000000000004}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdgeGateway.WebApi", "EdgeGateway.WebApi\EdgeGateway.WebApi.csproj", "{A1B2C3D4-0005-0000-0000-000000000005}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EdgeGateway.WebApi", "EdgeGateway.WebApi\EdgeGateway.WebApi.csproj", "{ECC08DE6-A05B-4F0E-8CFE-6E9F915650E7}"
 EndProject
 Global
 		GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -25,7 +25,9 @@ Global
 		{A1B2C3D4-0004-0000-0000-000000000004}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A1B2C3D4-0002-0000-0000-000000000002}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{A1B2C3D4-0002-0000-0000-000000000002}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{A1B2C3D4-0005-0000-0000-000000000005}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{A1B2C3D4-0005-0000-0000-000000000005}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ECC08DE6-A05B-4F0E-8CFE-6E9F915650E7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{ECC08DE6-A05B-4F0E-8CFE-6E9F915650E7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{ECC08DE6-A05B-4F0E-8CFE-6E9F915650E7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{ECC08DE6-A05B-4F0E-8CFE-6E9F915650E7}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

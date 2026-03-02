@@ -393,6 +393,30 @@ public class DataCollectionService
     }
 
     /// <summary>
+    /// 重新加载指定设备的配置（用于数据点配置变更时实时更新）
+    /// </summary>
+    public async Task ReloadDeviceAsync(int deviceId, CancellationToken cancellationToken)
+    {
+        // 先停止原有采集任务
+        StopDevice(deviceId);
+
+        // 重新从数据库加载设备配置
+        using var scope = _serviceProvider.CreateScope();
+        var deviceRepo = scope.ServiceProvider.GetRequiredService<IDeviceRepository>();
+        var device = await deviceRepo.GetByIdAsync(deviceId);
+
+        if (device == null || !device.IsEnabled)
+        {
+            _logger.LogInformation("设备 ID={DeviceId} 未启用或不存在，跳过重新加载", deviceId);
+            return;
+        }
+
+        // 重新启动采集任务
+        StartDeviceTask(device, cancellationToken);
+        _logger.LogInformation("设备 ID={DeviceId} 配置已重新加载", deviceId);
+    }
+
+    /// <summary>
     /// 停止数据聚合器并刷新快照
     /// </summary>
     public async Task StopAggregatorAsync()

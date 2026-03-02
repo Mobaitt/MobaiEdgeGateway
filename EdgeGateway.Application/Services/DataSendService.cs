@@ -11,7 +11,7 @@ namespace EdgeGateway.Application.Services;
 ///
 /// 工作流程：
 /// 1. 采集服务推送采集数据
-/// 2. 从数据库加载所有启用的发送通道（含数据点映射关系）
+/// 2. 从缓存加载所有启用的发送通道（含数据点映射关系）
 /// 3. 遍历通道：筛选出该通道绑定的数据点数据
 /// 4. 通过策略注册器获取对应的发送策略实例，执行发送
 /// </summary>
@@ -24,6 +24,12 @@ public class DataSendService
     // 已初始化的发送策略实例缓存（通道 ID → 策略实例），避免重复连接
     private readonly Dictionary<int, ISendStrategy> _strategyCache = new();
     private readonly SemaphoreSlim _initLock = new(1, 1);
+
+    // 通道配置缓存（通道 ID → 通道配置），避免频繁查询数据库
+    private List<Channel> _cachedChannels = new();
+    private DateTime _cacheUpdateTime = DateTime.MinValue;
+    private readonly SemaphoreSlim _cacheLock = new(1, 1);
+    private readonly TimeSpan _cacheExpiration = TimeSpan.FromSeconds(30); // 缓存过期时间：30 秒
 
     public DataSendService(
         IServiceProvider serviceProvider,
@@ -96,7 +102,7 @@ public class DataSendService
     {
         using var scope = _serviceProvider.CreateScope();
         var channelRepo = scope.ServiceProvider.GetRequiredService<IChannelRepository>();
-        
+
         var channels = (await channelRepo.GetEnabledAsync()).ToList();
         _logger.LogInformation("正在初始化 {Count} 个发送通道", channels.Count);
 
@@ -110,12 +116,68 @@ public class DataSendService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "通道 [{ChannelName}] 初始化失败，该通道将跳过", channel.Name);
+                _logger.LogError(ex, "初始化通道 [{ChannelName}] 失败", channel.Name);
             }
         }
 
+        // 初始化通道缓存
+        await RefreshChannelsCacheAsync();
+
         _logger.LogInformation("发送通道初始化完成，成功：{Count}/{Total}",
             _strategyCache.Count, channels.Count);
+    }
+
+    /// <summary>
+    /// 获取通道配置缓存（缓存过期时自动刷新）
+    /// </summary>
+    private async Task<List<Channel>> GetCachedChannelsAsync()
+    {
+        // 检查缓存是否过期
+        if (DateTime.UtcNow - _cacheUpdateTime < _cacheExpiration)
+        {
+            return _cachedChannels;
+        }
+
+        // 缓存过期，刷新缓存
+        await RefreshChannelsCacheAsync();
+        return _cachedChannels;
+    }
+
+    /// <summary>
+    /// 刷新通道配置缓存
+    /// </summary>
+    private async Task RefreshChannelsCacheAsync()
+    {
+        await _cacheLock.WaitAsync();
+        try
+        {
+            // 双重检查，避免重复刷新
+            if (DateTime.UtcNow - _cacheUpdateTime < _cacheExpiration)
+            {
+                return;
+            }
+
+            using var scope = _serviceProvider.CreateScope();
+            var channelRepo = scope.ServiceProvider.GetRequiredService<IChannelRepository>();
+
+            _cachedChannels = (await channelRepo.GetEnabledWithMappingsAsync()).ToList();
+            _cacheUpdateTime = DateTime.UtcNow;
+
+            _logger.LogDebug("通道配置缓存已刷新，共 {Count} 个通道", _cachedChannels.Count);
+        }
+        finally
+        {
+            _cacheLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// 强制刷新通道配置缓存（用于通道配置变更时）
+    /// </summary>
+    public async Task RefreshChannelsCacheForceAsync()
+    {
+        _cacheUpdateTime = DateTime.MinValue; // 强制过期
+        await RefreshChannelsCacheAsync();
     }
 
     /// <summary>
@@ -130,12 +192,8 @@ public class DataSendService
         IEnumerable<CollectedData> collectedData,
         CancellationToken cancellationToken = default)
     {
-        // 每次调用创建新的 Scope，获取独立的 DbContext 实例
-        using var scope = _serviceProvider.CreateScope();
-        var channelRepo = scope.ServiceProvider.GetRequiredService<IChannelRepository>();
-
-        // 加载通道（含数据点映射详情）
-        var channels = (await channelRepo.GetEnabledWithMappingsAsync()).ToList();
+        // 从缓存加载通道配置（缓存过期时自动刷新）
+        var channels = await GetCachedChannelsAsync();
 
         // 将采集数据按 DataPointId 建立索引（全量快照）
         var dataIndex = collectedData.ToDictionary(d => d.DataPointId);

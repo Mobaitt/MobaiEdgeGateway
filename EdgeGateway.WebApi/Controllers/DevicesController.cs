@@ -190,19 +190,67 @@ public class DevicesController : ControllerBase
 
         var dataPoint = new Domain.Entities.DataPoint
         {
-            DeviceId    = deviceId,
-            Name        = req.Name,
-            Tag         = req.Tag,
-            Description = req.Description,
-            Address     = req.Address,
-            DataType    = req.DataType,
-            Unit        = req.Unit,
-            IsEnabled   = req.IsEnabled
+            DeviceId           = deviceId,
+            Name               = req.Name,
+            Tag                = req.Tag,
+            Description        = req.Description,
+            Address            = req.Address,
+            DataType           = req.DataType,
+            Unit               = req.Unit,
+            ModbusSlaveId      = req.ModbusSlaveId,
+            ModbusFunctionCode = req.ModbusFunctionCode,
+            ModbusByteOrder    = req.ModbusByteOrder,
+            RegisterLength     = req.RegisterLength,
+            IsEnabled          = req.IsEnabled
         };
 
         var created = await _deviceService.CreateDataPointAsync(dataPoint);
         return CreatedAtAction(nameof(GetDataPoints), new { deviceId },
             ApiResponse<DataPointResponse>.Ok(MapDataPointToResponse(created, device.Name), "数据点创建成功"));
+    }
+
+    /// <summary>更新数据点</summary>
+    [HttpPut("{deviceId:int}/datapoints/{dataPointId:int}")]
+    [ProducesResponseType(typeof(ApiResponse), 200)]
+    [ProducesResponseType(typeof(ApiResponse), 404)]
+    public async Task<IActionResult> UpdateDataPoint(int deviceId, int dataPointId, [FromBody] UpdateDataPointRequest req)
+    {
+        var device = await _deviceService.GetDeviceAsync(deviceId);
+        if (device == null)
+            return NotFound(ApiResponse.Fail($"设备 ID={deviceId} 不存在"));
+
+        var dataPoint = await _deviceService.GetDataPointAsync(dataPointId);
+        if (dataPoint == null || dataPoint.DeviceId != deviceId)
+            return NotFound(ApiResponse.Fail($"数据点 ID={dataPointId} 不存在"));
+
+        // 记录配置变更字段
+        var configChanged = req.Address != null || req.DataType.HasValue || 
+                           req.ModbusSlaveId.HasValue || req.ModbusFunctionCode.HasValue || 
+                           req.ModbusByteOrder.HasValue || req.RegisterLength.HasValue ||
+                           req.IsEnabled.HasValue;
+
+        if (req.Name != null) dataPoint.Name = req.Name;
+        if (req.Description != null) dataPoint.Description = req.Description;
+        if (req.Address != null) dataPoint.Address = req.Address;
+        if (req.DataType.HasValue) dataPoint.DataType = req.DataType.Value;
+        if (req.Unit != null) dataPoint.Unit = req.Unit;
+        if (req.ModbusSlaveId.HasValue) dataPoint.ModbusSlaveId = req.ModbusSlaveId.Value;
+        if (req.ModbusFunctionCode.HasValue) dataPoint.ModbusFunctionCode = req.ModbusFunctionCode.Value;
+        if (req.ModbusByteOrder.HasValue) dataPoint.ModbusByteOrder = req.ModbusByteOrder.Value;
+        if (req.RegisterLength.HasValue) dataPoint.RegisterLength = req.RegisterLength.Value;
+        if (req.IsEnabled.HasValue) dataPoint.IsEnabled = req.IsEnabled.Value;
+
+        await _deviceService.UpdateDataPointAsync(dataPoint);
+
+        // 如果采集配置变更，重新加载设备采集任务
+        if (configChanged && device.IsEnabled)
+        {
+            await _collectionService.ReloadDeviceAsync(deviceId, HttpContext.RequestAborted);
+            _logger.LogInformation("数据点 ID={DataPointId} 配置变更，已重新加载设备 ID={DeviceId} 采集任务", 
+                dataPointId, deviceId);
+        }
+
+        return Ok(ApiResponse.Ok("数据点更新成功"));
     }
 
     /// <summary>删除数据点</summary>
@@ -245,19 +293,23 @@ public class DevicesController : ControllerBase
         UpdatedAt         = d.UpdatedAt
     };
 
-    private static DataPointResponse MapDataPointToResponse(Domain.Entities.DataPoint dp, string deviceName) => new()
+    private static DataPointResponse MapDataPointToResponse(DataPoint dp, string deviceName) => new()
     {
-        Id            = dp.Id,
-        DeviceId      = dp.DeviceId,
-        DeviceName    = deviceName,
-        Name          = dp.Name,
-        Tag           = dp.Tag,
-        Description   = dp.Description,
-        Address       = dp.Address,
-        DataType      = dp.DataType.ToString(),
-        DataTypeValue = (int)dp.DataType,
-        Unit          = dp.Unit,
-        IsEnabled     = dp.IsEnabled,
-        CreatedAt     = dp.CreatedAt
+        Id                 = dp.Id,
+        DeviceId           = dp.DeviceId,
+        DeviceName         = deviceName,
+        Name               = dp.Name,
+        Tag                = dp.Tag,
+        Description        = dp.Description,
+        Address            = dp.Address,
+        DataType           = dp.DataType.ToString(),
+        DataTypeValue      = (int)dp.DataType,
+        Unit               = dp.Unit,
+        IsEnabled          = dp.IsEnabled,
+        CreatedAt          = dp.CreatedAt,
+        ModbusSlaveId      = dp.ModbusSlaveId,
+        ModbusFunctionCode = dp.ModbusFunctionCode,
+        ModbusByteOrder    = dp.ModbusByteOrder.HasValue ? (byte)dp.ModbusByteOrder.Value : (byte?)null,
+        RegisterLength     = dp.RegisterLength
     };
 }

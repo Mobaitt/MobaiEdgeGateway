@@ -30,6 +30,10 @@ export const createDataPoint = (deviceId, data) =>
 export const deleteDataPoint = (deviceId, dataPointId) =>
   request.delete(`/devices/${deviceId}/datapoints/${dataPointId}`)
 
+/** 更新数据点 */
+export const updateDataPoint = (deviceId, dataPointId, data) =>
+  request.put(`/devices/${deviceId}/datapoints/${dataPointId}`, data)
+
 /** 获取设备数据点的实时数据 */
 export const getDeviceRealtimeData = (deviceId) =>
   request.get(`/devices/${deviceId}/datapoints/realtime`)

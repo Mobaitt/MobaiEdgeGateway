@@ -71,6 +71,37 @@ public class EnumsController : ControllerBase
         return Ok(new { data = options, message = "success" });
     }
 
+    /// <summary>
+    /// 获取 Modbus 字节序选项
+    /// </summary>
+    [HttpGet("modbus-byte-orders")]
+    public IActionResult GetModbusByteOrders()
+    {
+        var options = Enum.GetValues(typeof(ModbusByteOrder))
+            .Cast<ModbusByteOrder>()
+            .Select(p => new
+            {
+                value = (int)p,
+                label = p.ToString(),
+                desc = GetByteOrderDescription(p)
+            })
+            .ToList();
+
+        return Ok(new { data = options, message = "success" });
+    }
+
+    private static string GetByteOrderDescription(ModbusByteOrder order)
+    {
+        return order switch
+        {
+            ModbusByteOrder.ABCD => "大端模式 (ABCD) - 高字节在前，标准 Modbus 顺序",
+            ModbusByteOrder.BADC => "字节交换 (BADC) - 每个寄存器内字节交换",
+            ModbusByteOrder.CDAB => "字交换 (CDAB) - 两个寄存器顺序交换",
+            ModbusByteOrder.DCBA => "完全交换 (DCBA) - 寄存器内 + 寄存器间交换",
+            _ => order.ToString()
+        };
+    }
+
     private static string GetProtocolDescription(CollectionProtocol protocol)
     {
         return protocol switch

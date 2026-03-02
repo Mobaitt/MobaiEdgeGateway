@@ -16,11 +16,13 @@ namespace EdgeGateway.WebApi.Controllers;
 public class ChannelsController : ControllerBase
 {
     private readonly DeviceManagementService _deviceService;
+    private readonly DataSendService _sendService;
     private readonly ILogger<ChannelsController> _logger;
 
-    public ChannelsController(DeviceManagementService deviceService, ILogger<ChannelsController> logger)
+    public ChannelsController(DeviceManagementService deviceService, DataSendService sendService, ILogger<ChannelsController> logger)
     {
         _deviceService = deviceService;
+        _sendService   = sendService;
         _logger        = logger;
     }
 
@@ -70,6 +72,7 @@ public class ChannelsController : ControllerBase
     public async Task<IActionResult> BindDataPoints(int channelId, [FromBody] BindDataPointsRequest req)
     {
         await _deviceService.BindDataPointsToChannelAsync(channelId, req.DataPointIds);
+        await _sendService.RefreshChannelsCacheForceAsync();
         _logger.LogInformation("通道 ID={ChannelId} 绑定 {Count} 个数据点", channelId, req.DataPointIds.Count);
         return Ok(ApiResponse.Ok($"成功绑定 {req.DataPointIds.Count} 个数据点"));
     }

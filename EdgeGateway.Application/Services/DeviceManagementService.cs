@@ -97,12 +97,23 @@ public class DeviceManagementService
     public Task<IEnumerable<DataPoint>> GetDataPointsAsync(int deviceId) =>
         _dataPointRepo.GetByDeviceIdAsync(deviceId);
 
+    /// <summary>获取单个数据点</summary>
+    public Task<DataPoint?> GetDataPointAsync(int id) =>
+        _dataPointRepo.GetByIdAsync(id);
+
     /// <summary>新增数据点</summary>
     public async Task<DataPoint> CreateDataPointAsync(DataPoint dataPoint)
     {
         var created = await _dataPointRepo.AddAsync(dataPoint);
         _logger.LogInformation("新增数据点：{Tag} (设备 ID={DeviceId})", created.Tag, created.DeviceId);
         return created;
+    }
+
+    /// <summary>更新数据点</summary>
+    public async Task UpdateDataPointAsync(DataPoint dataPoint)
+    {
+        await _dataPointRepo.UpdateAsync(dataPoint);
+        _logger.LogInformation("更新数据点：{Tag} (ID={Id})", dataPoint.Tag, dataPoint.Id);
     }
 
     /// <summary>删除数据点</summary>

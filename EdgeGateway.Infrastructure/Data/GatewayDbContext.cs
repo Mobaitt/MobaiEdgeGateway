@@ -119,7 +119,8 @@ public class GatewayDbContext : DbContext
                 Id = 1, DeviceId = 1,
                 Name = "温度", Tag = "DEV_SIMULATOR_001.Temperature",
                 Address = "40001", DataType = Domain.Enums.DataValueType.Float,
-                Unit = "℃", IsEnabled = true,
+                Unit = "℃", IsEnabled = true, RegisterLength = 2,
+                ModbusSlaveId = 1, ModbusFunctionCode = 3, ModbusByteOrder = Domain.Enums.ModbusByteOrder.ABCD,
                 CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc)
             },
             new DataPoint
@@ -127,7 +128,8 @@ public class GatewayDbContext : DbContext
                 Id = 2, DeviceId = 1,
                 Name = "压力", Tag = "DEV_SIMULATOR_001.Pressure",
                 Address = "40002", DataType = Domain.Enums.DataValueType.Float,
-                Unit = "MPa", IsEnabled = true,
+                Unit = "MPa", IsEnabled = true, RegisterLength = 2,
+                ModbusSlaveId = 1, ModbusFunctionCode = 3, ModbusByteOrder = Domain.Enums.ModbusByteOrder.ABCD,
                 CreatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc)
             }
         );

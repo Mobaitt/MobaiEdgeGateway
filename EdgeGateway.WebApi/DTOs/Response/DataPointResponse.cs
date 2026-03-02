@@ -28,6 +28,12 @@ public class DataPointResponse
 
     public bool IsEnabled { get; set; }
     public DateTime CreatedAt { get; set; }
+
+    // Modbus 配置字段
+    public byte? ModbusSlaveId { get; set; }
+    public int? ModbusFunctionCode { get; set; }
+    public byte? ModbusByteOrder { get; set; }
+    public byte RegisterLength { get; set; }
 }
 
 /// <summary>数据点实时数据响应</summary>

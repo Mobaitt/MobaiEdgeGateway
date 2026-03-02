@@ -96,18 +96,23 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="100" align="right">
+        <el-table-column label="操作" width="150" align="right">
           <template #default="{ row }">
+            <el-button size="small" text @click="openEdit(row)">
+              <el-icon><Edit /></el-icon>
+              编辑
+            </el-button>
             <el-button size="small" text type="danger" @click="confirmDelete(row)">
               <el-icon><Delete /></el-icon>
+              删除
             </el-button>
           </template>
         </el-table-column>
       </el-table>
     </div>
 
-    <!-- 新增数据点弹窗 -->
-    <el-dialog v-model="dialogVisible" title="新增数据点" width="680px" destroy-on-close class="datapoint-dialog" top="8vh">
+    <!-- 新增/编辑数据点弹窗 -->
+    <el-dialog v-model="dialogVisible" :title="editingDataPoint ? '编辑数据点' : '新增数据点'" width="720px" destroy-on-close class="datapoint-dialog" top="5vh">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="90px" label-position="left">
         
         <!-- 基本信息 -->
@@ -161,22 +166,73 @@
           </el-row>
         </div>
 
+        <!-- Modbus 高级配置 -->
+        <div class="form-section">
+          <div class="section-title"><el-icon><Connection /></el-icon> Modbus 配置</div>
+          <el-row :gutter="20">
+            <el-col :span="8">
+              <el-form-item label="从站地址">
+                <el-input-number v-model="form.modbusSlaveId" :min="1" :max="247" :step="1" style="width:100%" controls-position="right" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="功能码">
+                <el-select v-model="form.modbusFunctionCode" placeholder="功能码" style="width:100%">
+                  <el-option label="01 - 读线圈" :value="1" />
+                  <el-option label="02 - 读离散输入" :value="2" />
+                  <el-option label="03 - 读保持寄存器" :value="3" />
+                  <el-option label="04 - 读输入寄存器" :value="4" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :span="8">
+              <el-form-item label="字节顺序">
+                <el-select v-model="form.modbusByteOrder" placeholder="字节序" style="width:100%">
+                  <el-option v-for="o in ModbusByteOrderOptions" :key="o.value" :label="o.label" :value="o.value">
+                    <div class="byte-order-option">
+                      <span>{{ o.label }}</span>
+                      <span class="byte-order-desc">{{ o.desc }}</span>
+                    </div>
+                  </el-option>
+                </el-select>
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row :gutter="20" style="margin-top: 12px">
+            <el-col :span="8">
+              <el-form-item label="寄存器长度">
+                <el-select v-model="form.registerLength" placeholder="长度" style="width:100%">
+                  <el-option label="1 个寄存器 (16 位)" :value="1" />
+                  <el-option label="2 个寄存器 (32 位)" :value="2" />
+                  <el-option label="4 个寄存器 (64 位)" :value="4" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <div class="protocol-hint">
+            <el-icon class="hint-icon"><InfoFilled /></el-icon>
+            <span>32 位数据类型（Int32、UInt32、Float）需要 2 个寄存器，64 位数据类型（Int64、UInt64、Double）需要 4 个寄存器。</span>
+          </div>
+        </div>
+
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="submitForm">创建数据点</el-button>
+        <el-button type="primary" :loading="submitting" @click="submitForm">
+          {{ editingDataPoint ? '保存修改' : '创建数据点' }}
+        </el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
-import { Plus, Delete, ArrowLeft } from '@element-plus/icons-vue'
-import { getDataPoints, createDataPoint, deleteDataPoint, getDeviceRealtimeData, getDevice } from '@/api/device'
-import { getDataValueTypes } from '@/api/enums'
+import { Plus, Delete, ArrowLeft, Document, Setting, Connection, InfoFilled, Edit } from '@element-plus/icons-vue'
+import { getDataPoints, createDataPoint, updateDataPoint, deleteDataPoint, getDeviceRealtimeData, getDevice } from '@/api/device'
+import { getDataValueTypes, getModbusByteOrders } from '@/api/enums'
 import { formatDateTime } from '@/api/constants'
 
 type DataPointItem = {
@@ -186,9 +242,14 @@ type DataPointItem = {
   description?: string
   address: string
   dataType: string | number
+  dataTypeValue?: number
   unit?: string
   isEnabled: boolean
   createdAt?: string
+  modbusSlaveId?: number
+  modbusFunctionCode?: number
+  modbusByteOrder?: number
+  registerLength?: number
 }
 
 type DataPointForm = {
@@ -199,6 +260,10 @@ type DataPointForm = {
   dataType: number | null
   unit: string
   isEnabled: boolean
+  modbusSlaveId: number
+  modbusFunctionCode: number
+  modbusByteOrder: number
+  registerLength: number
 }
 
 type RealtimeDataItem = {
@@ -212,6 +277,7 @@ const route = useRoute()
 const router = useRouter()
 const deviceId = computed(() => Number(route.params.id))
 const DataValueTypeOptions = ref<any[]>([])
+const ModbusByteOrderOptions = ref<any[]>([])
 
 // 加载数据类型选项
 const loadDataValueTypes = async () => {
@@ -220,6 +286,16 @@ const loadDataValueTypes = async () => {
     DataValueTypeOptions.value = (res as any).data || []
   } catch (error) {
     console.error('加载数据类型失败:', error)
+  }
+}
+
+// 加载 Modbus 字节序选项
+const loadModbusByteOrders = async () => {
+  try {
+    const res = await getModbusByteOrders()
+    ModbusByteOrderOptions.value = (res as any).data || []
+  } catch (error) {
+    console.error('加载 Modbus 字节序失败:', error)
   }
 }
 
@@ -235,6 +311,7 @@ let realtimeTimer: number | null = null
 
 const dialogVisible = ref(false)
 const submitting = ref(false)
+const editingDataPoint = ref<DataPointItem | null>(null)
 const formRef = ref<any>()
 const form = ref<DataPointForm>({
   name: '',
@@ -243,7 +320,11 @@ const form = ref<DataPointForm>({
   address: '',
   dataType: null,
   unit: '',
-  isEnabled: true
+  isEnabled: true,
+  modbusSlaveId: 1,
+  modbusFunctionCode: 3,
+  modbusByteOrder: 1,
+  registerLength: 1
 })
 
 const rules = {
@@ -319,7 +400,7 @@ const getQualityClass = (quality: string) => {
 
 const formatValue = (value: any, dataType: string | number) => {
   if (value === null || value === undefined) return '—'
-  
+
   // 数字类型保留小数
   if (typeof value === 'number') {
     const strVal = value.toString()
@@ -328,11 +409,29 @@ const formatValue = (value: any, dataType: string | number) => {
     }
     return strVal
   }
-  
+
   return String(value)
 }
 
+// 根据数据类型自动设置寄存器长度
+watch(() => form.value.dataType, (newType) => {
+  if (newType === null) return
+  // 32 位数据类型：Int32(4), UInt32(5), Float(6)
+  if ([4, 5, 6].includes(newType)) {
+    form.value.registerLength = 2
+  }
+  // 64 位数据类型：Int64(7), UInt64(8), Double(9)
+  else if ([7, 8, 9].includes(newType)) {
+    form.value.registerLength = 4
+  }
+  // 16 位数据类型
+  else {
+    form.value.registerLength = 1
+  }
+})
+
 const openCreate = () => {
+  editingDataPoint.value = null
   form.value = {
     name: '',
     tag: '',
@@ -340,7 +439,29 @@ const openCreate = () => {
     address: '',
     dataType: null,
     unit: '',
-    isEnabled: true
+    isEnabled: true,
+    modbusSlaveId: 1,
+    modbusFunctionCode: 3,
+    modbusByteOrder: 1,
+    registerLength: 1
+  }
+  dialogVisible.value = true
+}
+
+const openEdit = (row: DataPointItem) => {
+  editingDataPoint.value = row
+  form.value = {
+    name: row.name,
+    tag: row.tag,
+    description: row.description || '',
+    address: row.address,
+    dataType: row.dataTypeValue ?? (typeof row.dataType === 'number' ? row.dataType : null),
+    unit: row.unit || '',
+    isEnabled: row.isEnabled,
+    modbusSlaveId: row.modbusSlaveId || 1,
+    modbusFunctionCode: row.modbusFunctionCode || 3,
+    modbusByteOrder: row.modbusByteOrder || 1,
+    registerLength: row.registerLength || 1
   }
   dialogVisible.value = true
 }
@@ -349,10 +470,19 @@ const submitForm = async () => {
   await formRef.value?.validate()
   submitting.value = true
   try {
-    await createDataPoint(deviceId.value, form.value)
-    ElMessage.success('数据点创建成功')
+    if (editingDataPoint.value) {
+      // 编辑模式
+      await updateDataPoint(deviceId.value, editingDataPoint.value.id, form.value)
+      ElMessage.success('数据点更新成功')
+    } else {
+      // 创建模式
+      await createDataPoint(deviceId.value, form.value)
+      ElMessage.success('数据点创建成功')
+    }
     dialogVisible.value = false
     fetchDataPoints()
+  } catch (error: any) {
+    ElMessage.error(`操作失败：${error.message || '未知错误'}`)
   } finally {
     submitting.value = false
   }
@@ -378,6 +508,7 @@ onMounted(() => {
   fetchDevice()
   fetchDataPoints()
   loadDataValueTypes()
+  loadModbusByteOrders()
   startRealtimePolling()
 })
 
@@ -506,4 +637,16 @@ onUnmounted(() => {
 :deep(.el-input__wrapper) { background: var(--bg-base) !important; border-color: var(--border-muted) !important; }
 :deep(.el-select__wrapper) { background: var(--bg-base) !important; border-color: var(--border-muted) !important; }
 :deep(.el-textarea__inner) { background: var(--bg-base) !important; border-color: var(--border-muted) !important; color: var(--text-primary) !important; }
+
+/* 字节序选项样式 */
+.byte-order-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.byte-order-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+}
 </style>

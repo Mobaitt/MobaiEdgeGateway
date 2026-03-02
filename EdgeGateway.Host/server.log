@@ -1,0 +1,294 @@
+D:\Users\mobai\OneDrive\桌面\EdgeGateway\EdgeGateway.Infrastructure\EdgeGateway.Infrastructure.csproj : warning NU1701: Package 'NModbus4 2.1.0' was restored using '.NETFramework,Version=v4.6.1, .NETFramework,Version=v4.6.2, .NETFramework,Version=v4.7, .NETFramework,Version=v4.7.1, .NETFramework,Version=v4.7.2, .NETFramework,Version=v4.8, .NETFramework,Version=v4.8.1' instead of the project target framework 'net8.0'. This package may not be fully compatible with your project. [D:\Users\mobai\OneDrive\桌面\EdgeGateway\EdgeGateway.Host\EdgeGateway.Host.csproj]
+D:\Users\mobai\OneDrive\桌面\EdgeGateway\EdgeGateway.Application\EdgeGateway.Application.csproj : warning NU1701: Package 'NModbus4 2.1.0' was restored using '.NETFramework,Version=v4.6.1, .NETFramework,Version=v4.6.2, .NETFramework,Version=v4.7, .NETFramework,Version=v4.7.1, .NETFramework,Version=v4.7.2, .NETFramework,Version=v4.8, .NETFramework,Version=v4.8.1' instead of the project target framework 'net8.0'. This package may not be fully compatible with your project. [D:\Users\mobai\OneDrive\桌面\EdgeGateway\EdgeGateway.Host\EdgeGateway.Host.csproj]
+D:\Users\mobai\OneDrive\桌面\EdgeGateway\EdgeGateway.Host\EdgeGateway.Host.csproj : warning NU1701: Package 'NModbus4 2.1.0' was restored using '.NETFramework,Version=v4.6.1, .NETFramework,Version=v4.6.2, .NETFramework,Version=v4.7, .NETFramework,Version=v4.7.1, .NETFramework,Version=v4.7.2, .NETFramework,Version=v4.8, .NETFramework,Version=v4.8.1' instead of the project target framework 'net8.0'. This package may not be fully compatible with your project.
+D:\Users\mobai\OneDrive\桌面\EdgeGateway\EdgeGateway.Host\EdgeGateway.Host.csproj : warning NU1701: Package 'NModbus4 2.1.0' was restored using '.NETFramework,Version=v4.6.1, .NETFramework,Version=v4.6.2, .NETFramework,Version=v4.7, .NETFramework,Version=v4.7.1, .NETFramework,Version=v4.7.2, .NETFramework,Version=v4.8, .NETFramework,Version=v4.8.1' instead of the project target framework 'net8.0'. This package may not be fully compatible with your project.
+D:\Users\mobai\OneDrive\桌面\EdgeGateway\EdgeGateway.Application\EdgeGateway.Application.csproj : warning NU1701: Package 'NModbus4 2.1.0' was restored using '.NETFramework,Version=v4.6.1, .NETFramework,Version=v4.6.2, .NETFramework,Version=v4.7, .NETFramework,Version=v4.7.1, .NETFramework,Version=v4.7.2, .NETFramework,Version=v4.8, .NETFramework,Version=v4.8.1' instead of the project target framework 'net8.0'. This package may not be fully compatible with your project.
+D:\Users\mobai\OneDrive\桌面\EdgeGateway\EdgeGateway.Infrastructure\EdgeGateway.Infrastructure.csproj : warning NU1701: Package 'NModbus4 2.1.0' was restored using '.NETFramework,Version=v4.6.1, .NETFramework,Version=v4.6.2, .NETFramework,Version=v4.7, .NETFramework,Version=v4.7.1, .NETFramework,Version=v4.7.2, .NETFramework,Version=v4.8, .NETFramework,Version=v4.8.1' instead of the project target framework 'net8.0'. This package may not be fully compatible with your project.
+dbug: Microsoft.EntityFrameworkCore.Infrastructure[10401]
+      An 'IServiceProvider' was created for internal use by Entity Framework.
+dbug: Microsoft.EntityFrameworkCore.Model[10601]
+      The index {'ChannelId'} was not created on entity type 'ChannelDataPointMapping' as the properties are already covered by the index {'ChannelId', 'DataPointId'}.
+dbug: Microsoft.EntityFrameworkCore.Infrastructure[10403]
+      Entity Framework Core 8.0.0 initialized 'GatewayDbContext' using provider 'Microsoft.EntityFrameworkCore.Sqlite:8.0.0' with options: None
+dbug: Microsoft.EntityFrameworkCore.Database.Connection[20005]
+      Creating DbConnection.
+dbug: Microsoft.EntityFrameworkCore.Database.Connection[20006]
+      Created DbConnection. (4ms).
+dbug: Microsoft.EntityFrameworkCore.Database.Connection[20000]
+      Opening connection to database 'main' on server 'gateway.db'.
+dbug: Microsoft.EntityFrameworkCore.Database.Connection[20001]
+      Opened connection to database 'main' on server 'D:\Users\mobai\OneDrive\桌面\EdgeGateway\EdgeGateway.Host\gateway.db'.
+dbug: Microsoft.EntityFrameworkCore.Database.Connection[20007]
+      Disposing connection to database 'main' on server 'gateway.db'.
+dbug: Microsoft.EntityFrameworkCore.Database.Connection[20008]
+      Disposed connection to database 'main' on server 'gateway.db' (0ms).
+dbug: Microsoft.EntityFrameworkCore.Database.Command[20103]
+      Creating DbCommand for 'ExecuteScalar'.
+dbug: Microsoft.EntityFrameworkCore.Database.Connection[20005]
+      Creating DbConnection.
+dbug: Microsoft.EntityFrameworkCore.Database.Connection[20006]
+      Created DbConnection. (0ms).
+dbug: Microsoft.EntityFrameworkCore.Database.Command[20104]
+      Created DbCommand for 'ExecuteScalar' (2ms).
+dbug: Microsoft.EntityFrameworkCore.Database.Command[20106]
+      Initialized DbCommand for 'ExecuteScalar' (5ms).
+dbug: Microsoft.EntityFrameworkCore.Database.Connection[20000]
+      Opening connection to database 'main' on server 'gateway.db'.
+dbug: Microsoft.EntityFrameworkCore.Database.Connection[20001]
+      Opened connection to database 'main' on server 'D:\Users\mobai\OneDrive\桌面\EdgeGateway\EdgeGateway.Host\gateway.db'.
+dbug: Microsoft.EntityFrameworkCore.Database.Command[20100]
+      Executing DbCommand [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT COUNT(*) FROM "sqlite_master" WHERE "type" = 'table' AND "rootpage" IS NOT NULL;
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (8ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT COUNT(*) FROM "sqlite_master" WHERE "type" = 'table' AND "rootpage" IS NOT NULL;
+dbug: Microsoft.EntityFrameworkCore.Database.Connection[20002]
+      Closing connection to database 'main' on server 'D:\Users\mobai\OneDrive\桌面\EdgeGateway\EdgeGateway.Host\gateway.db'.
+dbug: Microsoft.EntityFrameworkCore.Database.Connection[20003]
+      Closed connection to database 'main' on server 'gateway.db' (0ms).
+dbug: Microsoft.EntityFrameworkCore.Infrastructure[10407]
+      'GatewayDbContext' disposed.
+dbug: Microsoft.EntityFrameworkCore.Database.Connection[20007]
+      Disposing connection to database 'main' on server 'gateway.db'.
+dbug: Microsoft.EntityFrameworkCore.Database.Connection[20008]
+      Disposed connection to database 'main' on server 'gateway.db' (0ms).
+dbug: Microsoft.Extensions.Hosting.Internal.Host[1]
+      Hosting starting
+info: EdgeGateway.Application.Services.CollectionStrategyRegistry[0]
+      采集策略注册: Simulator -> SimulatorCollectionStrategy
+info: EdgeGateway.Application.Services.CollectionStrategyRegistry[0]
+      采集策略注册: Modbus -> ModbusCollectionStrategy
+info: EdgeGateway.Application.Services.SendStrategyRegistry[0]
+      发送策略注册：LocalFile -> LocalFileSendStrategy
+info: EdgeGateway.Application.Services.SendStrategyRegistry[0]
+      发送策略注册：Mqtt -> MqttSendStrategy
+info: EdgeGateway.Application.Services.SendStrategyRegistry[0]
+      发送策略注册：Http -> HttpSendStrategy
+info: EdgeGateway.Application.Services.SendStrategyRegistry[0]
+      发送策略注册：WebSocket -> WebSocketSendStrategy
+info: EdgeGateway.Host.GatewayWorker[0]
+      边缘采集网关启动（控制台模式）
+dbug: Microsoft.EntityFrameworkCore.Infrastructure[10403]
+      Entity Framework Core 8.0.0 initialized 'GatewayDbContext' using provider 'Microsoft.EntityFrameworkCore.Sqlite:8.0.0' with options: None
+dbug: Microsoft.EntityFrameworkCore.Query[10111]
+      Compiling query expression: 
+      'DbSet<Channel>()
+          .Where(c => c.IsEnabled)'
+dbug: Microsoft.EntityFrameworkCore.Query[10107]
+      Generated query execution expression: 
+      'queryContext => new SingleQueryingEnumerable<Channel>(
+          (RelationalQueryContext)queryContext, 
+          RelationalCommandCache.QueryExpression(
+              Projection Mapping:
+                  EmptyProjectionMember -> Dictionary<IProperty, int> { [Property: Channel.Id (int) Required PK AfterSave:Throw ValueGenerated.OnAdd, 0], [Property: Channel.Code (string) Required Index MaxLength(50), 1], [Property: Channel.ConfigJson (string), 2], [Property: Channel.CreatedAt (DateTime) Required, 3], [Property: Channel.Description (string), 4], [Property: Channel.Endpoint (string) Required MaxLength(500), 5], [Property: Channel.IsEnabled (bool) Required, 6], [Property: Channel.Name (string) Required MaxLength(100), 7], [Property: Channel.Protocol (SendProtocol) Required, 8] }
+              SELECT c.Id, c.Code, c.ConfigJson, c.CreatedAt, c.Description, c.Endpoint, c.IsEnabled, c.Name, c.Protocol
+              FROM Channels AS c
+              WHERE c.IsEnabled), 
+          null, 
+          Func<QueryContext, DbDataReader, ResultContext, SingleQueryResultCoordinator, Channel>, 
+          EdgeGateway.Infrastructure.Data.GatewayDbContext, 
+          False, 
+          False, 
+          True
+      )'
+dbug: Microsoft.EntityFrameworkCore.Database.Connection[20005]
+      Creating DbConnection.
+dbug: Microsoft.EntityFrameworkCore.Database.Connection[20006]
+      Created DbConnection. (0ms).
+dbug: Microsoft.EntityFrameworkCore.Database.Connection[20000]
+      Opening connection to database 'main' on server 'gateway.db'.
+dbug: Microsoft.EntityFrameworkCore.Database.Connection[20001]
+      Opened connection to database 'main' on server 'D:\Users\mobai\OneDrive\桌面\EdgeGateway\EdgeGateway.Host\gateway.db'.
+dbug: Microsoft.EntityFrameworkCore.Database.Command[20103]
+      Creating DbCommand for 'ExecuteReader'.
+dbug: Microsoft.EntityFrameworkCore.Database.Command[20104]
+      Created DbCommand for 'ExecuteReader' (0ms).
+dbug: Microsoft.EntityFrameworkCore.Database.Command[20106]
+      Initialized DbCommand for 'ExecuteReader' (0ms).
+dbug: Microsoft.EntityFrameworkCore.Database.Command[20100]
+      Executing DbCommand [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT "c"."Id", "c"."Code", "c"."ConfigJson", "c"."CreatedAt", "c"."Description", "c"."Endpoint", "c"."IsEnabled", "c"."Name", "c"."Protocol"
+      FROM "Channels" AS "c"
+      WHERE "c"."IsEnabled"
+info: Microsoft.EntityFrameworkCore.Database.Command[20101]
+      Executed DbCommand (1ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT "c"."Id", "c"."Code", "c"."ConfigJson", "c"."CreatedAt", "c"."Description", "c"."Endpoint", "c"."IsEnabled", "c"."Name", "c"."Protocol"
+      FROM "Channels" AS "c"
+      WHERE "c"."IsEnabled"
+dbug: Microsoft.EntityFrameworkCore.ChangeTracking[10806]
+      Context 'GatewayDbContext' started tracking 'Channel' entity. Consider using 'DbContextOptionsBuilder.EnableSensitiveDataLogging' to see key values.
+dbug: Microsoft.EntityFrameworkCore.Database.Command[20301]
+      Closing data reader to 'main' on server 'D:\Users\mobai\OneDrive\桌面\EdgeGateway\EdgeGateway.Host\gateway.db'.
+dbug: Microsoft.EntityFrameworkCore.Database.Command[20300]
+      A data reader for 'main' on server 'D:\Users\mobai\OneDrive\桌面\EdgeGateway\EdgeGateway.Host\gateway.db' is being disposed after spending 31ms reading results.
+dbug: Microsoft.EntityFrameworkCore.Database.Connection[20002]
+      Closing connection to database 'main' on server 'D:\Users\mobai\OneDrive\桌面\EdgeGateway\EdgeGateway.Host\gateway.db'.
+dbug: Microsoft.EntityFrameworkCore.Database.Connection[20003]
+      Closed connection to database 'main' on server 'gateway.db' (0ms).
+info: EdgeGateway.Application.Services.DataSendService[0]
+      正在初始化 1 个发送通道
+info: EdgeGateway.Infrastructure.Strategies.Send.LocalFileSendStrategy[0]
+      本地文件通道初始化完成，输出路径：./output/data.json
+info: EdgeGateway.Application.Services.DataSendService[0]
+      发送通道初始化完成，成功：1/1
+dbug: Microsoft.EntityFrameworkCore.Infrastructure[10407]
+      'GatewayDbContext' disposed.
+dbug: Microsoft.EntityFrameworkCore.Database.Connection[20007]
+      Disposing connection to database 'main' on server 'gateway.db'.
+dbug: Microsoft.EntityFrameworkCore.Database.Connection[20008]
+      Disposed connection to database 'main' on server 'gateway.db' (0ms).
+dbug: Microsoft.EntityFrameworkCore.Infrastructure[10403]
+      Entity Framework Core 8.0.0 initialized 'GatewayDbContext' using provider 'Microsoft.EntityFrameworkCore.Sqlite:8.0.0' with options: None
+dbug: Microsoft.EntityFrameworkCore.Query[10111]
+      Compiling query expression: 
+      'DbSet<Device>()
+          .Include(d => d.DataPoints
+              .Where(dp => dp.IsEnabled))
+          .Where(d => d.IsEnabled)'
+dbug: Microsoft.EntityFrameworkCore.Query[10112]
+      Including navigation: 'Device.DataPoints'.
+dbug: Microsoft.EntityFrameworkCore.Query[10107]
+      Generated query execution expression: 
+      'queryContext => new SingleQueryingEnumerable<Device>(
+          (RelationalQueryContext)queryContext, 
+          RelationalCommandCache.QueryExpression(
+              Client Projections:
+                  0 -> Dictionary<IProperty, int> { [Property: Device.Id (int) Required PK AfterSave:Throw ValueGenerated.OnAdd, 0], [Property: Device.Address (string) Required MaxLength(200), 1], [Property: Device.Code (string) Required Index MaxLength(50), 2], [Property: Device.CreatedAt (DateTime) Required, 3], [Property: Device.Description (string), 4], [Property: Device.IsEnabled (bool) Required, 5], [Property: Device.Name (string) Required MaxLength(100), 6], [Property: Device.PollingIntervalMs (int) Required, 7], [Property: Device.Port (int?), 8], [Property: Device.Protocol (CollectionProtocol) Required, 9], [Property: Device.UpdatedAt (DateTime) Required, 10] }
+                  1 -> 0
+                  2 -> Dictionary<IProperty, int> { [Property: DataPoint.Id (int) Required PK AfterSave:Throw ValueGenerated.OnAdd, 11], [Property: DataPoint.Address (string) Required MaxLength(200), 12], [Property: DataPoint.CreatedAt (DateTime) Required, 13], [Property: DataPoint.DataType (DataValueType) Required, 14], [Property: DataPoint.Description (string), 15], [Property: DataPoint.DeviceId (int) Required FK Index, 16], [Property: DataPoint.IsEnabled (bool) Required, 17], [Property: DataPoint.ModbusByteOrder (ModbusByteOrder?), 18], [Property: DataPoint.ModbusFunctionCode (int?), 19], [Property: DataPoint.ModbusSlaveId (byte?), 20], [Property: DataPoint.Name (string) Required MaxLength(100), 21], [Property: DataPoint.RegisterLength (byte) Required, 22], [Property: DataPoint.Tag (string) Required Index MaxLength(200), 23], [Property: DataPoint.Unit (string), 24] }
+                  3 -> 11
+              SELECT d.Id, d.Address, d.Code, d.CreatedAt, d.Description, d.IsEnabled, d.Name, d.PollingIntervalMs, d.Port, d.Protocol, d.UpdatedAt, t.Id, t.Address, t.CreatedAt, t.DataType, t.Description, t.DeviceId, t.IsEnabled, t.ModbusByteOrder, t.ModbusFunctionCode, t.ModbusSlaveId, t.Name, t.RegisterLength, t.Tag, t.Unit
+              FROM Devices AS d
+              LEFT JOIN 
+              (
+                  SELECT d0.Id, d0.Address, d0.CreatedAt, d0.DataType, d0.Description, d0.DeviceId, d0.IsEnabled, d0.ModbusByteOrder, d0.ModbusFunctionCode, d0.ModbusSlaveId, d0.Name, d0.RegisterLength, d0.Tag, d0.Unit
+                  FROM DataPoints AS d0
+                  WHERE d0.IsEnabled
+              ) AS t ON d.Id == t.DeviceId
+              WHERE d.IsEnabled
+              ORDER BY d.Id ASC), 
+          null, 
+          Func<QueryContext, DbDataReader, ResultContext, SingleQueryResultCoordinator, Device>, 
+          EdgeGateway.Infrastructure.Data.GatewayDbContext, 
+          False, 
+          False, 
+          True
+      )'
+dbug: Microsoft.EntityFrameworkCore.Database.Connection[20005]
+      Creating DbConnection.
+dbug: Microsoft.EntityFrameworkCore.Database.Connection[20006]
+      Created DbConnection. (0ms).
+dbug: Microsoft.EntityFrameworkCore.Database.Connection[20000]
+      Opening connection to database 'main' on server 'gateway.db'.
+dbug: Microsoft.EntityFrameworkCore.Database.Connection[20001]
+      Opened connection to database 'main' on server 'D:\Users\mobai\OneDrive\桌面\EdgeGateway\EdgeGateway.Host\gateway.db'.
+dbug: Microsoft.EntityFrameworkCore.Database.Command[20103]
+      Creating DbCommand for 'ExecuteReader'.
+dbug: Microsoft.EntityFrameworkCore.Database.Command[20104]
+      Created DbCommand for 'ExecuteReader' (0ms).
+dbug: Microsoft.EntityFrameworkCore.Database.Command[20106]
+      Initialized DbCommand for 'ExecuteReader' (0ms).
+dbug: Microsoft.EntityFrameworkCore.Database.Command[20100]
+      Executing DbCommand [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT "d"."Id", "d"."Address", "d"."Code", "d"."CreatedAt", "d"."Description", "d"."IsEnabled", "d"."Name", "d"."PollingIntervalMs", "d"."Port", "d"."Protocol", "d"."UpdatedAt", "t"."Id", "t"."Address", "t"."CreatedAt", "t"."DataType", "t"."Description", "t"."DeviceId", "t"."IsEnabled", "t"."ModbusByteOrder", "t"."ModbusFunctionCode", "t"."ModbusSlaveId", "t"."Name", "t"."RegisterLength", "t"."Tag", "t"."Unit"
+      FROM "Devices" AS "d"
+      LEFT JOIN (
+          SELECT "d0"."Id", "d0"."Address", "d0"."CreatedAt", "d0"."DataType", "d0"."Description", "d0"."DeviceId", "d0"."IsEnabled", "d0"."ModbusByteOrder", "d0"."ModbusFunctionCode", "d0"."ModbusSlaveId", "d0"."Name", "d0"."RegisterLength", "d0"."Tag", "d0"."Unit"
+          FROM "DataPoints" AS "d0"
+          WHERE "d0"."IsEnabled"
+      ) AS "t" ON "d"."Id" = "t"."DeviceId"
+      WHERE "d"."IsEnabled"
+      ORDER BY "d"."Id"
+fail: Microsoft.EntityFrameworkCore.Database.Command[20102]
+      Failed executing DbCommand (2ms) [Parameters=[], CommandType='Text', CommandTimeout='30']
+      SELECT "d"."Id", "d"."Address", "d"."Code", "d"."CreatedAt", "d"."Description", "d"."IsEnabled", "d"."Name", "d"."PollingIntervalMs", "d"."Port", "d"."Protocol", "d"."UpdatedAt", "t"."Id", "t"."Address", "t"."CreatedAt", "t"."DataType", "t"."Description", "t"."DeviceId", "t"."IsEnabled", "t"."ModbusByteOrder", "t"."ModbusFunctionCode", "t"."ModbusSlaveId", "t"."Name", "t"."RegisterLength", "t"."Tag", "t"."Unit"
+      FROM "Devices" AS "d"
+      LEFT JOIN (
+          SELECT "d0"."Id", "d0"."Address", "d0"."CreatedAt", "d0"."DataType", "d0"."Description", "d0"."DeviceId", "d0"."IsEnabled", "d0"."ModbusByteOrder", "d0"."ModbusFunctionCode", "d0"."ModbusSlaveId", "d0"."Name", "d0"."RegisterLength", "d0"."Tag", "d0"."Unit"
+          FROM "DataPoints" AS "d0"
+          WHERE "d0"."IsEnabled"
+      ) AS "t" ON "d"."Id" = "t"."DeviceId"
+      WHERE "d"."IsEnabled"
+      ORDER BY "d"."Id"
+dbug: Microsoft.EntityFrameworkCore.Database.Connection[20002]
+      Closing connection to database 'main' on server 'D:\Users\mobai\OneDrive\桌面\EdgeGateway\EdgeGateway.Host\gateway.db'.
+dbug: Microsoft.EntityFrameworkCore.Database.Connection[20003]
+      Closed connection to database 'main' on server 'gateway.db' (0ms).
+fail: Microsoft.EntityFrameworkCore.Query[10100]
+      An exception occurred while iterating over the results of a query for context type 'EdgeGateway.Infrastructure.Data.GatewayDbContext'.
+      Microsoft.Data.Sqlite.SqliteException (0x80004005): SQLite Error 1: 'no such column: d0.RegisterLength'.
+         at Microsoft.Data.Sqlite.SqliteException.ThrowExceptionForRC(Int32 rc, sqlite3 db)
+         at Microsoft.Data.Sqlite.SqliteCommand.PrepareAndEnumerateStatements()+MoveNext()
+         at Microsoft.Data.Sqlite.SqliteCommand.GetStatements()+MoveNext()
+         at Microsoft.Data.Sqlite.SqliteDataReader.NextResult()
+         at Microsoft.Data.Sqlite.SqliteCommand.ExecuteReader(CommandBehavior behavior)
+         at Microsoft.Data.Sqlite.SqliteCommand.ExecuteReaderAsync(CommandBehavior behavior, CancellationToken cancellationToken)
+         at Microsoft.Data.Sqlite.SqliteCommand.ExecuteDbDataReaderAsync(CommandBehavior behavior, CancellationToken cancellationToken)
+         at Microsoft.EntityFrameworkCore.Storage.RelationalCommand.ExecuteReaderAsync(RelationalCommandParameterObject parameterObject, CancellationToken cancellationToken)
+         at Microsoft.EntityFrameworkCore.Storage.RelationalCommand.ExecuteReaderAsync(RelationalCommandParameterObject parameterObject, CancellationToken cancellationToken)
+         at Microsoft.EntityFrameworkCore.Query.Internal.SingleQueryingEnumerable`1.AsyncEnumerator.InitializeReaderAsync(AsyncEnumerator enumerator, CancellationToken cancellationToken)
+         at Microsoft.EntityFrameworkCore.Query.Internal.SingleQueryingEnumerable`1.AsyncEnumerator.MoveNextAsync()
+      Microsoft.Data.Sqlite.SqliteException (0x80004005): SQLite Error 1: 'no such column: d0.RegisterLength'.
+         at Microsoft.Data.Sqlite.SqliteException.ThrowExceptionForRC(Int32 rc, sqlite3 db)
+         at Microsoft.Data.Sqlite.SqliteCommand.PrepareAndEnumerateStatements()+MoveNext()
+         at Microsoft.Data.Sqlite.SqliteCommand.GetStatements()+MoveNext()
+         at Microsoft.Data.Sqlite.SqliteDataReader.NextResult()
+         at Microsoft.Data.Sqlite.SqliteCommand.ExecuteReader(CommandBehavior behavior)
+         at Microsoft.Data.Sqlite.SqliteCommand.ExecuteReaderAsync(CommandBehavior behavior, CancellationToken cancellationToken)
+         at Microsoft.Data.Sqlite.SqliteCommand.ExecuteDbDataReaderAsync(CommandBehavior behavior, CancellationToken cancellationToken)
+         at Microsoft.EntityFrameworkCore.Storage.RelationalCommand.ExecuteReaderAsync(RelationalCommandParameterObject parameterObject, CancellationToken cancellationToken)
+         at Microsoft.EntityFrameworkCore.Storage.RelationalCommand.ExecuteReaderAsync(RelationalCommandParameterObject parameterObject, CancellationToken cancellationToken)
+         at Microsoft.EntityFrameworkCore.Query.Internal.SingleQueryingEnumerable`1.AsyncEnumerator.InitializeReaderAsync(AsyncEnumerator enumerator, CancellationToken cancellationToken)
+         at Microsoft.EntityFrameworkCore.Query.Internal.SingleQueryingEnumerable`1.AsyncEnumerator.MoveNextAsync()
+dbug: Microsoft.EntityFrameworkCore.Infrastructure[10407]
+      'GatewayDbContext' disposed.
+dbug: Microsoft.EntityFrameworkCore.Database.Connection[20007]
+      Disposing connection to database 'main' on server 'gateway.db'.
+dbug: Microsoft.EntityFrameworkCore.Database.Connection[20008]
+      Disposed connection to database 'main' on server 'gateway.db' (0ms).
+fail: Microsoft.Extensions.Hosting.Internal.Host[11]
+      Hosting failed to start
+      Microsoft.Data.Sqlite.SqliteException (0x80004005): SQLite Error 1: 'no such column: d0.RegisterLength'.
+         at Microsoft.Data.Sqlite.SqliteException.ThrowExceptionForRC(Int32 rc, sqlite3 db)
+         at Microsoft.Data.Sqlite.SqliteCommand.PrepareAndEnumerateStatements()+MoveNext()
+         at Microsoft.Data.Sqlite.SqliteCommand.GetStatements()+MoveNext()
+         at Microsoft.Data.Sqlite.SqliteDataReader.NextResult()
+         at Microsoft.Data.Sqlite.SqliteCommand.ExecuteReader(CommandBehavior behavior)
+         at Microsoft.Data.Sqlite.SqliteCommand.ExecuteReaderAsync(CommandBehavior behavior, CancellationToken cancellationToken)
+         at Microsoft.Data.Sqlite.SqliteCommand.ExecuteDbDataReaderAsync(CommandBehavior behavior, CancellationToken cancellationToken)
+         at Microsoft.EntityFrameworkCore.Storage.RelationalCommand.ExecuteReaderAsync(RelationalCommandParameterObject parameterObject, CancellationToken cancellationToken)
+         at Microsoft.EntityFrameworkCore.Storage.RelationalCommand.ExecuteReaderAsync(RelationalCommandParameterObject parameterObject, CancellationToken cancellationToken)
+         at Microsoft.EntityFrameworkCore.Query.Internal.SingleQueryingEnumerable`1.AsyncEnumerator.InitializeReaderAsync(AsyncEnumerator enumerator, CancellationToken cancellationToken)
+         at Microsoft.EntityFrameworkCore.Query.Internal.SingleQueryingEnumerable`1.AsyncEnumerator.MoveNextAsync()
+         at Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync[TSource](IQueryable`1 source, CancellationToken cancellationToken)
+         at Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync[TSource](IQueryable`1 source, CancellationToken cancellationToken)
+         at EdgeGateway.Infrastructure.Repositories.DeviceRepository.GetEnabledAsync() in D:\Users\mobai\OneDrive\桌面\EdgeGateway\EdgeGateway.Infrastructure\Repositories\DeviceRepository.cs:line 31
+         at EdgeGateway.Application.Services.DataCollectionService.StartAllAsync(CancellationToken cancellationToken) in D:\Users\mobai\OneDrive\桌面\EdgeGateway\EdgeGateway.Application\Services\DataCollectionService.cs:line 283
+         at EdgeGateway.Host.GatewayWorker.ExecuteAsync(CancellationToken stoppingToken) in D:\Users\mobai\OneDrive\桌面\EdgeGateway\EdgeGateway.Host\GatewayWorker.cs:line 33
+         at Microsoft.Extensions.Hosting.Internal.Host.<StartAsync>b__15_1(IHostedService service, CancellationToken token)
+         at Microsoft.Extensions.Hosting.Internal.Host.ForeachService[T](IEnumerable`1 services, CancellationToken token, Boolean concurrent, Boolean abortOnFirstException, List`1 exceptions, Func`3 operation)
+Unhandled exception. Microsoft.Data.Sqlite.SqliteException (0x80004005): SQLite Error 1: 'no such column: d0.RegisterLength'.
+   at Microsoft.Data.Sqlite.SqliteException.ThrowExceptionForRC(Int32 rc, sqlite3 db)
+   at Microsoft.Data.Sqlite.SqliteCommand.PrepareAndEnumerateStatements()+MoveNext()
+   at Microsoft.Data.Sqlite.SqliteCommand.GetStatements()+MoveNext()
+   at Microsoft.Data.Sqlite.SqliteDataReader.NextResult()
+   at Microsoft.Data.Sqlite.SqliteCommand.ExecuteReader(CommandBehavior behavior)
+   at Microsoft.Data.Sqlite.SqliteCommand.ExecuteReaderAsync(CommandBehavior behavior, CancellationToken cancellationToken)
+   at Microsoft.Data.Sqlite.SqliteCommand.ExecuteDbDataReaderAsync(CommandBehavior behavior, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Storage.RelationalCommand.ExecuteReaderAsync(RelationalCommandParameterObject parameterObject, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Storage.RelationalCommand.ExecuteReaderAsync(RelationalCommandParameterObject parameterObject, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Query.Internal.SingleQueryingEnumerable`1.AsyncEnumerator.InitializeReaderAsync(AsyncEnumerator enumerator, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.Query.Internal.SingleQueryingEnumerable`1.AsyncEnumerator.MoveNextAsync()
+   at Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync[TSource](IQueryable`1 source, CancellationToken cancellationToken)
+   at Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync[TSource](IQueryable`1 source, CancellationToken cancellationToken)
+   at EdgeGateway.Infrastructure.Repositories.DeviceRepository.GetEnabledAsync() in D:\Users\mobai\OneDrive\桌面\EdgeGateway\EdgeGateway.Infrastructure\Repositories\DeviceRepository.cs:line 31
+   at EdgeGateway.Application.Services.DataCollectionService.StartAllAsync(CancellationToken cancellationToken) in D:\Users\mobai\OneDrive\桌面\EdgeGateway\EdgeGateway.Application\Services\DataCollectionService.cs:line 283
+   at EdgeGateway.Host.GatewayWorker.ExecuteAsync(CancellationToken stoppingToken) in D:\Users\mobai\OneDrive\桌面\EdgeGateway\EdgeGateway.Host\GatewayWorker.cs:line 33
+   at Microsoft.Extensions.Hosting.Internal.Host.<StartAsync>b__15_1(IHostedService service, CancellationToken token)
+   at Microsoft.Extensions.Hosting.Internal.Host.ForeachService[T](IEnumerable`1 services, CancellationToken token, Boolean concurrent, Boolean abortOnFirstException, List`1 exceptions, Func`3 operation)
+   at Microsoft.Extensions.Hosting.Internal.Host.StartAsync(CancellationToken cancellationToken)
+   at Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.RunAsync(IHost host, CancellationToken token)
+   at Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.RunAsync(IHost host, CancellationToken token)
+   at ConsoleEntryPoint.RunAsync(String[] args) in D:\Users\mobai\OneDrive\桌面\EdgeGateway\EdgeGateway.Host\ConsoleEntryPoint.cs:line 30
+   at Program.<Main>$(String[] args) in D:\Users\mobai\OneDrive\桌面\EdgeGateway\EdgeGateway.Host\Program.cs:line 3
+   at Program.<Main>(String[] args)
