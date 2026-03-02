@@ -1,13 +1,8 @@
 <template>
   <div class="devices-view page-enter">
-    <!-- 页面头部 -->
-    <div class="page-header">
-      <div>
-        <h1 class="page-title">设备管理</h1>
-        <p class="page-desc">管理边缘采集设备及其通信配置</p>
-      </div>
+    <PageHeader title="设备管理" desc="管理边缘采集设备及其通信配置">
       <el-button type="primary" :icon="Plus" @click="openCreate">新增设备</el-button>
-    </div>
+    </PageHeader>
 
     <!-- 工具栏 -->
     <div class="toolbar">
@@ -90,11 +85,7 @@
         </div>
       </div>
 
-      <!-- 新增占位卡 -->
-      <div class="device-card add-card" @click="openCreate">
-        <el-icon size="36" color="var(--border-muted)"><Plus /></el-icon>
-        <span style="color:var(--text-muted);font-size:13px;margin-top:8px">新增设备</span>
-      </div>
+      <AddCard class="device-card" text="新增设备" @click="openCreate" />
     </div>
 
     <!-- 新增/编辑设备弹窗 -->
@@ -107,9 +98,7 @@
         ref="formRef" :model="form" :rules="rules"
         label-width="100px" label-position="left"
       >
-        <!-- 基本信息 -->
-        <div class="form-section">
-          <div class="section-title"><el-icon><Document /></el-icon> 基本信息</div>
+        <FormSection title="基本信息" icon="Document">
           <el-row :gutter="20">
             <el-col :span="12">
               <el-form-item label="设备名称" prop="name">
@@ -129,11 +118,9 @@
           <el-form-item label="描述">
             <el-input v-model="form.description" type="textarea" :rows="2" placeholder="可选描述信息" />
           </el-form-item>
-        </div>
+        </FormSection>
 
-        <!-- 通信配置 -->
-        <div class="form-section">
-          <div class="section-title"><el-icon><Setting /></el-icon> 通信配置</div>
+        <FormSection title="通信配置" icon="Setting">
           <el-form-item label="通信协议" prop="protocol" v-if="!editingDevice">
             <el-select v-model="form.protocol" placeholder="选择协议" style="width:100%">
               <el-option v-for="o in CollectionProtocolOptions" :key="o.value" :label="o.label" :value="o.value">
@@ -170,11 +157,9 @@
               </el-form-item>
             </el-col>
           </el-row>
-        </div>
+        </FormSection>
 
-        <!-- 采集配置 -->
-        <div class="form-section">
-          <div class="section-title"><el-icon><Timer /></el-icon> 采集配置</div>
+        <FormSection title="采集配置" icon="Timer">
           <el-form-item label="采集周期" prop="pollingIntervalMs">
             <el-input-number
               v-model="form.pollingIntervalMs" :min="100" :max="60000" :step="500"
@@ -186,7 +171,7 @@
             <el-switch v-model="form.isEnabled" active-color="#38dcc4" />
             <span class="form-hint" style="margin-left: 12px">停用后设备将停止采集</span>
           </el-form-item>
-        </div>
+        </FormSection>
 
       </el-form>
       <template #footer>
@@ -202,8 +187,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessageBox, ElMessage } from 'element-plus'
-import { Plus, Edit, Delete, DataLine, Location, Timer, Document, Setting, InfoFilled, MagicStick } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { Plus, Edit, Delete, DataLine, Location, Timer, MagicStick, InfoFilled } from '@element-plus/icons-vue'
+import PageHeader from '@/components/PageHeader.vue'
+import FormSection from '@/components/FormSection.vue'
+import AddCard from '@/components/AddCard.vue'
+import { useConfirmDelete } from '@/composables/useConfirmDelete'
 import {
   getDevices,
   createDevice,
@@ -213,20 +202,7 @@ import {
 } from '@/api/device'
 import { getCollectionProtocols } from '@/api/enums'
 import { formatInterval } from '@/api/constants'
-
-type DeviceItem = {
-  id: number
-  name: string
-  code: string
-  description?: string
-  protocol?: number
-  protocolValue: number
-  address: string
-  port?: number | null
-  pollingIntervalMs: number
-  isEnabled: boolean
-  dataPointCount: number
-}
+import type { DeviceItem } from '@/types'
 
 type DeviceForm = {
   name: string
@@ -240,6 +216,7 @@ type DeviceForm = {
 }
 
 const router = useRouter()
+const { confirm: confirmDeleteFn } = useConfirmDelete()
 const loading = ref(false)
 const devices = ref<DeviceItem[]>([])
 const CollectionProtocolOptions = ref<any[]>([])
@@ -408,22 +385,13 @@ const submitForm = async () => {
 }
 
 const confirmDelete = (row: DeviceItem) => {
-  ElMessageBox.confirm(
-    `确定要删除设备 "${row.name}" 吗？此操作将同时移除所有相关的数据点和映射关系。`,
-    '删除确认',
-    {
-      type: 'warning',
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
-      confirmButtonClass: 'el-button--danger'
-    }
-  )
-    .then(async () => {
+  confirmDeleteFn({
+    message: `确定要删除设备 "${row.name}" 吗？此操作将同时移除所有相关的数据点和映射关系。`,
+    onConfirm: async () => {
       await deleteDevice(row.id)
-      ElMessage.success('删除成功')
       fetchDevices()
-    })
-    .catch(() => {})
+    }
+  })
 }
 
 const toggleDevice = async (row: DeviceItem) => {
@@ -447,13 +415,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.page-header {
-  display: flex; align-items: flex-start; justify-content: space-between;
-  margin-bottom: 24px;
-}
-.page-title { font-size: 22px; font-weight: 800; color: var(--text-primary); }
-.page-desc  { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
-
 /* 工具栏 */
 .toolbar {
   display: flex; align-items: center; gap: 12px; margin-bottom: 20px;
@@ -613,55 +574,9 @@ onMounted(() => {
   padding: 4px 8px;
 }
 
-/* 新增卡片 */
-.add-card {
-  border: 1px dashed var(--border-muted);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  min-height: 200px;
-  transition: all 0.25s;
-  background: transparent;
-}
-.add-card:hover {
-  border-color: var(--cyan);
-  background: rgba(0, 255, 255, 0.03);
-}
-.add-card .el-icon {
-  transition: transform 0.25s;
-}
-.add-card:hover .el-icon {
-  transform: scale(1.1) rotate(90deg);
-}
+.device-card.add-card { min-height: 200px; }
 
-/* 表单分组 */
-.form-section {
-  margin-bottom: 16px;
-  padding: 14px;
-  background: var(--bg-base);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
-}
-.form-section:last-child {
-  margin-bottom: 0;
-}
-.section-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 12px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--border-subtle);
-}
-.section-title .el-icon {
-  color: var(--cyan);
-  font-size: 14px;
-}
+/* 弹窗内协议选项与提示 */
 
 /* 协议选项样式 */
 .protocol-option {

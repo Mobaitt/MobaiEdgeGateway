@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="main-layout">
     <!-- 左侧边栏 -->
     <aside class="sidebar" :class="{ collapsed }">
@@ -79,37 +79,44 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { getGatewayStatus } from '@/api/gateway'
-
-type GatewayStatus = {
-  isRunning?: boolean
-  totalDevices?: number
-  totalChannels?: number
-}
+import type { GatewayStatus } from '@/types'
 
 const route = useRoute()
+const router = useRouter()
 const collapsed = ref(false)
 const gatewayOnline = ref(false)
 const currentTime = ref('')
 const deviceCount = ref(0)
 const channelCount = ref(0)
 
-const navItems = computed(() => [
-  { path: '/dashboard', title: '系统总览', icon: 'DataAnalysis' },
-  { path: '/devices', title: '设备管理', icon: 'Monitor', count: deviceCount.value },
-  { path: '/channels', title: '发送通道', icon: 'Share', count: channelCount.value }
-])
+const navItems = computed(() => {
+  const layoutRoute = router.getRoutes().find((r) => r.path === '/' && r.children?.length)
+  const children = layoutRoute?.children ?? []
+  const fullPath = (r: { path: string }) => (r.path.startsWith('/') ? r.path : `/${r.path}`)
+  const countByPath: Record<string, number> = {
+    '/devices': deviceCount.value,
+    '/channels': channelCount.value
+  }
+  return children
+    .filter((r) => !(r.meta?.hidden === true))
+    .map((r) => {
+      const path = fullPath(r)
+      return {
+        path,
+        title: (r.meta?.title as string) ?? (r.name as string) ?? '',
+        icon: (r.meta?.icon as string) ?? 'Document',
+        count: countByPath[path]
+      }
+    })
+})
 
 const currentTitle = computed(() => {
-  const map: Record<string, string> = {
-    '/dashboard': '系统总览',
-    '/devices': '设备管理',
-    '/channels': '发送通道'
-  }
-
-  const routeMetaTitle = typeof route.meta?.title === 'string' ? route.meta.title : ''
-  return map[route.path] || routeMetaTitle || ''
+  const metaTitle = typeof route.meta?.title === 'string' ? route.meta.title : ''
+  if (metaTitle) return metaTitle
+  const nav = navItems.value.find((n) => route.path.startsWith(n.path))
+  return nav?.title ?? ''
 })
 
 const statusClass = computed(() => (gatewayOnline.value ? 'online' : 'offline'))

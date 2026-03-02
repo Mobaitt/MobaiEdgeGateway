@@ -271,23 +271,7 @@ import { Plus, Delete, ArrowLeft, Document, Setting, Connection, InfoFilled, Edi
 import { getDataPoints, createDataPoint, updateDataPoint, toggleDataPoint as apiToggleDataPoint, deleteDataPoint, getDeviceRealtimeData, getDevice } from '@/api/device'
 import { getDataValueTypes, getModbusByteOrders } from '@/api/enums'
 import { formatDateTime } from '@/api/constants'
-
-type DataPointItem = {
-  id: number
-  name: string
-  tag: string
-  description?: string
-  address: string
-  dataType: string | number
-  dataTypeValue?: number
-  unit?: string
-  isEnabled: boolean
-  createdAt?: string
-  modbusSlaveId?: number
-  modbusFunctionCode?: number
-  modbusByteOrder?: number
-  registerLength?: number
-}
+import type { DataPointItem, RealtimeDataItem } from '@/types'
 
 type DataPointForm = {
   name: string
@@ -301,13 +285,6 @@ type DataPointForm = {
   modbusFunctionCode: number
   modbusByteOrder: number
   registerLength: number
-}
-
-type RealtimeDataItem = {
-  dataPointId: number
-  value: any
-  quality: string
-  timestamp: string
 }
 
 const route = useRoute()

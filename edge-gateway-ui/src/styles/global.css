@@ -125,6 +125,7 @@ html, body, #app {
   background: var(--el-mask-color);
   z-index: 1999;
   backdrop-filter: blur(4px);
+  overflow: hidden;
 }
 .el-dialog__wrapper {
   position: fixed;
@@ -136,16 +137,19 @@ html, body, #app {
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
 }
 
 .el-dialog {
   background: var(--bg-card) !important;
   border: 1px solid var(--border-muted) !important;
   border-radius: var(--radius-lg) !important;
-  max-height: 90vh;
-  margin: 0 auto !important;
+  max-height: 88vh;
+  margin: auto !important;
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
+  overflow: hidden;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(56, 220, 196, 0.08);
 }
 .el-dialog.is-fullscreen {
@@ -164,13 +168,64 @@ html, body, #app {
   font-size: 16px;
   letter-spacing: 0.02em;
 }
+/* 内容区：明确背景与文字色，随内容增高，超出时仅在 body 内滚动 */
 .el-dialog__body {
   padding: 20px 24px;
-  color: var(--text-primary);
+  background: var(--bg-card) !important;
+  color: var(--text-primary) !important;
   overflow-y: auto;
-  flex: 1;
-  min-height: 0;
-  max-height: calc(90vh - 140px);
+  overflow-x: hidden;
+  flex: 1 1 auto;
+  min-height: 120px;
+  max-height: calc(88vh - 120px);
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(56, 220, 196, 0.3) transparent;
+}
+.el-dialog__body::-webkit-scrollbar {
+  width: 5px;
+}
+.el-dialog__body::-webkit-scrollbar-track {
+  background: transparent;
+}
+.el-dialog__body::-webkit-scrollbar-thumb {
+  background: rgba(56, 220, 196, 0.3);
+  border-radius: 3px;
+}
+.el-dialog__body::-webkit-scrollbar-thumb:hover {
+  background: rgba(56, 220, 196, 0.5);
+}
+.el-dialog__body::-webkit-scrollbar-thumb:window-inactive {
+  background: transparent;
+}
+
+/* 弹窗内表单与输入必须可见（防止被主题或 teleport 覆盖） */
+.el-dialog .el-form-item__label {
+  color: var(--text-secondary) !important;
+}
+.el-dialog .el-input__wrapper {
+  background: var(--bg-base) !important;
+  border-color: var(--border-muted) !important;
+}
+.el-dialog .el-input__inner,
+.el-dialog .el-textarea__inner {
+  color: var(--text-primary) !important;
+  background: transparent !important;
+}
+.el-dialog .el-select .el-select__wrapper {
+  background: var(--bg-base) !important;
+}
+.el-dialog .el-select .el-select__placeholder,
+.el-dialog .el-select .el-select__selected {
+  color: var(--text-primary) !important;
+}
+.el-dialog .form-section,
+.el-dialog [class*="form-section"] {
+  background: var(--bg-base) !important;
+  color: var(--text-primary) !important;
+}
+.el-dialog .section-title {
+  color: var(--text-primary) !important;
 }
 .el-dialog__footer {
   border-top: 1px solid var(--border-subtle);
@@ -194,6 +249,31 @@ html, body, #app {
 }
 .el-dialog__headerbtn:hover .el-icon {
   color: var(--text-primary);
+}
+
+/* 发送通道弹窗紧凑排版（减少滚动条），弹窗 teleport 到 body 故用全局样式 */
+.channel-dialog-compact.el-dialog .el-dialog__body {
+  padding: 14px 20px !important;
+}
+.channel-dialog-compact .form-section.compact {
+  margin-bottom: 10px;
+  padding: 10px 12px;
+}
+.channel-dialog-compact .form-section.compact .section-title {
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  font-size: 11px;
+}
+.channel-dialog-compact .el-form-item {
+  margin-bottom: 12px;
+}
+.channel-dialog-compact .el-form-item.form-item-inline {
+  margin-bottom: 8px;
+}
+.channel-dialog-compact .form-item-inline .el-form-item__content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* Element Plus 暗色适配补丁（表单、输入等） */

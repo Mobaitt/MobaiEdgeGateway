@@ -1,13 +1,8 @@
 <template>
   <div class="channels-view page-enter">
-    <!-- 页面头部 -->
-    <div class="page-header">
-      <div>
-        <h1 class="page-title">发送通道</h1>
-        <p class="page-desc">配置数据发送目标及数据点绑定关系</p>
-      </div>
+    <PageHeader title="发送通道" desc="配置数据发送目标及数据点绑定关系">
       <el-button type="primary" :icon="Plus" @click="openCreate">新增通道</el-button>
-    </div>
+    </PageHeader>
 
     <!-- 通道卡片列表 -->
     <div v-loading="loading" class="channels-grid">
@@ -62,21 +57,14 @@
         </div>
       </div>
 
-      <!-- 新增占位卡 -->
-      <div class="channel-card add-card" @click="openCreate">
-        <el-icon size="32" color="var(--border-muted)"><Plus /></el-icon>
-        <span style="color:var(--text-muted);font-size:13px;margin-top:8px">新增通道</span>
-      </div>
+      <AddCard class="channel-card" text="新增通道" @click="openCreate" />
     </div>
 
-    <!-- 新增/编辑通道弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="editingChannel ? '编辑发送通道' : '新增发送通道'" width="720px" destroy-on-close class="channel-dialog app-dialog" align-center>
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px" label-position="left">
-        
-        <!-- 基本信息 -->
-        <div class="form-section">
-          <div class="section-title"><el-icon><Document /></el-icon> 基本信息</div>
-          <el-row :gutter="20">
+    <!-- 新增/编辑通道弹窗：紧凑排版减少滚动 -->
+    <el-dialog v-model="dialogVisible" :title="editingChannel ? '编辑发送通道' : '新增发送通道'" width="840px" destroy-on-close class="channel-dialog app-dialog channel-dialog-compact" align-center>
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="96px" label-position="left" class="channel-form">
+        <FormSection title="基本信息" icon="Document" class="compact">
+          <el-row :gutter="16">
             <el-col :span="12">
               <el-form-item label="通道名称" prop="name">
                 <el-input v-model="form.name" placeholder="如：云端 MQTT" />
@@ -89,80 +77,65 @@
             </el-col>
           </el-row>
           <el-form-item label="描述">
-            <el-input v-model="form.description" type="textarea" :rows="2" placeholder="可选描述信息" />
+            <el-input v-model="form.description" type="textarea" :rows="1" placeholder="可选描述信息" autosize />
           </el-form-item>
-        </div>
+        </FormSection>
 
-        <!-- 协议配置 -->
-        <div class="form-section">
-          <div class="section-title"><el-icon><Setting /></el-icon> 协议配置</div>
-          <el-form-item label="发送协议" prop="protocol">
-            <el-select v-model="form.protocol" placeholder="选择协议" style="width:100%">
-              <el-option v-for="o in SendProtocolOptions" :key="o.value" :label="o.label" :value="o.value">
-                <div class="protocol-option">
-                  <span>{{ o.label }}</span>
-                  <span class="protocol-desc">{{ o.desc }}</span>
-                </div>
-              </el-option>
-            </el-select>
-          </el-form-item>
-
-          <!-- WebSocket 模式说明 -->
-          <div v-if="form.protocol === 5" class="protocol-hint">
+        <FormSection title="协议配置" icon="Setting" class="compact">
+          <el-row :gutter="16">
+            <el-col :span="form.protocol === 2 ? 12 : 24">
+              <el-form-item label="发送协议" prop="protocol">
+                <el-select v-model="form.protocol" placeholder="选择协议" style="width:100%">
+                  <el-option v-for="o in SendProtocolOptions" :key="o.value" :label="o.label" :value="o.value">
+                    <div class="protocol-option">
+                      <span>{{ o.label }}</span>
+                      <span class="protocol-desc">{{ o.desc }}</span>
+                    </div>
+                  </el-option>
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col v-if="form.protocol === 2" :span="12">
+              <el-form-item label="运行模式">
+                <el-radio-group v-model="form.httpMode" class="mode-radio-group">
+                  <el-radio label="client"><el-icon><Upload /></el-icon> 客户端</el-radio>
+                  <el-radio label="server"><el-icon><Download /></el-icon> 服务端</el-radio>
+                </el-radio-group>
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <div v-if="form.protocol === 5" class="protocol-hint protocol-hint-inline">
             <el-icon class="hint-icon"><InfoFilled /></el-icon>
-            <span>WebSocket 作为服务端运行，等待客户端连接。数据会自动推送给订阅的客户端。</span>
+            <span>WebSocket 服务端，数据推送给订阅客户端。</span>
             <code class="hint-code">ws://localhost:5000/ws?topic=device/data</code>
           </div>
-
-          <!-- HTTP 模式选择 -->
-          <template v-if="form.protocol === 2">
-            <el-form-item label="运行模式">
-              <el-radio-group v-model="form.httpMode" class="mode-radio-group">
-                <el-radio label="client">
-                  <el-icon><Upload /></el-icon> 客户端模式（主动推送）
-                </el-radio>
-                <el-radio label="server">
-                  <el-icon><Download /></el-icon> 服务端模式（等待采集）
-                </el-radio>
-              </el-radio-group>
-            </el-form-item>
-
-            <div v-if="form.httpMode === 'client'" class="protocol-hint">
-              <el-icon class="hint-icon"><InfoFilled /></el-icon>
-              <span>作为 HTTP 客户端，主动将数据 POST 到目标接口。</span>
-            </div>
-
-            <div v-if="form.httpMode === 'server'" class="protocol-hint">
-              <el-icon class="hint-icon"><InfoFilled /></el-icon>
-              <span>作为 HTTP 服务端，等待客户端来 GET 数据。复用 Web 端口 5000，无需额外配置。</span>
-              <code class="hint-code">http://localhost:5000/api/http-data/xxx</code>
-            </div>
-          </template>
-
-          <!-- MQTT 模式说明 -->
-          <div v-if="form.protocol === 1" class="protocol-hint">
+          <div v-if="form.protocol === 2 && form.httpMode === 'client'" class="protocol-hint protocol-hint-inline">
             <el-icon class="hint-icon"><InfoFilled /></el-icon>
-            <span>将数据发布到 MQTT Broker 的指定主题。支持 QoS 和认证配置。</span>
+            <span>HTTP 客户端，主动 POST 到目标接口。</span>
+          </div>
+          <div v-if="form.protocol === 2 && form.httpMode === 'server'" class="protocol-hint protocol-hint-inline">
+            <el-icon class="hint-icon"><InfoFilled /></el-icon>
+            <span>HTTP 服务端，GET 获取数据。</span>
+            <code class="hint-code">http://localhost:5000/api/http-data/xxx</code>
+          </div>
+          <div v-if="form.protocol === 1" class="protocol-hint protocol-hint-inline">
+            <el-icon class="hint-icon"><InfoFilled /></el-icon>
+            <span>发布到 MQTT 主题，支持 QoS。</span>
             <code class="hint-code">edge/device/data</code>
           </div>
-
-          <!-- 本地文件模式说明 -->
-          <div v-if="form.protocol === 4" class="protocol-hint">
+          <div v-if="form.protocol === 4" class="protocol-hint protocol-hint-inline">
             <el-icon class="hint-icon"><InfoFilled /></el-icon>
-            <span>将数据追加写入本地 JSON 文件（NDJSON 格式），适合离线场景或数据备份。</span>
+            <span>追加写入本地 JSON（NDJSON）。</span>
           </div>
-        </div>
+        </FormSection>
 
-        <!-- 连接配置 -->
-        <div class="form-section">
-          <div class="section-title"><el-icon><Connection /></el-icon> 连接配置</div>
+        <FormSection title="连接配置" icon="Connection" class="compact">
           <el-form-item label="端点地址" prop="endpoint">
             <el-input v-model="form.endpoint" :placeholder="getEndpointPlaceholder(form.protocol)" />
           </el-form-item>
 
-          <!-- MQTT 配置 -->
           <template v-if="form.protocol === 1">
-            <el-row :gutter="20">
+            <el-row :gutter="16">
               <el-col :span="12">
                 <el-form-item label="主题" prop="mqttTopic">
                   <el-input v-model="form.mqttTopic" placeholder="edge/device/data" />
@@ -174,7 +147,7 @@
                 </el-form-item>
               </el-col>
             </el-row>
-            <el-row :gutter="20">
+            <el-row :gutter="16">
               <el-col :span="12">
                 <el-form-item label="用户名">
                   <el-input v-model="form.mqttUsername" placeholder="可选" />
@@ -195,56 +168,51 @@
             </el-form-item>
           </template>
 
-          <!-- HTTP 配置 -->
-          <template v-if="form.protocol === 2">
-            <el-form-item label="运行模式">
-              <el-radio-group v-model="form.httpMode">
-                <el-radio label="client">客户端模式（主动推送）</el-radio>
-                <el-radio label="server">服务端模式（等待采集）</el-radio>
-              </el-radio-group>
-            </el-form-item>
-            <template v-if="form.httpMode === 'client'">
-              <el-row :gutter="20">
-                <el-col :span="12">
-                  <el-form-item label="HTTP 方法">
-                    <el-select v-model="form.httpMethod" style="width:100%">
-                      <el-option label="POST" value="POST" />
-                      <el-option label="PUT" value="PUT" />
-                    </el-select>
-                  </el-form-item>
-                </el-col>
-                <el-col :span="12">
-                  <el-form-item label="认证 Token">
-                    <el-input v-model="form.httpToken" type="password" placeholder="Bearer xxx" />
-                  </el-form-item>
-                </el-col>
-              </el-row>
-              <el-form-item label="超时时间">
-                <el-input-number v-model="form.httpTimeout" :min="1000" :max="60000" :step="1000" style="width:200px" />
-                <span style="margin-left: 10px; color: var(--text-muted)">毫秒</span>
-              </el-form-item>
-            </template>
-            <div v-if="form.httpMode === 'server'" class="protocol-hint">
-              <el-icon class="hint-icon"><InfoFilled /></el-icon>
-              <span>作为 HTTP 服务端，等待客户端来 GET 数据。复用 Web 端口 5000，无需额外配置。</span>
-              <code class="hint-code">http://localhost:5000/api/http-data/xxx</code>
-            </div>
+          <template v-if="form.protocol === 2 && form.httpMode === 'client'">
+            <el-row :gutter="16">
+              <el-col :span="8">
+                <el-form-item label="HTTP 方法">
+                  <el-select v-model="form.httpMethod" style="width:100%">
+                    <el-option label="POST" value="POST" />
+                    <el-option label="PUT" value="PUT" />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="认证 Token">
+                  <el-input v-model="form.httpToken" type="password" placeholder="Bearer xxx" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="超时(ms)">
+                  <el-input-number v-model="form.httpTimeout" :min="1000" :max="60000" :step="1000" style="width:100%" controls-position="right" />
+                </el-form-item>
+              </el-col>
+            </el-row>
           </template>
+          <div v-if="form.protocol === 2 && form.httpMode === 'server'" class="protocol-hint protocol-hint-inline">
+            <el-icon class="hint-icon"><InfoFilled /></el-icon>
+            <span>服务端复用端口 5000。</span>
+            <code class="hint-code">http://localhost:5000/api/http-data/xxx</code>
+          </div>
 
-          <!-- WebSocket 配置 -->
           <template v-if="form.protocol === 5">
-            <el-form-item label="订阅主题">
-              <el-input v-model="form.wsSubscribeTopic" placeholder="device/data" />
-            </el-form-item>
-            <el-form-item label="心跳间隔">
-              <el-input-number v-model="form.wsHeartbeatInterval" :min="5000" :max="120000" :step="5000" style="width:200px" />
-              <span style="margin-left: 10px; color: var(--text-muted)">毫秒</span>
-            </el-form-item>
+            <el-row :gutter="16">
+              <el-col :span="12">
+                <el-form-item label="订阅主题">
+                  <el-input v-model="form.wsSubscribeTopic" placeholder="device/data" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="心跳间隔(ms)">
+                  <el-input-number v-model="form.wsHeartbeatInterval" :min="5000" :max="120000" :step="5000" style="width:100%" controls-position="right" />
+                </el-form-item>
+              </el-col>
+            </el-row>
           </template>
 
-          <!-- 本地文件配置 -->
           <template v-if="form.protocol === 4">
-            <el-row :gutter="20">
+            <el-row :gutter="16">
               <el-col :span="12">
                 <el-form-item label="文件格式">
                   <el-select v-model="form.fileFormat" style="width:100%">
@@ -261,11 +229,11 @@
             </el-row>
           </template>
 
-          <el-form-item label="是否启用">
+          <el-form-item label="是否启用" class="form-item-inline">
             <el-switch v-model="form.isEnabled" active-color="#38dcc4" />
-            <span class="form-hint" style="margin-left: 12px">停用后通道将停止发送数据</span>
+            <span class="form-hint">停用后停止发送</span>
           </el-form-item>
-        </div>
+        </FormSection>
 
       </el-form>
       <template #footer>
@@ -282,36 +250,15 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Link, Connection, InfoFilled, Document, Setting, Upload, Download } from '@element-plus/icons-vue'
+import { Plus, Link, Connection, InfoFilled, Upload, Download } from '@element-plus/icons-vue'
+import PageHeader from '@/components/PageHeader.vue'
+import FormSection from '@/components/FormSection.vue'
+import AddCard from '@/components/AddCard.vue'
+import { useConfirmDelete } from '@/composables/useConfirmDelete'
 import { getChannels, createChannel, updateChannel, deleteChannel, toggleChannel } from '@/api/channel'
 import { getSendProtocols } from '@/api/enums'
 import { formatDateTime } from '@/api/constants'
-
-type ChannelItem = {
-  id: number
-  name: string
-  code: string
-  description?: string
-  protocol: string
-  protocolValue: number
-  endpoint: string
-  mqttTopic?: string
-  mqttClientId?: string
-  mqttUsername?: string
-  mqttPassword?: string
-  mqttQos?: number
-  httpMethod?: string
-  httpToken?: string
-  httpTimeout?: number
-  httpMode?: string
-  wsSubscribeTopic?: string
-  wsHeartbeatInterval?: number
-  fileFormat?: string
-  filePath?: string
-  mappedDataPointCount: number
-  isEnabled: boolean
-  createdAt?: string
-}
+import type { ChannelItem } from '@/types'
 
 type ChannelForm = {
   name: string
@@ -336,6 +283,7 @@ type ChannelForm = {
 }
 
 const router = useRouter()
+const { confirm: confirmDeleteFn } = useConfirmDelete()
 const loading = ref(false)
 const channels = ref<ChannelItem[]>([])
 const SendProtocolOptions = ref<any[]>([])
@@ -485,23 +433,18 @@ const submitForm = async () => {
 
 const handleDelete = async (channel: ChannelItem) => {
   try {
-    await ElMessageBox.confirm(
-      `确定要删除发送通道 "${channel.name}" 吗？删除后无法恢复。`,
-      '删除通道',
-      {
-        type: 'warning',
-        confirmButtonText: '删除',
-        cancelButtonText: '取消',
-        confirmButtonClass: 'el-button--danger'
-      }
-    )
-
-    await deleteChannel(channel.id)
-    ElMessage.success('通道已删除')
-    fetchChannels()
-  } catch (e: any) {
-    if (e !== 'cancel') {
-      ElMessage.error(`删除失败：${e.message || '未知错误'}`)
+    await confirmDeleteFn({
+      title: '删除通道',
+      message: `确定要删除发送通道 "${channel.name}" 吗？删除后无法恢复。`,
+      onConfirm: async () => {
+        await deleteChannel(channel.id)
+        fetchChannels()
+      },
+      successMessage: '通道已删除'
+    })
+  } catch (e: unknown) {
+    if (e && typeof (e as Error).message === 'string') {
+      ElMessage.error(`删除失败：${(e as Error).message}`)
     }
   }
 }
@@ -541,10 +484,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.page-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:24px; }
-.page-title  { font-size:22px; font-weight:800; color:var(--text-primary); }
-.page-desc   { font-size:13px; color:var(--text-muted); margin-top:4px; }
-
 /* 卡片网格 */
 .channels-grid {
   display: grid;
@@ -688,55 +627,7 @@ onMounted(() => {
   padding: 4px 8px;
 }
 
-/* 新增卡片 */
-.add-card {
-  border: 1px dashed var(--border-muted);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  min-height: 180px;
-  transition: all 0.25s;
-  background: transparent;
-}
-.add-card:hover {
-  border-color: var(--cyan);
-  background: rgba(0, 255, 255, 0.03);
-}
-.add-card .el-icon {
-  transition: transform 0.25s;
-}
-.add-card:hover .el-icon {
-  transform: scale(1.1) rotate(90deg);
-}
-
-/* 表单分组 */
-.form-section {
-  margin-bottom: 16px;
-  padding: 14px;
-  background: var(--bg-base);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
-}
-.form-section:last-child {
-  margin-bottom: 0;
-}
-.section-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 12px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--border-subtle);
-}
-.section-title .el-icon {
-  color: var(--cyan);
-  font-size: 14px;
-}
+.channel-card.add-card { min-height: 180px; }
 
 /* 协议选项样式 */
 .protocol-option {
@@ -789,6 +680,24 @@ onMounted(() => {
   font-size: 11px;
   color: var(--cyan);
   align-self: flex-start;
+}
+
+/* 协议提示单行紧凑（发送通道弹窗内） */
+.protocol-hint-inline {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px !important;
+  padding: 5px 10px !important;
+  font-size: 11px !important;
+  line-height: 1.4;
+}
+.protocol-hint-inline .hint-icon {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.protocol-hint-inline .hint-code {
+  margin-left: 4px;
 }
 
 /* 表单提示 */

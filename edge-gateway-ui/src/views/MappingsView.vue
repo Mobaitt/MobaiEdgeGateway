@@ -63,11 +63,9 @@
         </el-table-column>
       </el-table>
 
-      <div v-if="mappings.length === 0 && !loading" class="empty-state">
-        <el-icon size="48" color="var(--border-muted)"><Connection /></el-icon>
-        <div style="margin-top:12px;color:var(--text-muted);font-size:14px">尚未绑定任何数据点</div>
-        <el-button type="primary" size="small" style="margin-top:12px" @click="openBindDialog">立即绑定</el-button>
-      </div>
+      <EmptyState v-if="mappings.length === 0 && !loading" message="尚未绑定任何数据点" icon="Connection">
+        <el-button type="primary" size="small" @click="openBindDialog">立即绑定</el-button>
+      </EmptyState>
     </div>
 
     <!-- 绑定数据点弹窗 -->
@@ -147,34 +145,11 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { Plus, Delete, ArrowLeft, Connection, InfoFilled, Monitor, Close } from '@element-plus/icons-vue'
+import EmptyState from '@/components/EmptyState.vue'
 import { getMappings, bindDataPoints, deleteMapping } from '@/api/channel'
 import { getDevices, getDataPoints } from '@/api/device'
 import { formatDateTime } from '@/api/constants'
-
-type MappingItem = {
-  id: number
-  dataPointId: number
-  dataPointTag: string
-  dataPointName: string
-  aliasName?: string
-  isEnabled: boolean
-  createdAt?: string
-}
-
-type DataPointItem = {
-  id: number
-  tag: string
-  name: string
-  unit?: string
-  isEnabled: boolean
-}
-
-type DeviceNode = {
-  id: number
-  name: string
-  code: string
-  dataPoints: DataPointItem[]
-}
+import type { MappingItem, DataPointItem, DeviceNode } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -325,7 +300,6 @@ onMounted(fetchMappings)
 .alias-text { font-size:13px; }
 .time-text  { font-size:11px; color:var(--text-muted); }
 
-.empty-state { display:flex; flex-direction:column; align-items:center; padding:48px 20px; }
 
 /* 绑定弹窗布局 */
 :deep(.bind-dialog .el-dialog__body) { max-height: 60vh; }

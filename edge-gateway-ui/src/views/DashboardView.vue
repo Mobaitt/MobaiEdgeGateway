@@ -1,10 +1,8 @@
-﻿<template>
+<template>
   <div class="dashboard page-enter">
-    <!-- 页面头部 -->
-    <div class="page-header">
-      <h1 class="page-title">系统总览</h1>
+    <PageHeader title="系统总览">
       <el-button size="small" :loading="loading" @click="refresh" :icon="Refresh">刷新</el-button>
-    </div>
+    </PageHeader>
 
     <!-- 统计卡片 -->
     <div class="stat-grid">
@@ -85,41 +83,17 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
+import PageHeader from '@/components/PageHeader.vue'
 import { getGatewayStatus } from '@/api/gateway'
 import { getDevices } from '@/api/device'
 import { getChannels } from '@/api/channel'
 import { SendProtocol } from '@/api/constants'
-
-type StatusData = {
-  isRunning?: boolean
-  totalDevices?: number
-  enabledDevices?: number
-  totalChannels?: number
-  enabledChannels?: number
-  totalDataPoints?: number
-}
-
-type DeviceItem = {
-  id: number
-  name: string
-  address: string
-  protocol: string
-  isEnabled: boolean
-  dataPointCount: number
-}
-
-type ChannelItem = {
-  id: number
-  name: string
-  endpoint: string
-  protocolValue: number
-  isEnabled: boolean
-}
+import type { GatewayStatus } from '@/types'
 
 const loading = ref(false)
-const status = ref<StatusData>({})
-const devices = ref<DeviceItem[]>([])
-const channels = ref<ChannelItem[]>([])
+const status = ref<GatewayStatus>({})
+const devices = ref<Array<{ id: number; name: string; address: string; protocol: string; isEnabled: boolean; dataPointCount: number }>>([])
+const channels = ref<Array<{ id: number; name: string; endpoint: string; protocolValue: number; isEnabled: boolean }>>([])
 
 const stats = computed(() => [
   {
@@ -178,9 +152,9 @@ const refresh = async () => {
       getChannels()
     ])
 
-    status.value = ((statusRes as { data?: StatusData })?.data ?? {}) as StatusData
-    devices.value = (((deviceRes as { data?: DeviceItem[] })?.data ?? []) as DeviceItem[]).slice(0, 6)
-    channels.value = (((channelRes as { data?: ChannelItem[] })?.data ?? []) as ChannelItem[]).slice(0, 5)
+    status.value = ((statusRes as { data?: GatewayStatus })?.data ?? {}) as GatewayStatus
+    devices.value = (((deviceRes as { data?: unknown[] })?.data ?? []) as typeof devices.value).slice(0, 6)
+    channels.value = (((channelRes as { data?: unknown[] })?.data ?? []) as typeof channels.value).slice(0, 5)
   } finally {
     loading.value = false
   }
@@ -190,12 +164,6 @@ onMounted(refresh)
 </script>
 
 <style scoped>
-.page-header {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 24px;
-}
-.page-title { font-size: 22px; font-weight: 800; color: var(--text-primary); letter-spacing: -0.01em; }
-
 /* 统计卡片 */
 .stat-grid {
   display: grid;
