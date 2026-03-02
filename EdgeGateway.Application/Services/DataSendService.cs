@@ -48,7 +48,7 @@ public class DataSendService
     {
         using var scope = _serviceProvider.CreateScope();
         var channelRepo = scope.ServiceProvider.GetRequiredService<IChannelRepository>();
-        
+
         var channel = await channelRepo.GetByIdAsync(channelId);
         if (channel == null)
         {
@@ -56,9 +56,11 @@ public class DataSendService
             return;
         }
 
-        if (_strategyCache.ContainsKey(channelId))
+        // 如果通道已在缓存中，重新初始化（用于 HTTP 服务端模式重新注册端点）
+        if (_strategyCache.TryGetValue(channelId, out var existingStrategy))
         {
-            _logger.LogInformation("通道 [{ChannelName}] 已在启用状态", channel.Name);
+            _logger.LogInformation("通道 [{ChannelName}] 已在启用状态，重新初始化", channel.Name);
+            await existingStrategy.InitializeAsync(channel, cancellationToken);
             return;
         }
 
