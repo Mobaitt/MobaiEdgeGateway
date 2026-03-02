@@ -259,14 +259,27 @@ const loadCollectionProtocols = async () => {
 const searchText = ref('')
 const filterProtocol = ref<number | null>(null)
 
+/** 从设备数据解析出协议数值（用于表单回显与筛选），兼容 protocolValue / protocol 数字或字符串 */
+function resolveProtocolValue(device: DeviceItem): number | null {
+  const d = device as any
+  if (typeof d.protocolValue === 'number') return d.protocolValue
+  if (typeof d.protocol === 'number') return d.protocol
+  if (typeof d.protocol === 'string') {
+    const opt = CollectionProtocolOptions.value.find((o) => o.label === d.protocol)
+    return opt ? opt.value : null
+  }
+  return null
+}
+
 const filteredDevices = computed(() => {
+  const filterVal = filterProtocol.value
   return devices.value.filter((device) => {
     const matchText =
       !searchText.value ||
       device.name.includes(searchText.value) ||
-      device.code.includes(searchText.value)
-
-    const matchProtocol = !filterProtocol.value || device.protocolValue === filterProtocol.value
+      (device.code && device.code.includes(searchText.value))
+    const deviceProtocolNum = resolveProtocolValue(device)
+    const matchProtocol = !filterVal || deviceProtocolNum === filterVal
     return matchText && matchProtocol
   })
 })
@@ -395,12 +408,13 @@ const openEdit = (row: DeviceItem) => {
   editingDevice.value = row
   form.value = {
     name: row.name,
+    code: row.code ?? '',
     description: row.description ?? '',
-    protocol: row.protocol ?? null,
-    address: row.address,
+    protocol: resolveProtocolValue(row),
+    address: row.address ?? '',
     port: row.port ?? null,
-    pollingIntervalMs: row.pollingIntervalMs,
-    isEnabled: row.isEnabled
+    pollingIntervalMs: row.pollingIntervalMs ?? 1000,
+    isEnabled: row.isEnabled ?? true
   }
   dialogVisible.value = true
 }

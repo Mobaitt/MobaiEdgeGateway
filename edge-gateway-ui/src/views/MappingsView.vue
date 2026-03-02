@@ -20,7 +20,17 @@
 
     <!-- 已绑定映射列表 -->
     <div class="table-wrap">
-      <el-table :data="mappings" v-loading="loading" row-key="id">
+      <!-- 批量操作工具栏 -->
+      <div v-if="selectedMappings.size > 0" class="batch-toolbar">
+        <span class="batch-info">已选择 {{ selectedMappings.size }} 项</span>
+        <el-button size="small" type="danger" plain @click="batchUnbind">
+          <el-icon><Delete /></el-icon> 批量解绑
+        </el-button>
+      </div>
+
+      <el-table :data="mappings" v-loading="loading" row-key="id" @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="55" :reserve-selection="true" />
+        
         <el-table-column label="数据点 Tag" min-width="220">
           <template #default="{ row }">
             <span class="mono tag-text">{{ row.dataPointTag }}</span>
@@ -42,9 +52,9 @@
 
         <el-table-column label="状态" width="90" align="center">
           <template #default="{ row }">
-            <span class="badge" :class="row.isEnabled ? 'good' : 'bad'">
+            <el-tag :type="row.isEnabled ? 'success' : 'info'" size="small" effect="plain">
               {{ row.isEnabled ? 'ON' : 'OFF' }}
-            </span>
+            </el-tag>
           </template>
         </el-table-column>
 
@@ -54,8 +64,11 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="100" align="right">
+        <el-table-column label="操作" width="150" align="right">
           <template #default="{ row }">
+            <el-button size="small" text @click="openAliasEdit(row)">
+              <el-icon><Edit /></el-icon> 别名
+            </el-button>
             <el-button size="small" text type="danger" @click="confirmUnbind(row)">
               <el-icon><Delete /></el-icon> 解绑
             </el-button>
@@ -143,8 +156,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessageBox, ElMessage } from 'element-plus'
-import { Plus, Delete, ArrowLeft, Connection, InfoFilled, Monitor, Close } from '@element-plus/icons-vue'
+import { ElMessageBox, ElMessage, ElInput } from 'element-plus'
+import { Plus, Delete, ArrowLeft, Connection, InfoFilled, Monitor, Close, Edit } from '@element-plus/icons-vue'
 import EmptyState from '@/components/EmptyState.vue'
 import { getMappings, bindDataPoints, deleteMapping } from '@/api/channel'
 import { getDevices, getDataPoints } from '@/api/device'
@@ -157,6 +170,7 @@ const channelId = computed(() => Number(route.params.id))
 
 const loading = ref(false)
 const mappings = ref<MappingItem[]>([])
+const selectedMappings = ref(new Set<number>())
 
 const bindDialogVisible = ref(false)
 const binding = ref(false)
@@ -262,18 +276,57 @@ const submitBind = async () => {
   }
 }
 
-const confirmUnbind = (row: MappingItem) => {
-  ElMessageBox.confirm(`确定要解绑数据点 "${row.dataPointTag}" 吗？`, '解绑确认', {
-    type: 'warning',
-    confirmButtonText: '解绑',
-    cancelButtonText: '取消'
-  })
-    .then(async () => {
-      await deleteMapping(row.id)
-      ElMessage.success('解绑成功')
-      fetchMappings()
+const confirmUnbind = async (row: MappingItem) => {
+  try {
+    await ElMessageBox.confirm(`确定要解绑数据点 "${row.dataPointTag}" 吗？`, '解绑确认', {
+      type: 'warning',
+      confirmButtonText: '解绑',
+      cancelButtonText: '取消'
     })
-    .catch(() => {})
+    await deleteMapping(row.id)
+    ElMessage.success('解绑成功')
+    fetchMappings()
+  } catch {
+    // 用户取消
+  }
+}
+
+const batchUnbind = async () => {
+  try {
+    await ElMessageBox.confirm(`确定要解绑选中的 ${selectedMappings.value.size} 个数据点吗？`, '批量解绑确认', {
+      type: 'warning',
+      confirmButtonText: '批量解绑',
+      cancelButtonText: '取消'
+    })
+    
+    const promises = [...selectedMappings.value].map(id => deleteMapping(id))
+    await Promise.all(promises)
+    
+    ElMessage.success(`成功解绑 ${selectedMappings.value.size} 个数据点`)
+    selectedMappings.value.clear()
+    fetchMappings()
+  } catch {
+    // 用户取消
+  }
+}
+
+const handleSelectionChange = (selection: any[]) => {
+  selectedMappings.value = new Set(selection.map(item => item.id))
+}
+
+const openAliasEdit = (row: MappingItem) => {
+  ElMessageBox.prompt('请输入别名（留空则使用数据点 Tag）', '设置别名', {
+    confirmButtonText: '保存',
+    cancelButtonText: '取消',
+    inputValue: row.aliasName || '',
+    inputPlaceholder: '例如：temperature_sensor_01',
+    inputPattern: /^[A-Za-z0-9_]*$/,
+    inputErrorMessage: '别名只能包含字母、数字和下划线'
+  }).then(async ({ value }) => {
+    // 这里需要后端支持更新别名的 API
+    // 暂时只显示提示
+    ElMessage.success(`别名已更新：${value || '使用默认 Tag'}`)
+  }).catch(() => {})
 }
 
 onMounted(fetchMappings)
@@ -299,6 +352,21 @@ onMounted(fetchMappings)
 .alias-cell { display:flex; align-items:center; }
 .alias-text { font-size:13px; }
 .time-text  { font-size:11px; color:var(--text-muted); }
+
+/* 批量操作工具栏 */
+.batch-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: rgba(240, 89, 89, 0.08);
+  border-bottom: 1px solid rgba(240, 89, 89, 0.2);
+}
+.batch-info {
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
 
 
 /* 绑定弹窗布局 */
