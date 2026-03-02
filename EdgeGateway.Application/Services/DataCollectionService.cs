@@ -330,11 +330,15 @@ public class DataCollectionService
                 }
                 
                 // 同时更新 Tag 缓存（用于虚拟节点计算）
-                _tagDataCache[item.Tag] = new TimestampedValue
+                // 只有值不为 null 时才更新，保持上次的成功值
+                if (item.Value != null)
                 {
-                    Value = item.Value,
-                    Timestamp = DateTime.UtcNow
-                };
+                    _tagDataCache[item.Tag] = new TimestampedValue
+                    {
+                        Value = item.Value,
+                        Timestamp = DateTime.UtcNow
+                    };
+                }
             }
         }
         finally
