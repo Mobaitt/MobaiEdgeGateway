@@ -25,6 +25,8 @@ public class EnumsController : ControllerBase
                 label = p.ToString(),
                 desc = GetProtocolDescription(p)
             })
+            // 过滤掉没有实现的
+            .Where(p => ((List<int>)[1, 99]).Contains(p.value))
             .ToList();
 
         return Ok(new { data = options, message = "success" });
