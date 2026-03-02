@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="mappings-view page-enter">
     <!-- 页面头部 -->
     <div class="page-header">
@@ -269,7 +269,7 @@ const confirmUnbind = (row: MappingItem) => {
     cancelButtonText: '取消'
   })
     .then(async () => {
-      await deleteMapping(channelId.value, row.id)
+      await deleteMapping(row.id)
       ElMessage.success('解绑成功')
       fetchMappings()
     })

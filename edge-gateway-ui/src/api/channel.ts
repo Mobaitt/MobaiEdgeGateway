@@ -21,8 +21,8 @@ export const getMappings = (channelId) =>
   request.get(`/channels/${channelId}/mappings`)
 
 /** 删除映射关系 */
-export const deleteMapping = (channelId, mappingId) =>
-  request.delete(`/channels/${channelId}/mappings/${mappingId}`)
+export const deleteMapping = (mappingId) =>
+  request.delete(`/channels/mappings/${mappingId}`)
 
 /** 启用/停用发送通道 */
 export const toggleChannel = (channelId) =>

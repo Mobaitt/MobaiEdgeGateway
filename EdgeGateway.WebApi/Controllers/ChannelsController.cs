@@ -132,6 +132,7 @@ public class ChannelsController : ControllerBase
     public async Task<IActionResult> DeleteMapping(int mappingId)
     {
         await _deviceService.DeleteMappingAsync(mappingId);
+        await _sendService.RefreshChannelsCacheForceAsync();
         return Ok(ApiResponse.Ok("映射关系删除成功"));
     }
 
