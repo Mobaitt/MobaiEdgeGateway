@@ -393,10 +393,10 @@ public class ModbusCollectionStrategy : ICollectionStrategy
         
         return byteOrder switch
         {
-            ModbusByteOrder.ABCD => [highBytes[0], highBytes[1], lowBytes[0], lowBytes[1]],
-            ModbusByteOrder.BADC => [highBytes[1], highBytes[0], lowBytes[1], lowBytes[0]],
-            ModbusByteOrder.CDAB => [lowBytes[0], lowBytes[1], highBytes[0], highBytes[1]],
-            ModbusByteOrder.DCBA => [lowBytes[1], lowBytes[0], highBytes[1], highBytes[0]],
+            ModbusByteOrder.ABCD => [lowBytes[0], lowBytes[1], highBytes[0], highBytes[1]],
+            ModbusByteOrder.CDAB => [highBytes[0], highBytes[1], lowBytes[0], lowBytes[1]],
+            ModbusByteOrder.BADC => [lowBytes[1], lowBytes[0], highBytes[1], highBytes[0]],
+            ModbusByteOrder.DCBA => [highBytes[1], highBytes[0], lowBytes[1], lowBytes[0]],
             _ => [highBytes[0], highBytes[1], lowBytes[0], lowBytes[1]]
         };
     }
