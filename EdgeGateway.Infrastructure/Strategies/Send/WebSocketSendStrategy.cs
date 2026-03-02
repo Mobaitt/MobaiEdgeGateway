@@ -43,28 +43,8 @@ public class WebSocketSendStrategy : ISendStrategy
     /// <inheritdoc/>
     public Task InitializeAsync(Channel channel, CancellationToken cancellationToken = default)
     {
-        // 解析配置
-        if (!string.IsNullOrEmpty(channel.ConfigJson))
-        {
-            var config = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(channel.ConfigJson);
-            if (config != null)
-            {
-                if (config.TryGetValue("subscribeTopic", out var topicEl))
-                {
-                    var topic = topicEl.GetString();
-                    if (!string.IsNullOrEmpty(topic))
-                    {
-                        _subscribeTopic = topic;
-                        _logger.LogInformation("从 ConfigJson 读取订阅主题：{Topic}", topic);
-                    }
-                }
-            }
-        }
-        else
-        {
-            _logger.LogWarning("通道 {ChannelName} 的 ConfigJson 为空，使用默认订阅主题：{DefaultTopic}",
-                channel.Name, _subscribeTopic);
-        }
+        // 使用通道配置中的订阅主题
+        _subscribeTopic = channel.WsSubscribeTopic ?? "device/data";
 
         _logger.LogInformation(
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +

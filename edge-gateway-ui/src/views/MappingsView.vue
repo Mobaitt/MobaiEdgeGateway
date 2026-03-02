@@ -71,7 +71,7 @@
     </div>
 
     <!-- 绑定数据点弹窗 -->
-    <el-dialog v-model="bindDialogVisible" title="绑定数据点到通道" width="750px" destroy-on-close class="bind-dialog" top="8vh">
+    <el-dialog v-model="bindDialogVisible" title="绑定数据点到通道" width="750px" destroy-on-close class="bind-dialog" align-center>
       <div class="bind-layout">
         <!-- 左：设备树选择数据点 -->
         <div class="device-selector">
@@ -392,33 +392,44 @@ onMounted(fetchMappings)
 .empty-hint { font-size:12px; color:var(--text-muted); text-align:center; padding:20px; }
 
 /* 弹窗样式修复 */
+.bind-dialog {
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
 :deep(.el-dialog) {
   background: var(--bg-card) !important;
   border: 1px solid var(--border-muted) !important;
   border-radius: var(--radius-lg) !important;
-  max-height: 84vh;
+  max-height: 90vh;
+  margin: 0 auto !important;
+  display: flex;
+  flex-direction: column;
 }
-:deep(.el-dialog__header) { 
+:deep(.el-dialog__header) {
   border-bottom: 1px solid var(--border-subtle);
   padding: 14px 20px;
   flex-shrink: 0;
 }
-:deep(.el-dialog__title) { 
+:deep(.el-dialog__title) {
   color: var(--text-primary) !important;
   font-weight: 600;
   font-size: 15px;
 }
-:deep(.el-dialog__body) { 
+:deep(.el-dialog__body) {
   color: var(--text-primary);
   padding: 16px 20px;
-  overflow: hidden;
+  overflow-y: auto;
   flex: 1;
+  max-height: calc(90vh - 120px);
 }
-:deep(.el-dialog__footer) { 
+:deep(.el-dialog__footer) {
   border-top: 1px solid var(--border-subtle);
   padding: 12px 20px;
   flex-shrink: 0;
 }
+
+/* 表单输入样式 */
 :deep(.el-input__wrapper) { background: var(--bg-base) !important; border-color: var(--border-muted) !important; }
 :deep(.el-checkbox__label) { color: var(--text-primary) !important; }
 :deep(.el-checkbox__input.is-checked .el-checkbox__inner) { background-color: var(--cyan) !important; border-color: var(--cyan) !important; }

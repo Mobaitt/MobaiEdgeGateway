@@ -54,21 +54,9 @@ public class HttpSendStrategy : ISendStrategy
     public async Task InitializeAsync(Channel channel, CancellationToken cancellationToken = default)
     {
         _endpoint = channel.Endpoint;
-
-        // 解析额外 HTTP 配置
-        if (!string.IsNullOrEmpty(channel.ConfigJson))
-        {
-            var config = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(channel.ConfigJson);
-            if (config != null)
-            {
-                if (config.TryGetValue("mode", out var modeEl))
-                    _mode = modeEl.GetString() ?? "client";
-                if (config.TryGetValue("token", out var tokenEl))
-                    _authToken = tokenEl.GetString();
-                if (config.TryGetValue("timeout", out var timeoutEl))
-                    _timeoutMs = timeoutEl.GetInt32();
-            }
-        }
+        _mode = channel.HttpMode ?? "client";
+        _authToken = channel.HttpToken;
+        _timeoutMs = channel.HttpTimeout ?? 5000;
 
         if (_mode == "server")
         {

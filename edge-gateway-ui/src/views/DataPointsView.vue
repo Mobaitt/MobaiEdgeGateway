@@ -149,7 +149,7 @@
     </div>
 
     <!-- 新增/编辑数据点弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="editingDataPoint ? '编辑数据点' : '新增数据点'" width="720px" destroy-on-close class="datapoint-dialog" top="5vh">
+    <el-dialog v-model="dialogVisible" :title="editingDataPoint ? '编辑数据点' : '新增数据点'" width="720px" destroy-on-close class="datapoint-dialog" align-center>
       <el-form ref="formRef" :model="form" :rules="rules" label-width="90px" label-position="left">
         
         <!-- 基本信息 -->
@@ -743,7 +743,7 @@ onUnmounted(() => {
 
 /* 弹窗样式 */
 .datapoint-dialog {
-  max-height: 84vh;
+  max-height: 90vh;
   display: flex;
   flex-direction: column;
 }
@@ -751,25 +751,29 @@ onUnmounted(() => {
   background: var(--bg-card) !important;
   border: 1px solid var(--border-muted) !important;
   border-radius: var(--radius-lg) !important;
-  max-height: 84vh;
+  max-height: 90vh;
+  margin: 0 auto !important;
+  display: flex;
+  flex-direction: column;
 }
-:deep(.el-dialog__header) { 
+:deep(.el-dialog__header) {
   border-bottom: 1px solid var(--border-subtle);
   padding: 14px 20px;
   flex-shrink: 0;
 }
-:deep(.el-dialog__title) { 
+:deep(.el-dialog__title) {
   color: var(--text-primary) !important;
   font-weight: 600;
   font-size: 15px;
 }
-:deep(.el-dialog__body) { 
+:deep(.el-dialog__body) {
   color: var(--text-primary);
   padding: 16px 20px;
   overflow-y: auto;
   flex: 1;
+  max-height: calc(90vh - 120px);
 }
-:deep(.el-dialog__footer) { 
+:deep(.el-dialog__footer) {
   border-top: 1px solid var(--border-subtle);
   padding: 12px 20px;
   flex-shrink: 0;

@@ -70,7 +70,7 @@
     </div>
 
     <!-- 新增/编辑通道弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="editingChannel ? '编辑发送通道' : '新增发送通道'" width="720px" destroy-on-close class="channel-dialog" top="8vh">
+    <el-dialog v-model="dialogVisible" :title="editingChannel ? '编辑发送通道' : '新增发送通道'" width="720px" destroy-on-close class="channel-dialog" align-center>
       <el-form ref="formRef" :model="form" :rules="rules" label-width="100px" label-position="left">
         
         <!-- 基本信息 -->
@@ -117,22 +117,22 @@
           <!-- HTTP 模式选择 -->
           <template v-if="form.protocol === 2">
             <el-form-item label="运行模式">
-              <el-radio-group v-model="httpMode" class="mode-radio-group">
-                <el-radio :label="'client'">
+              <el-radio-group v-model="form.httpMode" class="mode-radio-group">
+                <el-radio label="client">
                   <el-icon><Upload /></el-icon> 客户端模式（主动推送）
                 </el-radio>
-                <el-radio :label="'server'">
+                <el-radio label="server">
                   <el-icon><Download /></el-icon> 服务端模式（等待采集）
                 </el-radio>
               </el-radio-group>
             </el-form-item>
 
-            <div v-if="httpMode === 'client'" class="protocol-hint">
+            <div v-if="form.httpMode === 'client'" class="protocol-hint">
               <el-icon class="hint-icon"><InfoFilled /></el-icon>
               <span>作为 HTTP 客户端，主动将数据 POST 到目标接口。</span>
             </div>
 
-            <div v-if="httpMode === 'server'" class="protocol-hint">
+            <div v-if="form.httpMode === 'server'" class="protocol-hint">
               <el-icon class="hint-icon"><InfoFilled /></el-icon>
               <span>作为 HTTP 服务端，等待客户端来 GET 数据。复用 Web 端口 5000，无需额外配置。</span>
               <code class="hint-code">http://localhost:5000/api/http-data/xxx</code>
@@ -157,16 +157,110 @@
         <div class="form-section">
           <div class="section-title"><el-icon><Connection /></el-icon> 连接配置</div>
           <el-form-item label="端点地址" prop="endpoint">
-            <el-input v-model="form.endpoint" :placeholder="getEndpointPlaceholder(form.protocol, httpMode)" />
+            <el-input v-model="form.endpoint" :placeholder="getEndpointPlaceholder(form.protocol)" />
           </el-form-item>
-          <el-form-item label="配置 JSON">
-            <el-input
-              v-model="form.configJson" type="textarea" :rows="4"
-              :placeholder="getConfigPlaceholder(form.protocol, httpMode)"
-              class="mono-input"
-            />
-            <div class="form-hint">{{ getConfigHint(form.protocol, httpMode) }}</div>
-          </el-form-item>
+
+          <!-- MQTT 配置 -->
+          <template v-if="form.protocol === 1">
+            <el-row :gutter="20">
+              <el-col :span="12">
+                <el-form-item label="主题" prop="mqttTopic">
+                  <el-input v-model="form.mqttTopic" placeholder="edge/device/data" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="客户端 ID">
+                  <el-input v-model="form.mqttClientId" placeholder="device_001" />
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-row :gutter="20">
+              <el-col :span="12">
+                <el-form-item label="用户名">
+                  <el-input v-model="form.mqttUsername" placeholder="可选" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="密码">
+                  <el-input v-model="form.mqttPassword" type="password" placeholder="可选" />
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-form-item label="QoS">
+              <el-radio-group v-model="form.mqttQos">
+                <el-radio :label="0">0 - 至多一次</el-radio>
+                <el-radio :label="1">1 - 至少一次</el-radio>
+                <el-radio :label="2">2 - 只有一次</el-radio>
+              </el-radio-group>
+            </el-form-item>
+          </template>
+
+          <!-- HTTP 配置 -->
+          <template v-if="form.protocol === 2">
+            <el-form-item label="运行模式">
+              <el-radio-group v-model="form.httpMode">
+                <el-radio label="client">客户端模式（主动推送）</el-radio>
+                <el-radio label="server">服务端模式（等待采集）</el-radio>
+              </el-radio-group>
+            </el-form-item>
+            <template v-if="form.httpMode === 'client'">
+              <el-row :gutter="20">
+                <el-col :span="12">
+                  <el-form-item label="HTTP 方法">
+                    <el-select v-model="form.httpMethod" style="width:100%">
+                      <el-option label="POST" value="POST" />
+                      <el-option label="PUT" value="PUT" />
+                    </el-select>
+                  </el-form-item>
+                </el-col>
+                <el-col :span="12">
+                  <el-form-item label="认证 Token">
+                    <el-input v-model="form.httpToken" type="password" placeholder="Bearer xxx" />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              <el-form-item label="超时时间">
+                <el-input-number v-model="form.httpTimeout" :min="1000" :max="60000" :step="1000" style="width:200px" />
+                <span style="margin-left: 10px; color: var(--text-muted)">毫秒</span>
+              </el-form-item>
+            </template>
+            <div v-if="form.httpMode === 'server'" class="protocol-hint">
+              <el-icon class="hint-icon"><InfoFilled /></el-icon>
+              <span>作为 HTTP 服务端，等待客户端来 GET 数据。复用 Web 端口 5000，无需额外配置。</span>
+              <code class="hint-code">http://localhost:5000/api/http-data/xxx</code>
+            </div>
+          </template>
+
+          <!-- WebSocket 配置 -->
+          <template v-if="form.protocol === 5">
+            <el-form-item label="订阅主题">
+              <el-input v-model="form.wsSubscribeTopic" placeholder="device/data" />
+            </el-form-item>
+            <el-form-item label="心跳间隔">
+              <el-input-number v-model="form.wsHeartbeatInterval" :min="5000" :max="120000" :step="5000" style="width:200px" />
+              <span style="margin-left: 10px; color: var(--text-muted)">毫秒</span>
+            </el-form-item>
+          </template>
+
+          <!-- 本地文件配置 -->
+          <template v-if="form.protocol === 4">
+            <el-row :gutter="20">
+              <el-col :span="12">
+                <el-form-item label="文件格式">
+                  <el-select v-model="form.fileFormat" style="width:100%">
+                    <el-option label="JSON" value="json" />
+                    <el-option label="CSV" value="csv" />
+                  </el-select>
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="保存路径">
+                  <el-input v-model="form.filePath" placeholder="./output/data.json" />
+                </el-form-item>
+              </el-col>
+            </el-row>
+          </template>
+
           <el-form-item label="是否启用">
             <el-switch v-model="form.isEnabled" active-color="#38dcc4" />
             <span class="form-hint" style="margin-left: 12px">停用后通道将停止发送数据</span>
@@ -201,7 +295,19 @@ type ChannelItem = {
   protocol: string
   protocolValue: number
   endpoint: string
-  configJson?: string
+  mqttTopic?: string
+  mqttClientId?: string
+  mqttUsername?: string
+  mqttPassword?: string
+  mqttQos?: number
+  httpMethod?: string
+  httpToken?: string
+  httpTimeout?: number
+  httpMode?: string
+  wsSubscribeTopic?: string
+  wsHeartbeatInterval?: number
+  fileFormat?: string
+  filePath?: string
   mappedDataPointCount: number
   isEnabled: boolean
   createdAt?: string
@@ -213,7 +319,19 @@ type ChannelForm = {
   description: string
   protocol: number | null
   endpoint: string
-  configJson: string
+  mqttTopic: string
+  mqttClientId: string
+  mqttUsername: string
+  mqttPassword: string
+  mqttQos: number
+  httpMethod: string
+  httpToken: string
+  httpTimeout: number
+  httpMode: string
+  wsSubscribeTopic: string
+  wsHeartbeatInterval: number
+  fileFormat: string
+  filePath: string
   isEnabled: boolean
 }
 
@@ -235,7 +353,6 @@ const loadSendProtocols = async () => {
 const dialogVisible = ref(false)
 const submitting = ref(false)
 const editingChannel = ref<ChannelItem | null>(null)
-const httpMode = ref<'client' | 'server'>('client')
 const formRef = ref<any>()
 const form = ref<ChannelForm>({
   name: '',
@@ -243,7 +360,19 @@ const form = ref<ChannelForm>({
   description: '',
   protocol: null,
   endpoint: '',
-  configJson: '',
+  mqttTopic: '',
+  mqttClientId: '',
+  mqttUsername: '',
+  mqttPassword: '',
+  mqttQos: 0,
+  httpMethod: 'POST',
+  httpToken: '',
+  httpTimeout: 5000,
+  httpMode: 'client',
+  wsSubscribeTopic: '',
+  wsHeartbeatInterval: 30000,
+  fileFormat: 'json',
+  filePath: './output/data.json',
   isEnabled: true
 })
 
@@ -259,39 +388,12 @@ const getProtoColor = (value: number) => {
   return protocol?.color ?? '#8fa5c5'
 }
 
-const getEndpointPlaceholder = (protocol: number | null, mode?: 'client' | 'server') => {
+const getEndpointPlaceholder = (protocol: number | null) => {
   if (protocol === 1) return 'mqtt://host:1883'
-  if (protocol === 2) {
-    if (mode === 'server') return '/api/http-data/data (数据访问路径)'
-    return 'https://api.example.com/data/upload'
-  }
+  if (protocol === 2) return 'https://api.example.com/data/upload'
   if (protocol === 5) return 'ws://localhost:8080/ws 或 wss://api.example.com/ws'
   if (protocol === 4) return './output/data.json'
   return '请输入端点地址'
-}
-
-const getConfigPlaceholder = (protocol: number | null, mode?: 'client' | 'server') => {
-  if (protocol === 1) return '{"topic":"edge/data","clientId":"device01"}'
-  if (protocol === 2) {
-    if (mode === 'server') return '{}'
-    return '{"token":"Bearer xxx","timeout":5000}'
-  }
-  if (protocol === 5) {
-    return '{"subscribeTopic":"device/data","heartbeatInterval":30000}'
-  }
-  if (protocol === 4) return '{"format":"json","path":"./data"}'
-  return '配置 JSON（可选）'
-}
-
-const getConfigHint = (protocol: number | null, mode?: 'client' | 'server') => {
-  if (protocol === 1) return 'MQTT：topic(主题), clientId(客户端 ID), username, password'
-  if (protocol === 2) {
-    if (mode === 'server') return 'HTTP 服务端：无需配置，自动使用 Web 端口'
-    return 'HTTP 客户端：token(认证令牌), timeout(超时毫秒), method'
-  }
-  if (protocol === 5) return 'WebSocket：subscribeTopic(订阅主题), heartbeatInterval(心跳间隔 ms)'
-  if (protocol === 4) return '本地文件：format(json/csv), path(保存路径)'
-  return '根据所选协议填写相应配置'
 }
 
 const fetchChannels = async () => {
@@ -306,14 +408,25 @@ const fetchChannels = async () => {
 
 const openCreate = () => {
   editingChannel.value = null
-  httpMode.value = 'client'
   form.value = {
     name: '',
     code: '',
     description: '',
     protocol: null,
     endpoint: '',
-    configJson: '',
+    mqttTopic: '',
+    mqttClientId: '',
+    mqttUsername: '',
+    mqttPassword: '',
+    mqttQos: 0,
+    httpMethod: 'POST',
+    httpToken: '',
+    httpTimeout: 5000,
+    httpMode: 'client',
+    wsSubscribeTopic: '',
+    wsHeartbeatInterval: 30000,
+    fileFormat: 'json',
+    filePath: './output/data.json',
     isEnabled: true
   }
   dialogVisible.value = true
@@ -321,61 +434,36 @@ const openCreate = () => {
 
 const openEdit = (channel: ChannelItem) => {
   editingChannel.value = channel
-  // 从配置 JSON 中读取 mode
-  try {
-    if (channel.configJson) {
-      const config = JSON.parse(channel.configJson)
-      httpMode.value = config.mode === 'server' ? 'server' : 'client'
-    } else {
-      httpMode.value = 'client'
-    }
-  } catch {
-    httpMode.value = 'client'
-  }
   form.value = {
     name: channel.name,
     code: channel.code,
     description: channel.description || '',
     protocol: channel.protocolValue,
     endpoint: channel.endpoint,
-    configJson: channel.configJson || '',
+    mqttTopic: channel.mqttTopic || '',
+    mqttClientId: channel.mqttClientId || '',
+    mqttUsername: channel.mqttUsername || '',
+    mqttPassword: channel.mqttPassword || '',
+    mqttQos: channel.mqttQos ?? 0,
+    httpMethod: channel.httpMethod || 'POST',
+    httpToken: channel.httpToken || '',
+    httpTimeout: channel.httpTimeout ?? 5000,
+    httpMode: channel.httpMode || 'client',
+    wsSubscribeTopic: channel.wsSubscribeTopic || '',
+    wsHeartbeatInterval: channel.wsHeartbeatInterval ?? 30000,
+    fileFormat: channel.fileFormat || 'json',
+    filePath: channel.filePath || './output/data.json',
     isEnabled: channel.isEnabled
   }
   dialogVisible.value = true
-}
-
-const buildConfigJson = () => {
-  let config: Record<string, any> = {}
-
-  try {
-    if (form.value.configJson.trim()) {
-      config = JSON.parse(form.value.configJson)
-    }
-  } catch {
-    // 如果解析失败，使用空对象
-  }
-
-  // 如果是 HTTP 协议，添加 mode 配置
-  if (form.value.protocol === 2) {
-    config.mode = httpMode.value
-    // 服务端模式且配置了端口才添加 port
-    if (httpMode.value === 'server' && config.port) {
-      config.port = config.port
-    }
-  }
-
-  return JSON.stringify(config, null, 2)
 }
 
 const submitForm = async () => {
   await formRef.value?.validate()
   submitting.value = true
   try {
-    const submitData = {
-      ...form.value,
-      configJson: buildConfigJson()
-    }
-    
+    const submitData = { ...form.value }
+
     if (editingChannel.value) {
       // 编辑模式
       await updateChannel(editingChannel.value.id, submitData)
@@ -385,9 +473,11 @@ const submitForm = async () => {
       await createChannel(submitData)
       ElMessage.success('通道创建成功')
     }
-    
+
     dialogVisible.value = false
     fetchChannels()
+  } catch (error: any) {
+    ElMessage.error(`操作失败：${error.message || '未知错误'}`)
   } finally {
     submitting.value = false
   }
@@ -623,7 +713,7 @@ onMounted(() => {
 
 /* 弹窗样式 */
 .channel-dialog {
-  max-height: 84vh;
+  max-height: 90vh;
   display: flex;
   flex-direction: column;
 }
@@ -631,25 +721,29 @@ onMounted(() => {
   background: var(--bg-card) !important;
   border: 1px solid var(--border-muted) !important;
   border-radius: var(--radius-lg) !important;
-  max-height: 84vh;
+  max-height: 90vh;
+  margin: 0 auto !important;
+  display: flex;
+  flex-direction: column;
 }
-:deep(.el-dialog__header) { 
+:deep(.el-dialog__header) {
   border-bottom: 1px solid var(--border-subtle);
   padding: 14px 20px;
   flex-shrink: 0;
 }
-:deep(.el-dialog__title) { 
+:deep(.el-dialog__title) {
   color: var(--text-primary) !important;
   font-weight: 600;
   font-size: 15px;
 }
-:deep(.el-dialog__body) { 
+:deep(.el-dialog__body) {
   color: var(--text-primary);
   padding: 16px 20px;
   overflow-y: auto;
   flex: 1;
+  max-height: calc(90vh - 120px);
 }
-:deep(.el-dialog__footer) { 
+:deep(.el-dialog__footer) {
   border-top: 1px solid var(--border-subtle);
   padding: 12px 20px;
   flex-shrink: 0;
