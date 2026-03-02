@@ -11,7 +11,6 @@
           <el-tag v-else size="small" type="info" style="margin-left:8px">已停止</el-tag>
         </div>
       </div>
-      <el-button type="primary" :icon="Plus" @click="openCreate">新增数据点</el-button>
     </div>
 
     <!-- 统计栏 -->
@@ -34,36 +33,60 @@
       </div>
     </div>
 
+    <!-- 工具栏 -->
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <el-input
+          v-model="searchText" placeholder="搜索 Tag / 名称 / 地址..."
+          prefix-icon="Search" clearable style="width: 280px"
+          @input="filterDataPoints"
+        />
+        <el-select v-model="filterDataType" placeholder="数据类型" clearable style="width: 140px" @change="filterDataPoints">
+          <el-option
+            v-for="o in DataValueTypeOptions"
+            :key="o.value" :label="o.label" :value="o.value"
+          />
+        </el-select>
+        <el-select v-model="filterQuality" placeholder="数据质量" clearable style="width: 140px" @change="filterDataPoints">
+          <el-option label="Good" value="Good" />
+          <el-option label="Bad" value="Bad" />
+          <el-option label="Uncertain" value="Uncertain" />
+        </el-select>
+      </div>
+      <div class="toolbar-right">
+        <el-button :icon="Refresh" circle @click="refreshData" :loading="refreshing" title="刷新数据" />
+        <el-button type="primary" :icon="Plus" @click="openCreate">新增数据点</el-button>
+      </div>
+    </div>
+
     <!-- 表格 -->
     <div class="table-wrap">
-      <el-table :data="dataPoints" v-loading="loading" row-key="id">
-        <el-table-column label="Tag" min-width="220">
+      <el-table :data="filteredDataPoints" v-loading="loading" row-key="id" :default-sort="{ prop: 'createdAt', order: 'descending' }">
+        <el-table-column type="index" label="#" width="50" align="center" />
+        
+        <el-table-column prop="tag" label="Tag" min-width="200" sortable>
           <template #default="{ row }">
             <span class="mono tag-text">{{ row.tag }}</span>
           </template>
         </el-table-column>
 
-        <el-table-column prop="name" label="名称" width="130" />
+        <el-table-column prop="name" label="名称" width="120" sortable />
 
-        <el-table-column label="地址" width="120">
+        <el-table-column prop="address" label="地址" width="100" sortable>
           <template #default="{ row }">
             <span class="mono addr-text">{{ row.address }}</span>
           </template>
         </el-table-column>
 
-        <el-table-column label="数据类型" width="120" align="center">
+        <el-table-column prop="dataType" label="数据类型" width="100" align="center" sortable>
           <template #default="{ row }">
-            <span class="badge info mono">{{ row.dataType }}</span>
+            <span class="badge info mono">{{ getDataTypeLabel(row.dataType) }}</span>
           </template>
         </el-table-column>
 
-        <el-table-column label="单位" width="80" align="center">
-          <template #default="{ row }">
-            <span style="color:var(--text-muted);font-size:13px">{{ row.unit || '—' }}</span>
-          </template>
-        </el-table-column>
+        <el-table-column prop="unit" label="单位" width="70" align="center" />
 
-        <el-table-column label="实时值" width="150" align="center">
+        <el-table-column label="实时值" width="140" align="center">
           <template #default="{ row }">
             <span v-if="realtimeData[row.id]" class="mono realtime-value" :class="getQualityClass(realtimeData[row.id].quality)">
               {{ formatValue(realtimeData[row.id].value, row.dataType) }}
@@ -73,7 +96,7 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="数据质量" width="100" align="center">
+        <el-table-column prop="quality" label="质量" width="90" align="center" sortable>
           <template #default="{ row }">
             <span v-if="realtimeData[row.id]" class="badge mono" :class="getQualityClass(realtimeData[row.id].quality)">
               {{ realtimeData[row.id].quality }}
@@ -82,29 +105,43 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="状态" width="90" align="center">
+        <el-table-column label="启用" width="70" align="center">
           <template #default="{ row }">
-            <span class="badge" :class="row.isEnabled ? 'good' : 'bad'">
-              {{ row.isEnabled ? 'ON' : 'OFF' }}
-            </span>
+            <el-switch
+              v-model="row.isEnabled"
+              size="small"
+              active-color="#38dcc4"
+              inactive-color="#999"
+              @change="toggleDataPoint(row)"
+            />
           </template>
         </el-table-column>
 
-        <el-table-column label="创建时间" width="160">
+        <!-- Modbus 配置列 - 默认隐藏，需要时取消注释
+        <el-table-column label="Modbus 配置" width="180" align="center">
+          <template #default="{ row }">
+            <div class="modbus-config">
+              <span class="config-item" title="从站地址">S:{{ row.modbusSlaveId || 1 }}</span>
+              <span class="config-item" title="功能码">F:{{ row.modbusFunctionCode || 3 }}</span>
+              <span class="config-item" title="寄存器长度">L:{{ row.registerLength || 1 }}</span>
+            </div>
+          </template>
+        </el-table-column>
+        -->
+
+        <el-table-column prop="createdAt" label="创建时间" width="160" sortable>
           <template #default="{ row }">
             <span class="mono time-text">{{ formatDateTime(row.createdAt) }}</span>
           </template>
         </el-table-column>
 
-        <el-table-column label="操作" width="150" align="right">
+        <el-table-column label="操作" width="140" align="right" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" text @click="openEdit(row)">
+            <el-button size="small" text type="primary" @click="openEdit(row)">
               <el-icon><Edit /></el-icon>
-              编辑
             </el-button>
             <el-button size="small" text type="danger" @click="confirmDelete(row)">
               <el-icon><Delete /></el-icon>
-              删除
             </el-button>
           </template>
         </el-table-column>
@@ -230,8 +267,8 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
-import { Plus, Delete, ArrowLeft, Document, Setting, Connection, InfoFilled, Edit } from '@element-plus/icons-vue'
-import { getDataPoints, createDataPoint, updateDataPoint, deleteDataPoint, getDeviceRealtimeData, getDevice } from '@/api/device'
+import { Plus, Delete, ArrowLeft, Document, Setting, Connection, InfoFilled, Edit, Refresh, Search } from '@element-plus/icons-vue'
+import { getDataPoints, createDataPoint, updateDataPoint, toggleDataPoint as apiToggleDataPoint, deleteDataPoint, getDeviceRealtimeData, getDevice } from '@/api/device'
 import { getDataValueTypes, getModbusByteOrders } from '@/api/enums'
 import { formatDateTime } from '@/api/constants'
 
@@ -300,9 +337,64 @@ const loadModbusByteOrders = async () => {
 }
 
 const loading = ref(false)
+const refreshing = ref(false)
 const dataPoints = ref<DataPointItem[]>([])
 const enabledCount = computed(() => dataPoints.value.filter((item) => item.isEnabled).length)
 const deviceEnabled = ref(false)
+
+// 搜索和筛选
+const searchText = ref('')
+const filterDataType = ref<number | null>(null)
+const filterQuality = ref<string | null>(null)
+
+// 过滤后的数据点
+const filteredDataPoints = computed(() => {
+  return dataPoints.value.filter((item) => {
+    // 文本搜索
+    const matchText = !searchText.value || 
+      item.tag.toLowerCase().includes(searchText.value.toLowerCase()) ||
+      item.name.toLowerCase().includes(searchText.value.toLowerCase()) ||
+      item.address.toLowerCase().includes(searchText.value.toLowerCase())
+    
+    // 数据类型筛选
+    const itemDataType = typeof item.dataType === 'string' ? parseInt(item.dataType) : item.dataType
+    const matchDataType = !filterDataType.value || itemDataType === filterDataType.value
+    
+    // 数据质量筛选
+    const quality = realtimeData.value[item.id]?.quality
+    const matchQuality = !filterQuality.value || quality === filterQuality.value
+    
+    return matchText && matchDataType && matchQuality
+  })
+})
+
+// 获取数据类型标签
+const getDataTypeLabel = (dataType: string | number) => {
+  if (typeof dataType === 'number') {
+    const option = DataValueTypeOptions.value.find(o => o.value === dataType)
+    return option?.label || String(dataType)
+  }
+  return dataType
+}
+
+// 刷新数据
+const refreshData = async () => {
+  refreshing.value = true
+  try {
+    await fetchDataPoints()
+    await fetchRealtimeData()
+    ElMessage.success('数据已刷新')
+  } catch (error) {
+    ElMessage.error('刷新失败')
+  } finally {
+    refreshing.value = false
+  }
+}
+
+// 过滤数据点
+const filterDataPoints = () => {
+  // computed 会自动处理，这里可以添加日志或其他逻辑
+}
 
 // 实时数据
 const realtimeData = ref<Record<number, RealtimeDataItem>>({})
@@ -411,6 +503,20 @@ const formatValue = (value: any, dataType: string | number) => {
   }
 
   return String(value)
+}
+
+// 切换数据点启用状态
+const toggleDataPoint = async (row: DataPointItem) => {
+  try {
+    await apiToggleDataPoint(deviceId.value, row.id, row.isEnabled)
+    ElMessage.success(row.isEnabled ? '数据点已启用' : '数据点已禁用')
+    
+    // 如果设备已启用，采集服务会自动重新加载
+  } catch (error: any) {
+    // 恢复状态
+    row.isEnabled = !row.isEnabled
+    ElMessage.error(`操作失败：${error.message || '未知错误'}`)
+  }
 }
 
 // 根据数据类型自动设置寄存器长度
@@ -542,6 +648,52 @@ onUnmounted(() => {
 .addr-text { font-size: 13px; color: var(--text-secondary); }
 .time-text { font-size: 11px; color: var(--text-muted); }
 :deep(.mono-input .el-input__inner) { font-family: var(--font-mono); }
+
+/* 工具栏样式 */
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+}
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Modbus 配置展示 */
+.modbus-config {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}
+.config-item {
+  background: var(--bg-base);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border-muted);
+}
+.config-item:hover {
+  background: var(--cyan-dim);
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
 
 /* 实时数据值样式 */
 .realtime-value {

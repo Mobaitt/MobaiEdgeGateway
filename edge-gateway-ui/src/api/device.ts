@@ -34,6 +34,10 @@ export const deleteDataPoint = (deviceId, dataPointId) =>
 export const updateDataPoint = (deviceId, dataPointId, data) =>
   request.put(`/devices/${deviceId}/datapoints/${dataPointId}`, data)
 
+/** 切换数据点启用状态 */
+export const toggleDataPoint = (deviceId, dataPointId, isEnabled) =>
+  request.put(`/devices/${deviceId}/datapoints/${dataPointId}`, { isEnabled })
+
 /** 获取设备数据点的实时数据 */
 export const getDeviceRealtimeData = (deviceId) =>
   request.get(`/devices/${deviceId}/datapoints/realtime`)
