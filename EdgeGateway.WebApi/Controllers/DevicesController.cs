@@ -205,6 +205,15 @@ public class DevicesController : ControllerBase
         };
 
         var created = await _deviceService.CreateDataPointAsync(dataPoint);
+
+        // 如果设备已启用，重新加载采集任务
+        if (device.IsEnabled)
+        {
+            await _collectionService.ReloadDeviceAsync(deviceId, HttpContext.RequestAborted);
+            _logger.LogInformation("数据点 ID={DataPointId} 已创建，已重新加载设备 ID={DeviceId} 采集任务",
+                created.Id, deviceId);
+        }
+
         return CreatedAtAction(nameof(GetDataPoints), new { deviceId },
             ApiResponse<DataPointResponse>.Ok(MapDataPointToResponse(created, device.Name), "数据点创建成功"));
     }
@@ -258,7 +267,18 @@ public class DevicesController : ControllerBase
     [ProducesResponseType(typeof(ApiResponse), 200)]
     public async Task<IActionResult> DeleteDataPoint(int deviceId, int dataPointId)
     {
+        var device = await _deviceService.GetDeviceAsync(deviceId);
+
         await _deviceService.DeleteDataPointAsync(dataPointId);
+
+        // 如果设备已启用，重新加载采集任务
+        if (device != null && device.IsEnabled)
+        {
+            await _collectionService.ReloadDeviceAsync(deviceId, HttpContext.RequestAborted);
+            _logger.LogInformation("数据点 ID={DataPointId} 已删除，已重新加载设备 ID={DeviceId} 采集任务",
+                dataPointId, deviceId);
+        }
+
         return Ok(ApiResponse.Ok("数据点删除成功"));
     }
 
