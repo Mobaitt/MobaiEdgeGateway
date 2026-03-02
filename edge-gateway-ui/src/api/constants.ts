@@ -31,15 +31,19 @@ export const SendProtocolOptions = Object.values(SendProtocol).map(p => ({
 // =============================================
 // 数据值类型枚举
 // =============================================
-export const DataValueTypeOptions = [
-  { label: 'Bool',   value: 1 },
-  { label: 'Int16',  value: 2 },
-  { label: 'Int32',  value: 3 },
-  { label: 'Int64',  value: 4 },
-  { label: 'Float',  value: 5 },
-  { label: 'Double', value: 6 },
-  { label: 'String', value: 7 }
-]
+export const DataValueType = {
+  Bool:   { value: 1, label: 'Bool' },
+  Int16:  { value: 2, label: 'Int16' },
+  Int32:  { value: 3, label: 'Int32' },
+  Int64:  { value: 4, label: 'Int64' },
+  Float:  { value: 5, label: 'Float' },
+  Double: { value: 6, label: 'Double' },
+  String: { value: 7, label: 'String' }
+}
+
+export const DataValueTypeOptions = Object.values(DataValueType).map(t => ({
+  label: t.label, value: t.value
+}))
 
 // =============================================
 // 辅助函数
