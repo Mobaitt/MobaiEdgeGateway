@@ -113,15 +113,16 @@
           <el-row :gutter="20">
             <el-col :span="12">
               <el-form-item label="设备名称" prop="name">
-                <el-input v-model="form.name" placeholder="如：车间 A-PLC01" />
+                <el-input v-model="form.name" placeholder="如：车间 A-PLC01" @blur="generateCodeIfEmpty" />
               </el-form-item>
             </el-col>
             <el-col :span="12">
-              <el-form-item label="设备编码" prop="code" v-if="!editingDevice">
-                <el-input v-model="form.code" placeholder="DEV_PLC_001" />
-              </el-form-item>
-              <el-form-item v-else label="设备编码">
-                <el-input v-model="form.code" disabled />
+              <el-form-item label="设备编码" prop="code">
+                <el-input v-model="form.code" placeholder="DEV_PLC_001">
+                  <template #append>
+                    <el-button :icon="MagicStick" @click="generateCode" title="自动生成" />
+                  </template>
+                </el-input>
               </el-form-item>
             </el-col>
           </el-row>
@@ -202,7 +203,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
-import { Plus, Edit, Delete, DataLine, Location, Timer, Document, Setting, InfoFilled } from '@element-plus/icons-vue'
+import { Plus, Edit, Delete, DataLine, Location, Timer, Document, Setting, InfoFilled, MagicStick } from '@element-plus/icons-vue'
 import {
   getDevices,
   createDevice,
@@ -274,6 +275,35 @@ const getProtocolColor = (value: number) => {
 const getProtocolBg = (value: number) => {
   const protocol = CollectionProtocolOptions.value.find(p => p.value === value)
   return protocol ? `${protocol.color}22` : '#8fa5c522'
+}
+
+// 根据设备名称生成设备编码
+const generateCode = () => {
+  if (!form.value.name) {
+    ElMessage.warning('请先输入设备名称')
+    return
+  }
+  
+  // 移除特殊字符，转换为大写，用下划线连接
+  const code = form.value.name
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '')
+    .substring(0, 30)
+  
+  // 添加时间戳后缀确保唯一性
+  const timestamp = Date.now().toString(36).toUpperCase()
+  form.value.code = `${code}_${timestamp}`
+  
+  ElMessage.success('设备编码已生成')
+}
+
+// 设备名称失去焦点时，如果编码为空则自动生成
+const generateCodeIfEmpty = () => {
+  if (!form.value.code && form.value.name) {
+    generateCode()
+  }
 }
 
 const dialogVisible = ref(false)
