@@ -114,6 +114,7 @@ export interface DeviceNode {
 /** 实时数据点 */
 export interface RealtimeDataItem {
   dataPointId: number
+  tag: string
   value: unknown
   quality: string
   timestamp: string

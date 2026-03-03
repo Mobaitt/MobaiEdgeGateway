@@ -181,6 +181,7 @@ public class DevicesController : ControllerBase
         var result = realtimeData.Select(d => new DataPointRealtimeResponse
         {
             DataPointId = d.DataPointId,
+            Tag         = d.Tag,
             Value       = d.Value,
             Quality     = d.Quality.ToString(),
             Timestamp   = d.Timestamp

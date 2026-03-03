@@ -96,8 +96,8 @@
 
         <el-table-column label="实时值" width="140" align="center">
           <template #default="{ row }">
-            <span v-if="realtimeData[row.id]" class="mono realtime-value" :class="getQualityClass(realtimeData[row.id].quality)">
-              {{ formatValue(realtimeData[row.id].value, row.dataType) }}
+            <span v-if="realtimeData[row.tag]" class="mono realtime-value" :class="getQualityClass(realtimeData[row.tag].quality)">
+              {{ formatValue(realtimeData[row.tag].value, row.dataType) }}
               <span v-if="row.unit" class="value-unit">{{ row.unit }}</span>
             </span>
             <span v-else style="color:var(--text-muted);font-size:12px">—</span>
@@ -106,8 +106,8 @@
 
         <el-table-column prop="quality" label="质量" width="90" align="center" sortable>
           <template #default="{ row }">
-            <span v-if="realtimeData[row.id]" class="badge mono" :class="getQualityClass(realtimeData[row.id].quality)">
-              {{ realtimeData[row.id].quality }}
+            <span v-if="realtimeData[row.tag]" class="badge mono" :class="getQualityClass(realtimeData[row.tag].quality)">
+              {{ realtimeData[row.tag].quality }}
             </span>
             <span v-else style="color:var(--text-muted);font-size:12px">—</span>
           </template>
@@ -405,8 +405,8 @@ const filterDataPoints = () => {
   // computed 会自动处理，这里可以添加日志或其他逻辑
 }
 
-// 实时数据
-const realtimeData = ref<Record<number, RealtimeDataItem>>({})
+// 实时数据 - 使用 Tag 作为 key，避免虚拟数据点 ID 匹配问题
+const realtimeData = ref<Record<string, RealtimeDataItem>>({})
 const lastUpdateTime = ref<Date | null>(null)
 let realtimeTimer: number | null = null
 
@@ -509,20 +509,23 @@ const fetchRealtimeData = async () => {
   try {
     const res = await getDeviceRealtimeData(deviceId.value)
     const dataList = ((res as { data?: RealtimeDataItem[] })?.data ?? []) as RealtimeDataItem[]
-    
-    // 转换为 Map 方便查找
-    const dataMap: Record<number, RealtimeDataItem> = {}
+
+    // 使用 Tag 作为 key 存储实时数据，避免虚拟数据点 ID 问题
+    // 后端返回的 tag 已是完整格式（如 DEV001.Temperature）
+    const dataMap: Record<string, RealtimeDataItem> = {}
     dataList.forEach((item) => {
-      dataMap[item.dataPointId] = item
+      if (item.tag) {
+        dataMap[item.tag] = item
+      }
     })
-    
+
     realtimeData.value = dataMap
-    
+
     if (dataList.length > 0) {
       lastUpdateTime.value = new Date()
     }
   } catch (e) {
-    console.error('获取实时数据失败', e)
+    console.error('获取实时数据失败:', e)
   }
 }
 

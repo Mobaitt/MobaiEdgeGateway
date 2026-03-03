@@ -130,47 +130,59 @@ public class VirtualNodeEngine : IVirtualNodeEngine
 
                 foreach (var depTag in dependencies)
                 {
-                    // 从快照中获取最新值（通过委托）
+                    object? value = null;
+                    bool valueFound = false;
+
+                    // 1. 优先从快照中获取最新值（通过委托）
                     if (_getDataSnapshot != null)
                     {
-                        var value = _getDataSnapshot(depTag);
+                        value = _getDataSnapshot(depTag);
                         if (value != null)
                         {
                             dependencyValues[depTag] = value;
+                            valueFound = true;
                             continue;
                         }
-                        else
+                    }
+
+                    // 2. 快照中没有，检查是否是其他虚拟数据点（从缓存获取最新值）
+                    if (!valueFound)
+                    {
+                        // 遍历缓存查找匹配的 Tag
+                        foreach (var vp in _virtualPointCache.Values)
                         {
+                            if (vp.Tag == depTag)
+                            {
+                                // 优先使用快照中的值（如果有的话）
+                                // 如果快照中没有，才使用 LastValue（数据库中的旧值）
+                                _logger.LogDebug("虚拟数据点 {VirtualTag} 依赖的虚拟数据点 {DepTag} 在快照中未找到，使用 LastValue",
+                                    virtualDataPoint.Tag, depTag);
+                                dependencyValues[depTag] = vp.LastValue;
+                                valueFound = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    // 3. 如果还是没找到，从数据库查找数据点定义（但值为 null）
+                    if (!valueFound)
+                    {
+                        await using var context = await _dbContextFactory.CreateDbContextAsync();
+                        var dataPoint = await context.DataPoints
+                            .FirstOrDefaultAsync(dp => dp.Tag == depTag, cancellationToken);
+
+                        if (dataPoint != null)
+                        {
+                            // 数据库中有定义，但快照中没有值
                             _logger.LogWarning("虚拟数据点 {VirtualTag} 依赖数据 {DepTag} 在快照中为 null 或超时",
                                 virtualDataPoint.Tag, depTag);
-                        }
-                    }
-                    else
-                    {
-                        _logger.LogWarning("虚拟数据点 {VirtualTag} 的 getDataSnapshot 委托未设置",
-                            virtualDataPoint.Tag);
-                    }
-
-                    // 快照中没有，从数据库查找
-                    await using var context = await _dbContextFactory.CreateDbContextAsync();
-                    var dataPoint = await context.DataPoints
-                        .FirstOrDefaultAsync(dp => dp.Tag == depTag, cancellationToken);
-
-                    if (dataPoint != null)
-                    {
-                        // 数据库中有定义，但快照中没有值
-                        dependencyValues[depTag] = null;
-                    }
-                    else
-                    {
-                        // 检查是否是其他虚拟数据点
-                        var virtualPoint = _virtualPointCache.Values.FirstOrDefault(vp => vp.Tag == depTag);
-                        if (virtualPoint != null)
-                        {
-                            dependencyValues[depTag] = virtualPoint.LastValue;
+                            dependencyValues[depTag] = null;
                         }
                         else
                         {
+                            // 完全找不到依赖
+                            _logger.LogWarning("虚拟数据点 {VirtualTag} 找不到依赖数据 {DepTag}",
+                                virtualDataPoint.Tag, depTag);
                             dependencyValues[depTag] = null;
                         }
                     }

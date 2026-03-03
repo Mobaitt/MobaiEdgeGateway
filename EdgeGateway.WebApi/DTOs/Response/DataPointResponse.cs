@@ -40,6 +40,10 @@ public class DataPointResponse
 public class DataPointRealtimeResponse
 {
     public int DataPointId { get; set; }
+    
+    /// <summary>数据点 Tag 标识，用于前端匹配（特别是虚拟数据点）</summary>
+    public string Tag { get; set; } = string.Empty;
+    
     public object? Value { get; set; }
     public string Quality { get; set; } = string.Empty;
     public DateTime Timestamp { get; set; }
