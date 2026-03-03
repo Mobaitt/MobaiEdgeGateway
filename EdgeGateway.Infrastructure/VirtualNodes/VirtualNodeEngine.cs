@@ -137,22 +137,20 @@ public class VirtualNodeEngine : IVirtualNodeEngine
                         if (value != null)
                         {
                             dependencyValues[depTag] = value;
-                            _logger.LogInformation("虚拟数据点 {VirtualTag} 使用快照数据：{DepTag} = {Value}", 
-                                virtualDataPoint.Tag, depTag, value);
                             continue;
                         }
                         else
                         {
-                            _logger.LogWarning("虚拟数据点 {VirtualTag} 依赖数据 {DepTag} 在快照中为 null 或超时", 
+                            _logger.LogWarning("虚拟数据点 {VirtualTag} 依赖数据 {DepTag} 在快照中为 null 或超时",
                                 virtualDataPoint.Tag, depTag);
                         }
                     }
                     else
                     {
-                        _logger.LogWarning("虚拟数据点 {VirtualTag} 的 getDataSnapshot 委托未设置", 
+                        _logger.LogWarning("虚拟数据点 {VirtualTag} 的 getDataSnapshot 委托未设置",
                             virtualDataPoint.Tag);
                     }
-                    
+
                     // 快照中没有，从数据库查找
                     await using var context = await _dbContextFactory.CreateDbContextAsync();
                     var dataPoint = await context.DataPoints
@@ -162,8 +160,6 @@ public class VirtualNodeEngine : IVirtualNodeEngine
                     {
                         // 数据库中有定义，但快照中没有值
                         dependencyValues[depTag] = null;
-                        _logger.LogDebug("虚拟数据点 {VirtualTag} 依赖数据 {DepTag} 在快照中缺失", 
-                            virtualDataPoint.Tag, depTag);
                     }
                     else
                     {
@@ -176,8 +172,6 @@ public class VirtualNodeEngine : IVirtualNodeEngine
                         else
                         {
                             dependencyValues[depTag] = null;
-                            _logger.LogDebug("虚拟数据点 {VirtualTag} 依赖数据 {DepTag} 未找到", 
-                                virtualDataPoint.Tag, depTag);
                         }
                     }
                 }
@@ -206,8 +200,6 @@ public class VirtualNodeEngine : IVirtualNodeEngine
                 // 设置虚拟数据点 ID 和 Tag
                 result.VirtualDataPointId = virtualDataPoint.Id;
                 result.VirtualDataPointTag = virtualDataPoint.Tag;
-
-                _logger.LogDebug("虚拟数据点 {Tag} 计算完成：{Value}", virtualDataPoint.Tag, result.Value);
 
                 return result;
             }
@@ -306,11 +298,6 @@ public class VirtualNodeEngine : IVirtualNodeEngine
                     _logger.LogError(ex, "虚拟数据点 {Tag} 因依赖更新触发计算失败", virtualPoint.Tag);
                 }
             }
-        }
-
-        if (results.Any())
-        {
-            _logger.LogDebug("依赖数据 {Tag} 更新，触发 {Count} 个虚拟数据点计算", dataPointTag, results.Count);
         }
 
         return results;

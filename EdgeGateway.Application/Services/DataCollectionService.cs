@@ -112,25 +112,9 @@ public class DataCollectionService
                 // 检查值是否为 null（采集失败时值为 null）
                 if (timestampedValue.Value != null)
                 {
-                    _logger.LogDebug("快照命中：Tag={Tag}, Value={Value}, Timestamp={Time}", 
-                        tag, timestampedValue.Value, timestampedValue.Timestamp);
                     return timestampedValue.Value;
                 }
-                else
-                {
-                    _logger.LogDebug("快照值为 null: Tag={Tag}", tag);
-                }
             }
-            else
-            {
-                _logger.LogDebug("快照超时：Tag={Tag}, Timestamp={Time}", 
-                    tag, timestampedValue.Timestamp);
-            }
-        }
-        else
-        {
-            _logger.LogDebug("快照未命中：Tag={Tag}, 缓存中的 Tags: {CacheTags}", 
-                tag, string.Join(", ", _tagDataCache.Keys));
         }
         return null;
     }
@@ -266,8 +250,6 @@ public class DataCollectionService
 
             // 批量推送
             await _sendService.DispatchAsync(dataToSend, cancellationToken);
-
-            _logger.LogDebug("数据聚合推送：{Count} 条数据", dataToSend.Count);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -443,10 +425,6 @@ public class DataCollectionService
                         // 执行一轮数据采集
                         var collectedData = (await strategy.ReadAsync(enabledPoints, cts.Token)).ToList();
 
-                        var goodCount = collectedData.Count(d => d.Quality == DataQuality.Good);
-                        _logger.LogDebug("设备 [{DeviceName}] 采集完成：{Good}/{Total} 点质量良好",
-                            device.Name, goodCount, collectedData.Count);
-
                         // 执行规则引擎处理
                         var processedData = await ExecuteRuleEngineAsync(collectedData, cts.Token);
 
@@ -618,10 +596,6 @@ public class DataCollectionService
                         Timestamp = data.Timestamp
                     });
                 }
-                else
-                {
-                    _logger.LogDebug("数据 {Tag} 被规则拒绝", data.Tag);
-                }
             }
             catch (Exception ex)
             {
@@ -672,8 +646,6 @@ public class DataCollectionService
                                 LastUpdateTime = DateTime.UtcNow
                             };
                         }
-                        _logger.LogDebug("虚拟节点计算完成：{Tag} = {Value}",
-                            virtualResult.VirtualDataPointTag, virtualResult.Value);
                     }
                 }
             }

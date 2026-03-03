@@ -59,7 +59,6 @@ public class MqttSendStrategy : ISendStrategy
 
             var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = false });
 
-            _logger.LogDebug("MQTT 发送成功 -> 主题：{Topic}, Payload: {Json}", _defaultTopic, json);
             await Task.CompletedTask;
 
             return SendResult.Success(package.DataList.Count());

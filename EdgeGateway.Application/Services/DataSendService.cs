@@ -164,8 +164,6 @@ public class DataSendService
 
             _cachedChannels = (await channelRepo.GetEnabledWithMappingsAsync()).ToList();
             _cacheUpdateTime = DateTime.UtcNow;
-
-            _logger.LogDebug("通道配置缓存已刷新，共 {Count} 个通道", _cachedChannels.Count);
         }
         finally
         {
@@ -248,9 +246,7 @@ public class DataSendService
                 // 执行发送
                 var result = await strategy.SendAsync(package, cancellationToken);
 
-                if (result.IsSuccess)
-                    _logger.LogDebug("通道 [{ChannelName}] 发送成功，条数：{Count}", channel.Name, result.SentCount);
-                else
+                if (!result.IsSuccess)
                     _logger.LogWarning("通道 [{ChannelName}] 发送失败：{Error}", channel.Name, result.ErrorMessage);
             }
             catch (Exception ex)

@@ -78,7 +78,6 @@ public class LocalFileSendStrategy : ISendStrategy
             var line = JsonSerializer.Serialize(record);
             await File.AppendAllTextAsync(_filePath, line + Environment.NewLine, cancellationToken);
 
-            _logger.LogDebug("文件写入成功 -> {FilePath}", _filePath);
             return SendResult.Success(package.DataList.Count());
         }
         catch (Exception ex)

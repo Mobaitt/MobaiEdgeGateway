@@ -94,18 +94,6 @@ public class WebSocketSendStrategy : ISendStrategy
             // 推送给订阅该主题的客户端
             await _connectionManager.BroadcastToTopicAsync(_subscribeTopic, json);
 
-            // 打印推送日志
-            var wsAddress = $"ws://<host>:5000/ws";
-            _logger.LogDebug(
-                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
-                "WebSocket 数据推送完成\n" +
-                "  通道：{ChannelName}\n" +
-                "  订阅地址：ws://<host>:5000/ws?topic={Topic}\n" +
-                "  推送数据条数：{Count}\n" +
-                "  当前在线客户端：{Clients}\n" +
-                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-                package.Channel.Name, _subscribeTopic, package.DataList.Count(), _connectionManager.Count);
-
             return SendResult.Success(package.DataList.Count());
         }
         catch (Exception ex)

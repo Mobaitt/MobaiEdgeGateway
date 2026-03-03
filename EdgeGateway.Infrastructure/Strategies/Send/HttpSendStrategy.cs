@@ -139,7 +139,6 @@ public class HttpSendStrategy : ISendStrategy
                     : $"/api/http-data/{_endpoint.TrimStart('/')}";
 
                 _httpListenerService.UpdateData(endpointPath, json);
-                _logger.LogDebug("HTTP 服务端数据已更新 -> {Endpoint}", endpointPath);
                 return SendResult.Success(package.DataList.Count());
             }
             else
@@ -160,7 +159,6 @@ public class HttpSendStrategy : ISendStrategy
 
                 if (response.IsSuccessStatusCode)
                 {
-                    _logger.LogDebug("HTTP 发送成功 -> {Endpoint}, 状态码：{Code}", _endpoint, (int)response.StatusCode);
                     return SendResult.Success(package.DataList.Count());
                 }
                 else
