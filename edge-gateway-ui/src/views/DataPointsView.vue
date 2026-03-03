@@ -52,10 +52,16 @@
           <el-option label="Bad" value="Bad" />
           <el-option label="Uncertain" value="Uncertain" />
         </el-select>
+        <el-select v-model="filterType" placeholder="数据类型" clearable style="width: 120px" @change="filterDataPoints">
+          <el-option label="全部" value="" />
+          <el-option label="普通数据点" value="normal" />
+          <el-option label="虚拟数据点" value="virtual" />
+        </el-select>
       </div>
       <div class="toolbar-right">
         <el-button :icon="Refresh" circle @click="refreshData" :loading="refreshing" title="刷新数据" />
         <el-button type="primary" :icon="Plus" @click="openCreate">新增数据点</el-button>
+        <el-button type="success" :icon="Cpu" @click="goToVirtualNodes">虚拟节点</el-button>
       </div>
     </div>
 
@@ -63,10 +69,11 @@
     <div class="table-wrap">
       <el-table :data="filteredDataPoints" v-loading="loading" row-key="id" :default-sort="{ prop: 'createdAt', order: 'descending' }">
         <el-table-column type="index" label="#" width="50" align="center" />
-        
+
         <el-table-column prop="tag" label="Tag" min-width="200" sortable>
           <template #default="{ row }">
             <span class="mono tag-text">{{ row.tag }}</span>
+            <el-tag v-if="row.isVirtual" size="small" type="warning" style="margin-left:6px">虚拟</el-tag>
           </template>
         </el-table-column>
 
@@ -74,7 +81,8 @@
 
         <el-table-column prop="address" label="地址" width="100" sortable>
           <template #default="{ row }">
-            <span class="mono addr-text">{{ row.address }}</span>
+            <span v-if="!row.isVirtual" class="mono addr-text">{{ row.address }}</span>
+            <span v-else style="color:var(--text-muted);font-size:12px">表达式</span>
           </template>
         </el-table-column>
 
@@ -117,18 +125,6 @@
           </template>
         </el-table-column>
 
-        <!-- Modbus 配置列 - 默认隐藏，需要时取消注释
-        <el-table-column label="Modbus 配置" width="180" align="center">
-          <template #default="{ row }">
-            <div class="modbus-config">
-              <span class="config-item" title="从站地址">S:{{ row.modbusSlaveId || 1 }}</span>
-              <span class="config-item" title="功能码">F:{{ row.modbusFunctionCode || 3 }}</span>
-              <span class="config-item" title="寄存器长度">L:{{ row.registerLength || 1 }}</span>
-            </div>
-          </template>
-        </el-table-column>
-        -->
-
         <el-table-column prop="createdAt" label="创建时间" width="160" sortable>
           <template #default="{ row }">
             <span class="mono time-text">{{ formatDateTime(row.createdAt) }}</span>
@@ -137,7 +133,10 @@
 
         <el-table-column label="操作" width="140" align="right" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" text type="primary" @click="openEdit(row)">
+            <el-button v-if="row.isVirtual" size="small" text type="success" @click="openVirtualNodeEdit(row)">
+              <el-icon><Edit /></el-icon>
+            </el-button>
+            <el-button v-else size="small" text type="primary" @click="openEdit(row)">
               <el-icon><Edit /></el-icon>
             </el-button>
             <el-button size="small" text type="danger" @click="confirmDelete(row)">
@@ -273,13 +272,18 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
-import { Plus, Delete, ArrowLeft, Document, Setting, Connection, InfoFilled, Edit, Refresh, Search, MagicStick } from '@element-plus/icons-vue'
+import { Plus, Delete, ArrowLeft, Document, Setting, Connection, InfoFilled, Edit, Refresh, Search, MagicStick, Cpu } from '@element-plus/icons-vue'
 import { getDataPoints, createDataPoint, updateDataPoint, toggleDataPoint as apiToggleDataPoint, deleteDataPoint, getDeviceRealtimeData, getDevice } from '@/api/device'
+import { getVirtualDataPointsByDevice } from '@/api/virtualNode'
 import { getDataValueTypes, getModbusByteOrders } from '@/api/enums'
 import { formatDateTime } from '@/api/constants'
 import { CollectionProtocol } from '@/api/constants'
 import { nameToCode } from '@/utils/codeGenerate'
 import type { DataPointItem, RealtimeDataItem } from '@/types'
+import type { VirtualDataPoint } from '@/types/virtualNode'
+
+// 扩展的数据点类型，支持虚拟节点
+type DataPointWithVirtual = (DataPointItem | VirtualDataPoint) & { isVirtual?: boolean }
 
 type DataPointForm = {
   name: string
@@ -300,6 +304,9 @@ const router = useRouter()
 const deviceId = computed(() => Number(route.params.id))
 const DataValueTypeOptions = ref<any[]>([])
 const ModbusByteOrderOptions = ref<any[]>([])
+
+// 筛选器
+const filterType = ref<string>('') // '' = 全部，'normal' = 普通，'virtual' = 虚拟
 
 // 加载数据类型选项
 const loadDataValueTypes = async () => {
@@ -323,7 +330,7 @@ const loadModbusByteOrders = async () => {
 
 const loading = ref(false)
 const refreshing = ref(false)
-const dataPoints = ref<DataPointItem[]>([])
+const dataPoints = ref<DataPointWithVirtual[]>([])
 const enabledCount = computed(() => dataPoints.value.filter((item) => item.isEnabled).length)
 const deviceEnabled = ref(false)
 /** 当前设备编码，用于生成数据点 Tag（格式：设备编码.数据点标识） */
@@ -340,21 +347,32 @@ const filterQuality = ref<string | null>(null)
 // 过滤后的数据点
 const filteredDataPoints = computed(() => {
   return dataPoints.value.filter((item) => {
+    // 类型筛选
+    const isVirtual = !!item.isVirtual
+    let matchType = true
+    if (filterType.value === 'normal') {
+      matchType = !isVirtual
+    } else if (filterType.value === 'virtual') {
+      matchType = isVirtual
+    }
+
     // 文本搜索
-    const matchText = !searchText.value || 
-      item.tag.toLowerCase().includes(searchText.value.toLowerCase()) ||
-      item.name.toLowerCase().includes(searchText.value.toLowerCase()) ||
-      item.address.toLowerCase().includes(searchText.value.toLowerCase())
-    
+    const searchTextLower = searchText.value.toLowerCase()
+    const matchText = !searchText.value ||
+      item.tag.toLowerCase().includes(searchTextLower) ||
+      item.name.toLowerCase().includes(searchTextLower) ||
+      ('address' in item && item.address.toLowerCase().includes(searchTextLower)) ||
+      ('expression' in item && (item.expression || '').toLowerCase().includes(searchTextLower))
+
     // 数据类型筛选
     const itemDataType = typeof item.dataType === 'string' ? parseInt(item.dataType) : item.dataType
     const matchDataType = !filterDataType.value || itemDataType === filterDataType.value
-    
+
     // 数据质量筛选
     const quality = realtimeData.value[item.id]?.quality
     const matchQuality = !filterQuality.value || quality === filterQuality.value
-    
-    return matchText && matchDataType && matchQuality
+
+    return matchText && matchDataType && matchQuality && matchType
   })
 })
 
@@ -372,6 +390,7 @@ const refreshData = async () => {
   refreshing.value = true
   try {
     await fetchDataPoints()
+    await loadVirtualDataPoints()
     await fetchRealtimeData()
     ElMessage.success('数据已刷新')
   } catch (error) {
@@ -459,9 +478,31 @@ const fetchDataPoints = async () => {
   loading.value = true
   try {
     const res = await getDataPoints(deviceId.value)
-    dataPoints.value = ((res as { data?: DataPointItem[] })?.data ?? []) as DataPointItem[]
+    dataPoints.value = ((res as { data?: DataPointItem[] })?.data ?? []).map(item => ({
+      ...item,
+      isVirtual: false
+    })) as DataPointWithVirtual[]
   } finally {
     loading.value = false
+  }
+}
+
+// 加载虚拟数据点
+const loadVirtualDataPoints = async () => {
+  try {
+    const res = await getVirtualDataPointsByDevice(deviceId.value)
+    const virtualPoints = ((res as { data?: VirtualDataPoint[] })?.data ?? []).map(item => ({
+      ...item,
+      isVirtual: true
+    })) as DataPointWithVirtual[]
+    
+    // 合并普通数据点和虚拟数据点
+    dataPoints.value = [
+      ...dataPoints.value.filter(item => !item.isVirtual),
+      ...virtualPoints
+    ]
+  } catch (error) {
+    console.error('加载虚拟数据点失败:', error)
   }
 }
 
@@ -649,9 +690,22 @@ const confirmDelete = (row: DataPointItem) => {
     .catch(() => {})
 }
 
+// 跳转到虚拟节点页面
+const goToVirtualNodes = () => {
+  router.push({ path: '/virtual-nodes', query: { deviceId: deviceId.value } })
+}
+
+// 打开虚拟节点编辑对话框
+const openVirtualNodeEdit = (row: DataPointWithVirtual) => {
+  if (row.isVirtual) {
+    router.push({ path: '/virtual-nodes', query: { deviceId: deviceId.value, editId: row.id } })
+  }
+}
+
 onMounted(() => {
   fetchDevice()
   fetchDataPoints()
+  loadVirtualDataPoints()
   loadDataValueTypes()
   loadModbusByteOrders()
   startRealtimePolling()
