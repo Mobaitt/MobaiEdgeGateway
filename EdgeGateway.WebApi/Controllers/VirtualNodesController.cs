@@ -189,6 +189,8 @@ public class VirtualNodesController : ControllerBase
                 Quality = result.Quality,
                 ErrorMessage = result.ErrorMessage,
                 Timestamp = result.Timestamp,
+                VirtualDataPointId = result.VirtualDataPointId,
+                VirtualDataPointTag = result.VirtualDataPointTag,
                 DependencyValues = result.DependencyValues
             };
 
@@ -222,6 +224,8 @@ public class VirtualNodesController : ControllerBase
                 Quality = r.Quality,
                 ErrorMessage = r.ErrorMessage,
                 Timestamp = r.Timestamp,
+                VirtualDataPointId = r.VirtualDataPointId,
+                VirtualDataPointTag = r.VirtualDataPointTag,
                 DependencyValues = r.DependencyValues
             }).ToList();
 
@@ -252,6 +256,8 @@ public class VirtualNodesController : ControllerBase
                 Quality = r.Quality,
                 ErrorMessage = r.ErrorMessage,
                 Timestamp = r.Timestamp,
+                VirtualDataPointId = r.VirtualDataPointId,
+                VirtualDataPointTag = r.VirtualDataPointTag,
                 DependencyValues = r.DependencyValues
             }).ToList();
 

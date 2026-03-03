@@ -110,6 +110,12 @@ public class VirtualNodeCalculationResultResponse
     /// <summary>计算时间戳</summary>
     public DateTime Timestamp { get; set; }
 
+    /// <summary>虚拟数据点 ID</summary>
+    public int VirtualDataPointId { get; set; }
+
+    /// <summary>虚拟数据点 Tag</summary>
+    public string? VirtualDataPointTag { get; set; }
+
     /// <summary>依赖数据值</summary>
     public Dictionary<string, object?> DependencyValues { get; set; } = new();
 }
