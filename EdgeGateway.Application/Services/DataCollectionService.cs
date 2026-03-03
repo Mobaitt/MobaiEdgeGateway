@@ -22,11 +22,10 @@ namespace EdgeGateway.Application.Services;
 /// - 按聚合窗口间隔（默认 1 秒）批量推送全量数据
 /// - 数据点超过 1 分钟未更新则自动置为 null（Uncertain 状态）
 /// - 确保同一通道绑定的所有设备数据始终完整发送，不会缺失
-/// 
+///
 /// 缓存架构：
 /// - _dataSnapshot: 全量数据快照（DataPointId → TimestampedData），唯一数据源
 /// - _tagIndex: Tag 索引（Tag → DataPointId），支持按 Tag 快速查询
-/// - _tagDataCache: 已废弃，保留用于兼容虚拟节点引擎
 /// </summary>
 public class DataCollectionService
 {
@@ -47,36 +46,27 @@ public class DataCollectionService
     // Tag 索引：Tag → DataPointId，支持按 Tag 快速查询
     private readonly ConcurrentDictionary<string, int> _tagIndex = new();
 
-    // 按 Tag 索引的数据缓存：Tag → 带时间戳的值（用于虚拟节点计算，兼容用）
-    private readonly ConcurrentDictionary<string, TimestampedValue> _tagDataCache = new();
-    private readonly TimeSpan _tagCacheExpiration = TimeSpan.FromSeconds(30); // 缓存 30 秒
-
     private readonly SemaphoreSlim _snapshotLock = new(1, 1);
     private readonly int _aggregateWindowMs = 1000; // 聚合窗口：1 秒
-    private readonly int _dataTimeoutMinutes = 1;   // 数据超时时间：1 分钟
+    private readonly TimeSpan _dataExpiration = TimeSpan.FromSeconds(30); // 数据过期时间：30 秒
     private CancellationTokenSource? _aggregatorCts;
     private Task? _aggregatorTask;
 
     /// <summary>
-    /// 带时间戳的数据包装
+    /// 带时间戳的数据包装（支持缓存过期机制）
     /// </summary>
     private class TimestampedData
     {
         public CollectedData Data { get; set; } = null!;
         public DateTime LastUpdateTime { get; set; } = DateTime.UtcNow;
-    }
-    
-    /// <summary>
-    /// 带时间戳的值（用于 Tag 缓存）
-    /// </summary>
-    private class TimestampedValue
-    {
-        public object? Value { get; set; }
-        public DateTime Timestamp { get; set; } = DateTime.UtcNow;
-        
+
+        /// <summary>
+        /// 检查数据是否已过期（超过 30 秒没有更新）
+        /// </summary>
         public bool IsExpired(TimeSpan expiration)
         {
-            return (DateTime.UtcNow - Timestamp) > expiration;
+            return LastUpdateTime == DateTime.MinValue ||
+                   (DateTime.UtcNow - LastUpdateTime) > expiration;
         }
     }
 
@@ -106,29 +96,23 @@ public class DataCollectionService
 
     /// <summary>
     /// 根据 Tag 获取快照数据值（供虚拟节点引擎使用）
-    /// 优先从 _tagDataCache 获取，如果没有则从 _dataSnapshot 查询
+    /// 通过 _tagIndex 快速定位 DataPointId，然后从 _dataSnapshot 查询
+    /// 数据过期时间为 30 秒，过期数据返回 null
     /// </summary>
     private object? GetSnapshotValue(string tag)
     {
-        // 尝试从 Tag 缓存获取（快速路径）
-        if (_tagDataCache.TryGetValue(tag, out var timestampedValue))
-        {
-            if (!timestampedValue.IsExpired(_tagCacheExpiration) && timestampedValue.Value != null)
-            {
-                return timestampedValue.Value;
-            }
-        }
-
         // 从快照中查询（通过 Tag 索引）
         if (_tagIndex.TryGetValue(tag, out var dataPointId))
         {
             if (_dataSnapshot.TryGetValue(dataPointId, out var snapshotData))
             {
-                if (snapshotData.LastUpdateTime == DateTime.MinValue ||
-                    (DateTime.UtcNow - snapshotData.LastUpdateTime).TotalMinutes < _dataTimeoutMinutes)
+                // 数据过期，返回 null
+                if (snapshotData.IsExpired(_dataExpiration))
                 {
-                    return snapshotData.Data.Value;
+                    return null;
                 }
+
+                return snapshotData.Data.Value;
             }
         }
 
@@ -193,7 +177,7 @@ public class DataCollectionService
                             Quality = DataQuality.Uncertain,
                             Timestamp = DateTime.UtcNow
                         },
-                        LastUpdateTime = DateTime.MinValue // 使用 MinValue，这样会被视为超时
+                        LastUpdateTime = DateTime.MinValue // 使用 MinValue，这样会被视为过期
                     };
                 }
             }
@@ -252,7 +236,7 @@ public class DataCollectionService
     }
 
     /// <summary>
-    /// 将全量快照数据批量推送给发送服务（超过 1 分钟未更新的数据置为 null）
+    /// 将全量快照数据批量推送给发送服务（超过 30 秒未更新的数据置为 null）
     /// </summary>
     private async Task FlushSnapshotAsync(CancellationToken cancellationToken)
     {
@@ -262,23 +246,14 @@ public class DataCollectionService
             if (_dataSnapshot.Count == 0)
                 return;
 
-            var now = DateTime.UtcNow;
-            var timeoutThreshold = now.AddMinutes(-_dataTimeoutMinutes);
-
             // 复制当前全量快照，超时数据置为 null
             var dataToSend = new List<CollectedData>();
             foreach (var kvp in _dataSnapshot)
             {
-                // LastUpdateTime 为 MinValue 表示初始占位数据，保持 Uncertain 状态
-                // 超过 1 分钟未更新的数据也置为 Uncertain
-                if (kvp.Value.LastUpdateTime == DateTime.MinValue)
+                // 使用 IsExpired 方法统一判断过期
+                if (kvp.Value.IsExpired(_dataExpiration))
                 {
-                    // 初始占位数据，保持原样（Uncertain）
-                    dataToSend.Add(kvp.Value.Data);
-                }
-                else if (kvp.Value.LastUpdateTime < timeoutThreshold)
-                {
-                    // 超过 1 分钟未更新，创建 null 占位数据
+                    // 超过 30 秒没有成功数据，创建 null 占位数据
                     dataToSend.Add(CreateTimeoutData(kvp.Value.Data));
                 }
                 else
@@ -320,7 +295,8 @@ public class DataCollectionService
 
     /// <summary>
     /// 更新数据点到全量快照（线程安全）
-    /// 只更新质量为 Good 的数据，Bad/Uncertain 数据保持上次成功值
+    /// 质量为 Good 且 Value 不为 null 时，更新数据和 LastUpdateTime
+    /// 质量为 Good 但 Value 为 null 时，保持上次成功值，不更新 LastUpdateTime（这样超过 30 秒会过期）
     /// </summary>
     public async Task UpdateSnapshotAsync(IEnumerable<CollectedData> data, CancellationToken cancellationToken)
     {
@@ -329,7 +305,7 @@ public class DataCollectionService
         {
             foreach (var item in data)
             {
-                // 只更新质量为 Good 的数据
+                // 只处理质量为 Good 的数据
                 if (item.Quality != DataQuality.Good)
                 {
                     // 采集失败时，保持快照中的上次成功值，不更新
@@ -342,26 +318,21 @@ public class DataCollectionService
                 // 更新或添加数据点的最新值
                 if (_dataSnapshot.TryGetValue(item.DataPointId, out var existing))
                 {
-                    existing.Data = item;
-                    existing.LastUpdateTime = DateTime.UtcNow;
+                    // 只有 Value 不为 null 时，才更新数据和 LastUpdateTime
+                    if (item.Value != null)
+                    {
+                        existing.Data = item;
+                        existing.LastUpdateTime = DateTime.UtcNow;
+                    }
+                    // 如果 Value 为 null，保持 existing.Data 和 LastUpdateTime 不变
+                    // 这样超过 30 秒后会自动过期
                 }
                 else
                 {
                     _dataSnapshot[item.DataPointId] = new TimestampedData
                     {
                         Data = item,
-                        LastUpdateTime = DateTime.UtcNow
-                    };
-                }
-
-                // 同时更新 Tag 缓存（用于虚拟节点计算，兼容用）
-                // 只有值不为 null 时才更新，保持上次的成功值
-                if (item.Value != null)
-                {
-                    _tagDataCache[item.Tag] = new TimestampedValue
-                    {
-                        Value = item.Value,
-                        Timestamp = DateTime.UtcNow
+                        LastUpdateTime = item.Value != null ? DateTime.UtcNow : DateTime.MinValue
                     };
                 }
             }
@@ -374,27 +345,20 @@ public class DataCollectionService
 
     /// <summary>
     /// 获取指定设备的所有数据点快照数据（用于 realtime 接口）
-    /// 超过 1 分钟未更新的数据返回 null（Uncertain）
+    /// 超过 30 秒未更新的数据返回 null（Uncertain）
     /// </summary>
     public List<CollectedData> GetDeviceSnapshotData(int deviceId)
     {
-        var now = DateTime.UtcNow;
-        var timeoutThreshold = now.AddMinutes(-_dataTimeoutMinutes);
-
         var results = new List<CollectedData>();
         foreach (var kvp in _dataSnapshot)
         {
             if (kvp.Value.Data.DeviceId != deviceId)
                 continue;
 
-            // LastUpdateTime 为 MinValue 表示初始占位数据，保持 Uncertain 状态
-            if (kvp.Value.LastUpdateTime == DateTime.MinValue)
+            // 使用 IsExpired 方法统一判断过期
+            if (kvp.Value.IsExpired(_dataExpiration))
             {
-                results.Add(kvp.Value.Data);
-            }
-            else if (kvp.Value.LastUpdateTime < timeoutThreshold)
-            {
-                // 超过 1 分钟未更新，返回 null 占位数据
+                // 超过 30 秒没有成功数据，返回 null 占位数据
                 results.Add(CreateTimeoutData(kvp.Value.Data));
             }
             else
@@ -723,11 +687,14 @@ public class DataCollectionService
                 if (virtualDataPoint != null)
                 {
                     var snapshotKey = -virtualDataPoint.Id;
-                    
+
                     // 更新快照
                     await _snapshotLock.WaitAsync(cancellationToken);
                     try
                     {
+                        // 维护 Tag 索引
+                        _tagIndex[virtualDataPoint.Tag] = snapshotKey;
+
                         _dataSnapshot[snapshotKey] = new TimestampedData
                         {
                             Data = new CollectedData
@@ -746,16 +713,6 @@ public class DataCollectionService
                     finally
                     {
                         _snapshotLock.Release();
-                    }
-
-                    // 同时更新 Tag 缓存
-                    if (virtualResult.Value != null)
-                    {
-                        _tagDataCache[virtualDataPoint.Tag] = new TimestampedValue
-                        {
-                            Value = virtualResult.Value,
-                            Timestamp = DateTime.UtcNow
-                        };
                     }
                 }
             }
