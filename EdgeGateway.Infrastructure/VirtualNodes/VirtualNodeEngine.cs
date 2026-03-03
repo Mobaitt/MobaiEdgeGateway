@@ -333,9 +333,6 @@ public class VirtualNodeEngine : IVirtualNodeEngine
                 dependencies.Add(tag);
             }
         }
-
-        _logger.LogInformation("表达式 '{Expression}' 解析到依赖：{Dependencies}", 
-            expression, string.Join(", ", dependencies));
         
         return dependencies.Distinct().ToList();
     }
