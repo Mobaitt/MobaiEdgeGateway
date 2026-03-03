@@ -203,6 +203,10 @@ public class VirtualNodeEngine : IVirtualNodeEngine
                     await updateContext.SaveChangesAsync(cancellationToken);
                 }
 
+                // 设置虚拟数据点 ID 和 Tag
+                result.VirtualDataPointId = virtualDataPoint.Id;
+                result.VirtualDataPointTag = virtualDataPoint.Tag;
+
                 _logger.LogDebug("虚拟数据点 {Tag} 计算完成：{Value}", virtualDataPoint.Tag, result.Value);
 
                 return result;

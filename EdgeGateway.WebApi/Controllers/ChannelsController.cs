@@ -94,7 +94,23 @@ public class ChannelsController : ControllerBase
     }
 
     /// <summary>
-    /// 为通道添加单个数据点映射（支持设置别名）
+    /// 批量绑定虚拟数据点到通道
+    /// 建立"虚拟数据点 → 通道"的发送映射关系
+    /// </summary>
+    /// <param name="channelId">目标通道 ID</param>
+    /// <param name="req">包含虚拟数据点 ID 列表</param>
+    [HttpPost("{channelId:int}/bind-virtual-datapoints")]
+    [ProducesResponseType(typeof(ApiResponse), 200)]
+    [ProducesResponseType(typeof(ApiResponse), 404)]
+    public async Task<IActionResult> BindVirtualDataPoints(int channelId, [FromBody] BindDataPointsRequest req)
+    {
+        await _deviceService.BindVirtualDataPointsToChannelAsync(channelId, req.DataPointIds);
+        _logger.LogInformation("通道 ID={ChannelId} 绑定 {Count} 个虚拟数据点", channelId, req.DataPointIds.Count);
+        return Ok(ApiResponse.Ok($"成功绑定 {req.DataPointIds.Count} 个虚拟数据点"));
+    }
+
+    /// <summary>
+    /// 为通道添加单个数据点映射
     /// </summary>
     [HttpPost("{channelId:int}/mappings")]
     [ProducesResponseType(typeof(ApiResponse), 200)]
@@ -112,15 +128,16 @@ public class ChannelsController : ControllerBase
         var mappings = await _deviceService.GetChannelMappingsAsync(channelId);
         var result   = mappings.Select(m => new MappingResponse
         {
-            Id              = m.Id,
-            ChannelId       = m.ChannelId,
-            ChannelName     = m.Channel?.Name ?? string.Empty,
-            DataPointId     = m.DataPointId,
-            DataPointTag    = m.DataPoint?.Tag ?? string.Empty,
-            DataPointName   = m.DataPoint?.Name ?? string.Empty,
-            AliasName       = m.AliasName,
-            IsEnabled       = m.IsEnabled,
-            CreatedAt       = m.CreatedAt
+            Id                 = m.Id,
+            ChannelId          = m.ChannelId,
+            ChannelName        = m.Channel?.Name ?? string.Empty,
+            DataPointId        = m.DataPointId,
+            VirtualDataPointId = m.VirtualDataPointId,
+            DataPointTag       = m.DataPoint?.Tag ?? m.VirtualDataPoint?.Tag ?? string.Empty,
+            DataPointName      = m.DataPoint?.Name ?? m.VirtualDataPoint?.Name ?? string.Empty,
+            IsEnabled          = m.IsEnabled,
+            CreatedAt          = m.CreatedAt,
+            IsVirtual          = m.VirtualDataPointId.HasValue
         }).ToList();
 
         return Ok(ApiResponse<List<MappingResponse>>.Ok(result, $"共 {result.Count} 条映射"));

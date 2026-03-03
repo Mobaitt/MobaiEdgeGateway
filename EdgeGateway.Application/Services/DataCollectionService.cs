@@ -650,28 +650,31 @@ public class DataCollectionService
                 // 将虚拟节点计算结果也更新到快照
                 foreach (var virtualResult in virtualResults.Where(r => r.Success))
                 {
-                    // 更新快照（虚拟数据点使用负 ID）
-                    var virtualDataPoint = await FindVirtualDataPointByTagAsync(virtualResult.DependencyValues.Keys.FirstOrDefault() ?? data.Tag);
-                    if (virtualDataPoint != null)
+                    // 使用虚拟数据点的 Tag 查找虚拟数据点
+                    if (!string.IsNullOrEmpty(virtualResult.VirtualDataPointTag))
                     {
-                        var snapshotKey = -virtualDataPoint.Id;
-                        _dataSnapshot[snapshotKey] = new TimestampedData
+                        var virtualDataPoint = await FindVirtualDataPointByTagAsync(virtualResult.VirtualDataPointTag);
+                        if (virtualDataPoint != null)
                         {
-                            Data = new CollectedData
+                            var snapshotKey = -virtualDataPoint.Id;
+                            _dataSnapshot[snapshotKey] = new TimestampedData
                             {
-                                DataPointId = snapshotKey,
-                                Tag = virtualDataPoint.Tag,
-                                DeviceId = virtualDataPoint.DeviceId,
-                                DeviceName = virtualDataPoint.Device?.Name ?? "Unknown",
-                                Value = virtualResult.Value,
-                                Quality = virtualResult.Quality,
-                                Timestamp = virtualResult.Timestamp
-                            },
-                            LastUpdateTime = DateTime.UtcNow
-                        };
+                                Data = new CollectedData
+                                {
+                                    DataPointId = snapshotKey,
+                                    Tag = virtualDataPoint.Tag,
+                                    DeviceId = virtualDataPoint.DeviceId,
+                                    DeviceName = virtualDataPoint.Device?.Name ?? "Unknown",
+                                    Value = virtualResult.Value,
+                                    Quality = virtualResult.Quality,
+                                    Timestamp = virtualResult.Timestamp
+                                },
+                                LastUpdateTime = DateTime.UtcNow
+                            };
+                        }
+                        _logger.LogDebug("虚拟节点计算完成：{Tag} = {Value}",
+                            virtualResult.VirtualDataPointTag, virtualResult.Value);
                     }
-                    _logger.LogDebug("虚拟节点计算完成：{Tag} = {Value}", 
-                        virtualResult.DependencyValues.Keys.FirstOrDefault() ?? "Unknown", virtualResult.Value);
                 }
             }
             catch (Exception ex)

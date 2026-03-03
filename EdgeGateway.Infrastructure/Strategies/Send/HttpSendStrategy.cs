@@ -111,11 +111,6 @@ public class HttpSendStrategy : ISendStrategy
     {
         try
         {
-            // 构建映射字典：DataPointId → AliasName
-            var aliasMap = package.Mappings
-                .Where(m => m.IsEnabled)
-                .ToDictionary(m => m.DataPointId, m => m.AliasName);
-
             // 构建统一格式的数据
             // 格式：{ "name": "DEV_SIMULATOR_001.DEV_SIMULATOR_001.Temperature", "value": 61.42, "unit": "℃", "quality": "Good" }
             var payload = new
@@ -139,10 +134,10 @@ public class HttpSendStrategy : ISendStrategy
             {
                 // 服务端模式：更新缓存数据
                 // 使用与注册时相同的路径
-                var endpointPath = _endpoint.StartsWith("/api/http-data/", StringComparison.OrdinalIgnoreCase) 
-                    ? _endpoint 
+                var endpointPath = _endpoint.StartsWith("/api/http-data/", StringComparison.OrdinalIgnoreCase)
+                    ? _endpoint
                     : $"/api/http-data/{_endpoint.TrimStart('/')}";
-                
+
                 _httpListenerService.UpdateData(endpointPath, json);
                 _logger.LogDebug("HTTP 服务端数据已更新 -> {Endpoint}", endpointPath);
                 return SendResult.Success(package.DataList.Count());

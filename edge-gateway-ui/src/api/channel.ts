@@ -16,6 +16,10 @@ export const deleteChannel = (channelId) => request.delete(`/channels/${channelI
 export const bindDataPoints = (channelId, dataPointIds) =>
   request.post(`/channels/${channelId}/bind-datapoints`, { dataPointIds })
 
+/** 批量绑定虚拟数据点到通道 */
+export const bindVirtualDataPoints = (channelId, virtualDataPointIds) =>
+  request.post(`/channels/${channelId}/bind-virtual-datapoints`, { dataPointIds: virtualDataPointIds })
+
 /** 获取通道的数据点映射列表 */
 export const getMappings = (channelId) =>
   request.get(`/channels/${channelId}/mappings`)

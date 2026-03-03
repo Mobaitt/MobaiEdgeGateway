@@ -62,5 +62,7 @@ export interface VirtualNodeCalculationResult {
   quality: number
   errorMessage: string | null
   timestamp: string
+  virtualDataPointId: number
+  virtualDataPointTag: string | null
   dependencyValues: Record<string, any>
 }

@@ -71,11 +71,6 @@ public class WebSocketSendStrategy : ISendStrategy
     {
         try
         {
-            // 构建映射字典：DataPointId → AliasName
-            var aliasMap = package.Mappings
-                .Where(m => m.IsEnabled)
-                .ToDictionary(m => m.DataPointId, m => m.AliasName);
-
             // 构建推送数据（包含所有数据点，不过滤质量）
             // 格式统一为：{ "name": "DEV_SIMULATOR_001.DEV_SIMULATOR_001.Temperature", "value": 61.42, "unit": "℃", "quality": "Good" }
             var payload = new

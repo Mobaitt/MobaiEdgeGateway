@@ -58,11 +58,6 @@ public class LocalFileSendStrategy : ISendStrategy
         await _writeLock.WaitAsync(cancellationToken);
         try
         {
-            // 构建数据行（支持别名映射）
-            var aliasMap = package.Mappings
-                .Where(m => m.IsEnabled)
-                .ToDictionary(m => m.DataPointId, m => m.AliasName);
-
             // 构建统一格式的数据
             // 格式：{ "name": "DEV_SIMULATOR_001.DEV_SIMULATOR_001.Temperature", "value": 61.42, "unit": "℃", "quality": "Good" }
             var record = new

@@ -33,6 +33,16 @@ public class VirtualNodeCalculationResult
     public DateTime Timestamp { get; set; } = DateTime.UtcNow;
 
     /// <summary>
+    /// 虚拟数据点 ID
+    /// </summary>
+    public int VirtualDataPointId { get; set; }
+
+    /// <summary>
+    /// 虚拟数据点 Tag
+    /// </summary>
+    public string? VirtualDataPointTag { get; set; }
+
+    /// <summary>
     /// 依赖的数据点值（用于调试）
     /// </summary>
     public Dictionary<string, object?> DependencyValues { get; set; } = new();

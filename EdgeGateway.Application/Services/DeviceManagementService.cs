@@ -15,6 +15,7 @@ public class DeviceManagementService
     private readonly IChannelMappingRepository _mappingRepo;
     private readonly DataCollectionService _collectionService;
     private readonly DataSendService _sendService;
+    private readonly VirtualNodeManagementService _virtualNodeService;
     private readonly ILogger<DeviceManagementService> _logger;
 
     public DeviceManagementService(
@@ -24,6 +25,7 @@ public class DeviceManagementService
         IChannelMappingRepository mappingRepo,
         DataCollectionService collectionService,
         DataSendService sendService,
+        VirtualNodeManagementService virtualNodeService,
         ILogger<DeviceManagementService> logger)
     {
         _deviceRepo         = deviceRepo;
@@ -32,6 +34,7 @@ public class DeviceManagementService
         _mappingRepo        = mappingRepo;
         _collectionService  = collectionService;
         _sendService        = sendService;
+        _virtualNodeService = virtualNodeService;
         _logger             = logger;
     }
 
@@ -183,6 +186,41 @@ public class DeviceManagementService
         {
             await _mappingRepo.AddRangeAsync(newMappings);
             _logger.LogInformation("通道 [{ChannelName}] 成功绑定 {Count} 个数据点",
+                channel.Name, newMappings.Count);
+        }
+    }
+
+    /// <summary>
+    /// 将虚拟数据点绑定到发送通道（建立映射关系）
+    /// 虚拟数据点计算后的数据将通过该通道发送出去
+    /// </summary>
+    /// <param name="channelId">目标发送通道 ID</param>
+    /// <param name="virtualDataPointIds">要绑定的虚拟数据点 ID 列表</param>
+    public async Task BindVirtualDataPointsToChannelAsync(int channelId, IEnumerable<int> virtualDataPointIds)
+    {
+        var channel = await _channelRepo.GetByIdAsync(channelId)
+            ?? throw new InvalidOperationException($"通道 ID={channelId} 不存在");
+
+        var existingMappings = (await _mappingRepo.GetByChannelIdAsync(channelId))
+            .Select(m => m.VirtualDataPointId)
+            .ToHashSet();
+
+        // 仅添加尚未绑定的虚拟数据点（避免重复）
+        var newMappings = virtualDataPointIds
+            .Where(id => !existingMappings.Contains(id) && id != 0)
+            .Select(id => new ChannelDataPointMapping
+            {
+                ChannelId          = channelId,
+                VirtualDataPointId = id,
+                IsEnabled          = true
+            })
+            .ToList();
+
+        if (newMappings.Any())
+        {
+            await _mappingRepo.AddRangeAsync(newMappings);
+            await _sendService.RefreshChannelsCacheForceAsync();
+            _logger.LogInformation("通道 [{ChannelName}] 成功绑定 {Count} 个虚拟数据点",
                 channel.Name, newMappings.Count);
         }
     }

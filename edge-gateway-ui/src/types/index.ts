@@ -36,15 +36,34 @@ export interface DataPointItem {
   registerLength?: number
 }
 
+/** 虚拟数据点 */
+export interface VirtualDataPoint {
+  id: number
+  deviceId: number
+  name: string
+  tag: string
+  description?: string
+  expression: string
+  calculationType: number
+  dataType: number
+  unit?: string
+  isEnabled: boolean
+  dependencyTags: string
+  lastValueJson?: string
+  lastCalculationTime?: string
+  createdAt?: string
+}
+
 /** 通道映射项 */
 export interface MappingItem {
   id: number
-  dataPointId: number
+  dataPointId?: number
+  virtualDataPointId?: number
   dataPointTag: string
   dataPointName: string
-  aliasName?: string
   isEnabled: boolean
   createdAt?: string
+  isVirtual?: boolean
 }
 
 /** 发送通道 */

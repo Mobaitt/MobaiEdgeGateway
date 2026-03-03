@@ -23,12 +23,6 @@ public class ChannelDataPointMapping
     /// <summary>发送时是否启用此映射</summary>
     public bool IsEnabled { get; set; } = true;
 
-    /// <summary>
-    /// 发送时的字段别名（可选）
-    /// 例如：数据点 Tag 为 "Device01.Temp"，但发到某个系统时需要叫 "temperature"
-    /// </summary>
-    public string? AliasName { get; set; }
-
     /// <summary>创建时间</summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
