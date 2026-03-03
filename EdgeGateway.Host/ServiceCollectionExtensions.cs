@@ -99,7 +99,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<DeviceManagementService>();
         services.AddSingleton<DataSendService>();
         services.AddSingleton<DataCollectionService>();
-        services.AddSingleton<RealtimeDataService>();
         services.AddScoped<RuleManagementService>();
         services.AddScoped<VirtualNodeManagementService>();
 

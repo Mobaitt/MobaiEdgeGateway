@@ -22,13 +22,17 @@ namespace EdgeGateway.Application.Services;
 /// - 按聚合窗口间隔（默认 1 秒）批量推送全量数据
 /// - 数据点超过 1 分钟未更新则自动置为 null（Uncertain 状态）
 /// - 确保同一通道绑定的所有设备数据始终完整发送，不会缺失
+/// 
+/// 缓存架构：
+/// - _dataSnapshot: 全量数据快照（DataPointId → TimestampedData），唯一数据源
+/// - _tagIndex: Tag 索引（Tag → DataPointId），支持按 Tag 快速查询
+/// - _tagDataCache: 已废弃，保留用于兼容虚拟节点引擎
 /// </summary>
 public class DataCollectionService
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly CollectionStrategyRegistry _strategyRegistry;
     private readonly DataSendService _sendService;
-    private readonly RealtimeDataService _realtimeDataService;
     private readonly IRuleEngine _ruleEngine;
     private readonly IVirtualNodeEngine _virtualNodeEngine;
     private readonly IDbContextFactory<GatewayDbContext> _dbContextFactory;
@@ -37,13 +41,16 @@ public class DataCollectionService
     // 每个设备的采集任务句柄（设备 Id → CancellationTokenSource）
     private readonly Dictionary<int, CancellationTokenSource> _deviceTasks = new();
 
-    // 全量数据快照：DataPointId → 带时间戳的采集数据
+    // 全量数据快照：DataPointId → 带时间戳的采集数据（唯一数据源）
     private readonly Dictionary<int, TimestampedData> _dataSnapshot = new();
-    
-    // 按 Tag 索引的数据缓存：Tag → 带时间戳的值（用于虚拟节点计算）
+
+    // Tag 索引：Tag → DataPointId，支持按 Tag 快速查询
+    private readonly ConcurrentDictionary<string, int> _tagIndex = new();
+
+    // 按 Tag 索引的数据缓存：Tag → 带时间戳的值（用于虚拟节点计算，兼容用）
     private readonly ConcurrentDictionary<string, TimestampedValue> _tagDataCache = new();
     private readonly TimeSpan _tagCacheExpiration = TimeSpan.FromSeconds(30); // 缓存 30 秒
-    
+
     private readonly SemaphoreSlim _snapshotLock = new(1, 1);
     private readonly int _aggregateWindowMs = 1000; // 聚合窗口：1 秒
     private readonly int _dataTimeoutMinutes = 1;   // 数据超时时间：1 分钟
@@ -77,7 +84,6 @@ public class DataCollectionService
         IServiceProvider serviceProvider,
         CollectionStrategyRegistry strategyRegistry,
         DataSendService sendService,
-        RealtimeDataService realtimeDataService,
         IRuleEngine ruleEngine,
         IVirtualNodeEngine virtualNodeEngine,
         IDbContextFactory<GatewayDbContext> dbContextFactory,
@@ -86,36 +92,46 @@ public class DataCollectionService
         _serviceProvider     = serviceProvider;
         _strategyRegistry    = strategyRegistry;
         _sendService         = sendService;
-        _realtimeDataService = realtimeDataService;
         _ruleEngine          = ruleEngine;
         _virtualNodeEngine   = virtualNodeEngine;
         _dbContextFactory    = dbContextFactory;
         _logger              = logger;
-        
+
         // 设置虚拟节点引擎的快照数据获取委托
         if (virtualNodeEngine is EdgeGateway.Infrastructure.VirtualNodes.VirtualNodeEngine engine)
         {
             engine.SetDataSnapshotGetter(GetSnapshotValue);
         }
     }
-    
+
     /// <summary>
     /// 根据 Tag 获取快照数据值（供虚拟节点引擎使用）
+    /// 优先从 _tagDataCache 获取，如果没有则从 _dataSnapshot 查询
     /// </summary>
     private object? GetSnapshotValue(string tag)
     {
+        // 尝试从 Tag 缓存获取（快速路径）
         if (_tagDataCache.TryGetValue(tag, out var timestampedValue))
         {
-            // 检查是否过期
-            if (!timestampedValue.IsExpired(_tagCacheExpiration))
+            if (!timestampedValue.IsExpired(_tagCacheExpiration) && timestampedValue.Value != null)
             {
-                // 检查值是否为 null（采集失败时值为 null）
-                if (timestampedValue.Value != null)
+                return timestampedValue.Value;
+            }
+        }
+
+        // 从快照中查询（通过 Tag 索引）
+        if (_tagIndex.TryGetValue(tag, out var dataPointId))
+        {
+            if (_dataSnapshot.TryGetValue(dataPointId, out var snapshotData))
+            {
+                if (snapshotData.LastUpdateTime == DateTime.MinValue ||
+                    (DateTime.UtcNow - snapshotData.LastUpdateTime).TotalMinutes < _dataTimeoutMinutes)
                 {
-                    return timestampedValue.Value;
+                    return snapshotData.Data.Value;
                 }
             }
         }
+
         return null;
     }
 
@@ -320,6 +336,9 @@ public class DataCollectionService
                     continue;
                 }
 
+                // 维护 Tag 索引
+                _tagIndex[item.Tag] = item.DataPointId;
+
                 // 更新或添加数据点的最新值
                 if (_dataSnapshot.TryGetValue(item.DataPointId, out var existing))
                 {
@@ -334,8 +353,8 @@ public class DataCollectionService
                         LastUpdateTime = DateTime.UtcNow
                     };
                 }
-                
-                // 同时更新 Tag 缓存（用于虚拟节点计算）
+
+                // 同时更新 Tag 缓存（用于虚拟节点计算，兼容用）
                 // 只有值不为 null 时才更新，保持上次的成功值
                 if (item.Value != null)
                 {
@@ -455,9 +474,6 @@ public class DataCollectionService
                         // 执行规则引擎处理
                         var processedData = await ExecuteRuleEngineAsync(collectedData, cts.Token);
 
-                        // 更新实时数据服务
-                        _realtimeDataService.UpdateData(processedData);
-
                         // 更新到全量快照（由聚合器按窗口间隔批量推送）
                         await UpdateSnapshotAsync(processedData, cts.Token);
 
@@ -490,7 +506,7 @@ public class DataCollectionService
     }
 
     /// <summary>
-    /// 停止指定设备的采集任务
+    /// 停止指定设备的采集任务，并清理该设备的快照数据
     /// </summary>
     public void StopDevice(int deviceId)
     {
@@ -498,7 +514,10 @@ public class DataCollectionService
         {
             cts.Cancel();
             _deviceTasks.Remove(deviceId);
-            _realtimeDataService.ClearDeviceData(deviceId);
+            
+            // 清理该设备的快照数据和 Tag 索引
+            ClearDeviceSnapshotData(deviceId);
+            
             _logger.LogInformation("设备 ID [{DeviceId}] 采集任务已停止", deviceId);
         }
     }
@@ -575,7 +594,10 @@ public class DataCollectionService
         {
             await existingCts.CancelAsync();
             _deviceTasks.Remove(deviceId);
-            _realtimeDataService.ClearDeviceData(deviceId);
+            
+            // 清理该设备的快照数据
+            ClearDeviceSnapshotData(deviceId);
+            
             _logger.LogInformation("设备 ID [{DeviceId}] 原有采集任务已停止，准备重启", deviceId);
         }
 
@@ -735,23 +757,47 @@ public class DataCollectionService
                             Timestamp = DateTime.UtcNow
                         };
                     }
-
-                    // 更新实时数据服务
-                    _realtimeDataService.UpdateData(new[]
-                    {
-                        new CollectedData
-                        {
-                            DataPointId = snapshotKey,
-                            Tag = virtualDataPoint.Tag,
-                            DeviceId = virtualDataPoint.DeviceId,
-                            DeviceName = virtualDataPoint.Device?.Name ?? "Unknown",
-                            Value = virtualResult.Value,
-                            Quality = virtualResult.Quality,
-                            Timestamp = virtualResult.Timestamp
-                        }
-                    });
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// 清理指定设备的快照数据和 Tag 索引
+    /// </summary>
+    private void ClearDeviceSnapshotData(int deviceId)
+    {
+        _snapshotLock.Wait();
+        try
+        {
+            // 找出该设备的所有数据点
+            var keysToRemove = _dataSnapshot
+                .Where(kvp => kvp.Value.Data.DeviceId == deviceId)
+                .Select(kvp => kvp.Key)
+                .ToList();
+
+            // 从快照中移除
+            foreach (var key in keysToRemove)
+            {
+                _dataSnapshot.Remove(key);
+            }
+
+            // 从 Tag 索引中移除
+            var tagKeysToRemove = _tagIndex
+                .Where(kvp => _dataSnapshot.ContainsKey(kvp.Value) == false)
+                .Select(kvp => kvp.Key)
+                .ToList();
+
+            foreach (var tagKey in tagKeysToRemove)
+            {
+                _tagIndex.TryRemove(tagKey, out _);
+            }
+
+            _logger.LogDebug("设备 ID={DeviceId} 的快照数据已清理，移除 {Count} 个数据点", deviceId, keysToRemove.Count);
+        }
+        finally
+        {
+            _snapshotLock.Release();
         }
     }
 
