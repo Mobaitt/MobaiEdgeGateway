@@ -23,6 +23,12 @@ public class ChannelDataPointMapping
     /// <summary>发送时是否启用此映射</summary>
     public bool IsEnabled { get; set; } = true;
 
+    /// <summary>数据点 Tag（绑定时保存的快照，虚拟点位使用完整 Tag）</summary>
+    public string? DataPointTag { get; set; }
+
+    /// <summary>数据点名称（绑定时保存的快照，虚拟点位使用完整名称）</summary>
+    public string? DataPointName { get; set; }
+
     /// <summary>创建时间</summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

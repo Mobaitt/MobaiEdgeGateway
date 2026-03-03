@@ -133,8 +133,9 @@ public class ChannelsController : ControllerBase
             ChannelName        = m.Channel?.Name ?? string.Empty,
             DataPointId        = m.DataPointId,
             VirtualDataPointId = m.VirtualDataPointId,
-            DataPointTag       = m.DataPoint?.Tag ?? m.VirtualDataPoint?.Tag ?? string.Empty,
-            DataPointName      = m.DataPoint?.Name ?? m.VirtualDataPoint?.Name ?? string.Empty,
+            // 优先使用保存的 DataPointTag 和 DataPointName，如果没有则从导航属性获取
+            DataPointTag       = m.DataPointTag ?? m.DataPoint?.Tag ?? m.VirtualDataPoint?.Tag ?? string.Empty,
+            DataPointName      = m.DataPointName ?? m.DataPoint?.Name ?? m.VirtualDataPoint?.Name ?? string.Empty,
             IsEnabled          = m.IsEnabled,
             CreatedAt          = m.CreatedAt,
             IsVirtual          = m.VirtualDataPointId.HasValue

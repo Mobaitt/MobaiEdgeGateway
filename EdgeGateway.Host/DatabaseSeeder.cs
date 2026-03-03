@@ -171,24 +171,57 @@ public class DatabaseSeeder
             var httpServerChannel = channels.First(c => c.Code == "HTTP_SERVER");
             foreach (var dp in dataPoints)
             {
-                mappings.Add(new ChannelDataPointMapping { ChannelId = httpServerChannel.Id, DataPointId = dp.Id, IsEnabled = true });
+                // 获取设备编码用于构建完整 Tag
+                var device = devices.First(d => d.Id == dp.DeviceId);
+                mappings.Add(new ChannelDataPointMapping 
+                { 
+                    ChannelId = httpServerChannel.Id, 
+                    DataPointId = dp.Id, 
+                    DataPointTag = $"{device.Code}.{dp.Tag}",
+                    DataPointName = dp.Name,
+                    IsEnabled = true 
+                });
             }
             // HTTP 服务端通道映射 - 所有虚拟数据点
             foreach (var vp in virtualPoints)
             {
-                mappings.Add(new ChannelDataPointMapping { ChannelId = httpServerChannel.Id, VirtualDataPointId = vp.Id, IsEnabled = true });
+                var device = devices.First(d => d.Id == vp.DeviceId);
+                mappings.Add(new ChannelDataPointMapping 
+                { 
+                    ChannelId = httpServerChannel.Id, 
+                    VirtualDataPointId = vp.Id, 
+                    DataPointTag = $"{device.Code}.{vp.Tag}",
+                    DataPointName = vp.Name,
+                    IsEnabled = true 
+                });
             }
 
             // WebSocket 通道映射 - 所有设备数据点
             var wsChannel = channels.First(c => c.Code == "WS_PUSH");
             foreach (var dp in dataPoints)
             {
-                mappings.Add(new ChannelDataPointMapping { ChannelId = wsChannel.Id, DataPointId = dp.Id, IsEnabled = true });
+                var device = devices.First(d => d.Id == dp.DeviceId);
+                mappings.Add(new ChannelDataPointMapping 
+                { 
+                    ChannelId = wsChannel.Id, 
+                    DataPointId = dp.Id, 
+                    DataPointTag = $"{device.Code}.{dp.Tag}",
+                    DataPointName = dp.Name,
+                    IsEnabled = true 
+                });
             }
             // WebSocket 通道映射 - 所有虚拟数据点
             foreach (var vp in virtualPoints)
             {
-                mappings.Add(new ChannelDataPointMapping { ChannelId = wsChannel.Id, VirtualDataPointId = vp.Id, IsEnabled = true });
+                var device = devices.First(d => d.Id == vp.DeviceId);
+                mappings.Add(new ChannelDataPointMapping 
+                { 
+                    ChannelId = wsChannel.Id, 
+                    VirtualDataPointId = vp.Id, 
+                    DataPointTag = $"{device.Code}.{vp.Tag}",
+                    DataPointName = vp.Name,
+                    IsEnabled = true 
+                });
             }
 
             await context.ChannelDataPointMappings.AddRangeAsync(mappings);

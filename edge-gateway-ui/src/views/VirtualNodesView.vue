@@ -11,7 +11,7 @@
           <div class="panel-header">
             <span class="panel-title">设备</span>
           </div>
-          <el-table :data="devices" v-loading="devicesLoading" stripe highlight-current-row @current-change="handleDeviceSelect">
+          <el-table :data="devices" v-loading="devicesLoading"  highlight-current-row @current-change="handleDeviceSelect">
             <el-table-column prop="id" label="ID" width="60" />
             <el-table-column prop="name" label="名称" min-width="120" />
             <el-table-column prop="code" label="编码" min-width="120" />
@@ -52,7 +52,6 @@
             v-else
             :data="virtualDataPoints"
             v-loading="pointsLoading"
-            stripe
           >
             <el-table-column prop="id" label="ID" width="60" />
             <el-table-column prop="name" label="名称" min-width="120" />
@@ -81,7 +80,12 @@
     <div class="panel table-wrap results-panel">
       <div class="panel-header">
         <span class="panel-title">计算结果</span>
-        <el-button type="success" size="small" :disabled="!selectedDevice" @click="calculateDevice">
+        <el-button 
+          type="success" 
+          size="small" 
+          :disabled="!selectedDevice" 
+          @click="calculateDevice"
+        >
           <el-icon><Refresh /></el-icon>
           计算设备虚拟节点
         </el-button>
@@ -89,32 +93,25 @@
           <el-icon><Refresh /></el-icon>
           计算全部
         </el-button>
+        <el-switch
+          v-model="autoRefresh"
+          active-text="自动刷新"
+          inactive-text="手动刷新"
+          style="margin-left: 16px;"
+          @change="toggleAutoRefresh"
+        />
       </div>
-      <el-table :data="calculationResults" stripe>
-        <el-table-column prop="tag" label="数据点" min-width="200" />
+      <el-table :data="calculationResults">
+        <el-table-column prop="virtualDataPointTag" label="数据点" min-width="200" />
         <el-table-column prop="value" label="计算结果" min-width="150" />
         <el-table-column prop="quality" label="质量" width="100">
           <template #default="{ row }">
             <el-tag :type="row.quality === 0 ? 'success' : 'danger'" size="small">
-              {{ row.quality === 0 ? 'Good' : 'Bad' }}
+              {{ row.quality}}
             </el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="timestamp" label="计算时间" width="180" />
-        <el-table-column label="依赖值" min-width="200">
-          <template #default="{ row }">
-            <el-popover placement="top" trigger="hover">
-              <template #default>
-                <div v-for="(value, key) in row.dependencyValues" :key="key">
-                  <strong>{{ key }}:</strong> {{ value }}
-                </div>
-              </template>
-              <template #reference>
-                <el-tag size="small">查看 {{ Object.keys(row.dependencyValues || {}).length }} 个依赖</el-tag>
-              </template>
-            </el-popover>
-          </template>
-        </el-table-column>
       </el-table>
     </div>
 
@@ -228,7 +225,7 @@ Pressure > 50 && Temperature < 80 ? "Normal" : "Alert"</pre>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh } from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
@@ -255,6 +252,8 @@ const virtualDataPoints = ref<VirtualDataPoint[]>([])
 const selectedDevice = ref<Device | null>(null)
 const calculationResults = ref<any[]>([])
 const dependencies = ref<string[]>([])
+const autoRefresh = ref(true)
+const refreshTimer = ref<number | null>(null)
 
 const pointDialogVisible = ref(false)
 const expressionHelpVisible = ref(false)
@@ -319,8 +318,16 @@ const handleDeviceSelect = (row: Device | null) => {
   selectedDevice.value = row
   if (row) {
     loadVirtualDataPoints(row.id)
+    // 选择设备后自动计算并启动自动刷新
+    if (autoRefresh.value) {
+      setTimeout(() => {
+        calculateDevice()
+        startAutoRefresh()
+      }, 500)
+    }
   } else {
     virtualDataPoints.value = []
+    stopAutoRefresh()
   }
 }
 
@@ -435,7 +442,11 @@ const calculatePoint = async (id: number) => {
   try {
     const res = await calculateVirtualDataPoint(id)
     ElMessage.success('计算成功')
-    calculationResults.value = [res.data]
+    // 使用 virtualDataPointTag 显示
+    calculationResults.value = [{
+      ...res.data,
+      virtualDataPointTag: res.data.virtualDataPointTag
+    }]
   } catch (error: any) {
     ElMessage.error(error.message || '计算失败')
   }
@@ -446,7 +457,11 @@ const calculateDevice = async () => {
   try {
     const res = await calculateDeviceVirtualDataPoints(selectedDevice.value.id)
     ElMessage.success(`计算完成：${res.data.filter((r: any) => r.success).length}/${res.data.length}`)
-    calculationResults.value = res.data
+    // 使用 virtualDataPointTag 显示
+    calculationResults.value = res.data.map((r: any) => ({
+      ...r,
+      virtualDataPointTag: r.virtualDataPointTag
+    }))
   } catch (error: any) {
     ElMessage.error(error.message || '计算失败')
   }
@@ -456,9 +471,39 @@ const calculateAll = async () => {
   try {
     const res = await calculateAllVirtualDataPoints()
     ElMessage.success(`计算完成：${res.data.filter((r: any) => r.success).length}/${res.data.length}`)
-    calculationResults.value = res.data
+    // 使用 virtualDataPointTag 显示
+    calculationResults.value = res.data.map((r: any) => ({
+      ...r,
+      virtualDataPointTag: r.virtualDataPointTag
+    }))
   } catch (error: any) {
     ElMessage.error(error.message || '计算失败')
+  }
+}
+
+// 自动刷新
+const toggleAutoRefresh = () => {
+  if (autoRefresh.value && selectedDevice.value) {
+    startAutoRefresh()
+  } else {
+    stopAutoRefresh()
+  }
+}
+
+const startAutoRefresh = () => {
+  if (refreshTimer.value) return
+  // 每 3 秒刷新一次
+  refreshTimer.value = window.setInterval(() => {
+    if (selectedDevice.value) {
+      calculateDevice()
+    }
+  }, 3000)
+}
+
+const stopAutoRefresh = () => {
+  if (refreshTimer.value) {
+    window.clearInterval(refreshTimer.value)
+    refreshTimer.value = null
   }
 }
 
@@ -479,6 +524,11 @@ const parseDependencies = async () => {
 const showExpressionHelp = () => {
   expressionHelpVisible.value = true
 }
+
+// 页面卸载时停止自动刷新
+onUnmounted(() => {
+  stopAutoRefresh()
+})
 
 onMounted(() => {
   loadDevices()

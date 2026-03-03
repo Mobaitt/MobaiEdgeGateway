@@ -205,14 +205,24 @@ public class DeviceManagementService
             .Select(m => m.VirtualDataPointId)
             .ToHashSet();
 
+        // 获取所有虚拟点位用于构建完整 Tag
+        var allVirtualPoints = await _virtualNodeService.GetAllVirtualDataPointsAsync();
+        var virtualPointDict = allVirtualPoints.ToDictionary(vp => vp.Id);
+
         // 仅添加尚未绑定的虚拟数据点（避免重复）
         var newMappings = virtualDataPointIds
             .Where(id => !existingMappings.Contains(id) && id != 0)
-            .Select(id => new ChannelDataPointMapping
+            .Select(id =>
             {
-                ChannelId          = channelId,
-                VirtualDataPointId = id,
-                IsEnabled          = true
+                var vp = virtualPointDict.TryGetValue(id, out var point) ? point : null;
+                return new ChannelDataPointMapping
+                {
+                    ChannelId          = channelId,
+                    VirtualDataPointId = id,
+                    DataPointTag       = vp != null ? $"{vp.Device?.Code}.{vp.Tag}" : null,
+                    DataPointName      = vp != null ? vp.Name : null,
+                    IsEnabled          = true
+                };
             })
             .ToList();
 

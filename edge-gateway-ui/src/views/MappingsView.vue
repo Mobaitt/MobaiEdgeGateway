@@ -40,12 +40,6 @@
 
         <el-table-column prop="dataPointName" label="名称" width="130" />
 
-        <el-table-column label="数据点 Tag" min-width="220">
-          <template #default="{ row }">
-            <span class="mono tag-text">{{ row.dataPointTag }}</span>
-          </template>
-        </el-table-column>
-
         <el-table-column label="状态" width="90" align="center">
           <template #default="{ row }">
             <el-tag :type="row.isEnabled ? 'success' : 'info'" size="small" effect="plain">
@@ -137,7 +131,7 @@
                   @change="(v) => toggleVirtualDp(vp.id, v)"
                 />
                 <div class="dp-info">
-                  <span class="mono" style="color:var(--purple); font-size:12px">{{ vp.tag }}</span>
+                  <span class="mono" style="color:var(--purple); font-size:12px">{{ getVirtualPointFullTag(vp) }}</span>
                   <span v-if="vp.unit" style="color:var(--text-muted); font-size:11px">· {{ vp.unit }}</span>
                   <el-tag v-if="isVirtualMapped(vp.id)" size="small" type="info" style="margin-left:6px; font-size:10px">已绑定</el-tag>
                 </div>
@@ -162,7 +156,7 @@
             </div>
             <!-- 虚拟数据点 -->
             <div v-for="id in [...virtualSelectedIds]" :key="'v-' + id" class="selected-item">
-              <span class="mono" style="font-size:12px; color:var(--purple)">{{ getVirtualTagById(id) }}</span>
+              <span class="mono" style="font-size:12px; color:var(--purple)">{{ getVirtualPointFullTagById(id) }}</span>
               <el-button size="small" text circle @click="virtualSelectedIds.delete(id)">
                 <el-icon size="12"><Close /></el-icon>
               </el-button>
@@ -283,6 +277,19 @@ const getTagById = (id: number) => {
 const getVirtualTagById = (id: number) => {
   const vp = virtualDataPoints.value.find((item) => item.id === id)
   return vp ? vp.tag : String(id)
+}
+
+// 获取虚拟点位的完整 Tag（{deviceCode}.{tag}）
+const getVirtualPointFullTag = (vp: VirtualDataPoint) => {
+  const device = deviceTree.value.find(d => d.id === vp.deviceId)
+  return device ? `${device.code}.${vp.tag}` : vp.tag
+}
+
+const getVirtualPointFullTagById = (id: number) => {
+  const vp = virtualDataPoints.value.find((item) => item.id === id)
+  if (!vp) return String(id)
+  const device = deviceTree.value.find(d => d.id === vp.deviceId)
+  return device ? `${device.code}.${vp.tag}` : vp.tag
 }
 
 const fetchMappings = async () => {

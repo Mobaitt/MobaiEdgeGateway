@@ -96,6 +96,8 @@ public class GatewayDbContext : DbContext
         {
             entity.ToTable("ChannelDataPointMappings");
             entity.HasKey(e => e.Id);
+            entity.Property(e => e.DataPointTag).HasMaxLength(200);
+            entity.Property(e => e.DataPointName).HasMaxLength(100);
 
             // DataPointId 和 VirtualDataPointId 至少有一个有值
             entity.HasCheckConstraint("CK_ChannelDataPointMapping_DataPoint", "DataPointId IS NOT NULL OR VirtualDataPointId IS NOT NULL");
