@@ -85,17 +85,17 @@ public class ChannelRepository : IChannelRepository
                 .ToListAsync();
             
             // 详细调试日志
-            var allMappings = await _db.ChannelDataPointMappings
-                .Where(m => m.ChannelId == channel.Id)
-                .Select(m => new { m.Id, m.DataPointId, m.VirtualDataPointId, m.IsEnabled })
-                .ToListAsync();
+            // var allMappings = await _db.ChannelDataPointMappings
+            //     .Where(m => m.ChannelId == channel.Id)
+            //     .Select(m => new { m.Id, m.DataPointId, m.VirtualDataPointId, m.IsEnabled })
+            //     .ToListAsync();
             
-            foreach (var m in allMappings)
-            {
-                Console.WriteLine($"通道 {channel.Name} 映射：Id={m.Id}, DataPointId={m.DataPointId}, VirtualDataPointId={m.VirtualDataPointId}, IsEnabled={m.IsEnabled}");
-            }
-            
-            Console.WriteLine($"通道 {channel.Name}: DataPointMappings={channel.DataPointMappings.Count}, VirtualDataPointMappings={channel.VirtualDataPointMappings.Count}");
+            // foreach (var m in allMappings)
+            // {
+            //     Console.WriteLine($"通道 {channel.Name} 映射：Id={m.Id}, DataPointId={m.DataPointId}, VirtualDataPointId={m.VirtualDataPointId}, IsEnabled={m.IsEnabled}");
+            // }
+            //
+            // Console.WriteLine($"通道 {channel.Name}: DataPointMappings={channel.DataPointMappings.Count}, VirtualDataPointMappings={channel.VirtualDataPointMappings.Count}");
         }
         
         return channels;
