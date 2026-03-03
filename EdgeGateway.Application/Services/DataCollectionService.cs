@@ -26,6 +26,7 @@ namespace EdgeGateway.Application.Services;
 /// 缓存架构：
 /// - _dataSnapshot: 全量数据快照（DataPointId → TimestampedData），唯一数据源
 /// - _tagIndex: Tag 索引（Tag → DataPointId），支持按 Tag 快速查询
+/// - _virtualDataPointCache: 虚拟数据点缓存（Tag → VirtualDataPoint），避免频繁 DB 查询
 /// </summary>
 public class DataCollectionService
 {
@@ -46,7 +47,15 @@ public class DataCollectionService
     // Tag 索引：Tag → DataPointId，支持按 Tag 快速查询
     private readonly ConcurrentDictionary<string, int> _tagIndex = new();
 
-    private readonly SemaphoreSlim _snapshotLock = new(1, 1);
+    // 虚拟数据点缓存：Tag → VirtualDataPoint，避免频繁数据库查询
+    // 注意：虚拟数据点缓存是全局的，因为 Tag 是全局唯一的
+    private readonly ConcurrentDictionary<string, VirtualDataPoint> _virtualDataPointCache = new();
+
+    // 设备 ID → 虚拟数据点 ID 列表，用于快速查找设备下的虚拟数据点
+    private readonly ConcurrentDictionary<int, HashSet<int>> _deviceVirtualPointIds = new();
+
+    // 读写锁：支持多读单写，提升并发性能
+    private readonly ReaderWriterLockSlim _snapshotLock = new();
     private readonly int _aggregateWindowMs = 1000; // 聚合窗口：1 秒
     private readonly TimeSpan _dataExpiration = TimeSpan.FromSeconds(30); // 数据过期时间：30 秒
     private CancellationTokenSource? _aggregatorCts;
@@ -98,21 +107,31 @@ public class DataCollectionService
     /// 根据 Tag 获取快照数据值（供虚拟节点引擎使用）
     /// 通过 _tagIndex 快速定位 DataPointId，然后从 _dataSnapshot 查询
     /// 数据过期时间为 30 秒，过期数据返回 null
+    /// 使用读锁，支持高并发读取
     /// </summary>
     private object? GetSnapshotValue(string tag)
     {
         // 从快照中查询（通过 Tag 索引）
         if (_tagIndex.TryGetValue(tag, out var dataPointId))
         {
-            if (_dataSnapshot.TryGetValue(dataPointId, out var snapshotData))
+            // 使用读锁，支持并发读取
+            _snapshotLock.EnterReadLock();
+            try
             {
-                // 数据过期，返回 null
-                if (snapshotData.IsExpired(_dataExpiration))
+                if (_dataSnapshot.TryGetValue(dataPointId, out var snapshotData))
                 {
-                    return null;
-                }
+                    // 数据过期，返回 null
+                    if (snapshotData.IsExpired(_dataExpiration))
+                    {
+                        return null;
+                    }
 
-                return snapshotData.Data.Value;
+                    return snapshotData.Data.Value;
+                }
+            }
+            finally
+            {
+                _snapshotLock.ExitReadLock();
             }
         }
 
@@ -237,17 +256,18 @@ public class DataCollectionService
 
     /// <summary>
     /// 将全量快照数据批量推送给发送服务（超过 30 秒未更新的数据置为 null）
+    /// 使用读锁，支持读取期间并发写入
     /// </summary>
     private async Task FlushSnapshotAsync(CancellationToken cancellationToken)
     {
-        await _snapshotLock.WaitAsync(cancellationToken);
+        _snapshotLock.EnterReadLock();
         try
         {
             if (_dataSnapshot.Count == 0)
                 return;
 
-            // 复制当前全量快照，超时数据置为 null
-            var dataToSend = new List<CollectedData>();
+            // 预分配列表容量，避免扩容开销
+            var dataToSend = new List<CollectedData>(_dataSnapshot.Count);
             foreach (var kvp in _dataSnapshot)
             {
                 // 使用 IsExpired 方法统一判断过期
@@ -272,7 +292,7 @@ public class DataCollectionService
         }
         finally
         {
-            _snapshotLock.Release();
+            _snapshotLock.ExitReadLock();
         }
     }
 
@@ -297,10 +317,11 @@ public class DataCollectionService
     /// 更新数据点到全量快照（线程安全）
     /// 质量为 Good 且 Value 不为 null 时，更新数据和 LastUpdateTime
     /// 质量为 Good 但 Value 为 null 时，保持上次成功值，不更新 LastUpdateTime（这样超过 30 秒会过期）
+    /// 使用写锁，但尽量减少锁持有时间
     /// </summary>
     public async Task UpdateSnapshotAsync(IEnumerable<CollectedData> data, CancellationToken cancellationToken)
     {
-        await _snapshotLock.WaitAsync(cancellationToken);
+        _snapshotLock.EnterWriteLock();
         try
         {
             foreach (var item in data)
@@ -339,36 +360,47 @@ public class DataCollectionService
         }
         finally
         {
-            _snapshotLock.Release();
+            _snapshotLock.ExitWriteLock();
         }
     }
 
     /// <summary>
     /// 获取指定设备的所有数据点快照数据（用于 realtime 接口）
     /// 超过 30 秒未更新的数据返回 null（Uncertain）
+    /// 使用读锁，支持并发读取
     /// </summary>
     public List<CollectedData> GetDeviceSnapshotData(int deviceId)
     {
-        var results = new List<CollectedData>();
-        foreach (var kvp in _dataSnapshot)
+        _snapshotLock.EnterReadLock();
+        try
         {
-            if (kvp.Value.Data.DeviceId != deviceId)
-                continue;
+            var results = new List<CollectedData>();
+            
+            // 遍历快照，筛选出该设备的所有数据点（包括虚拟数据点）
+            foreach (var kvp in _dataSnapshot)
+            {
+                if (kvp.Value.Data.DeviceId != deviceId)
+                    continue;
 
-            // 使用 IsExpired 方法统一判断过期
-            if (kvp.Value.IsExpired(_dataExpiration))
-            {
-                // 超过 30 秒没有成功数据，返回 null 占位数据
-                results.Add(CreateTimeoutData(kvp.Value.Data));
+                // 使用 IsExpired 方法统一判断过期
+                if (kvp.Value.IsExpired(_dataExpiration))
+                {
+                    // 超过 30 秒没有成功数据，返回 null 占位数据
+                    results.Add(CreateTimeoutData(kvp.Value.Data));
+                }
+                else
+                {
+                    // 正常数据
+                    results.Add(kvp.Value.Data);
+                }
             }
-            else
-            {
-                // 正常数据
-                results.Add(kvp.Value.Data);
-            }
+
+            return results;
         }
-
-        return results;
+        finally
+        {
+            _snapshotLock.ExitReadLock();
+        }
     }
 
     /// <summary>
@@ -673,6 +705,7 @@ public class DataCollectionService
 
     /// <summary>
     /// 将虚拟节点计算结果更新到快照和实时数据服务
+    /// 使用虚拟数据点缓存，避免频繁数据库查询
     /// </summary>
     private async Task UpdateVirtualNodeResultsToSnapshotAsync(
         List<Domain.Interfaces.VirtualNodeCalculationResult> virtualResults,
@@ -683,26 +716,47 @@ public class DataCollectionService
             // 使用虚拟数据点的 Tag 查找虚拟数据点
             if (!string.IsNullOrEmpty(virtualResult.VirtualDataPointTag))
             {
-                var virtualDataPoint = await FindVirtualDataPointByTagAsync(virtualResult.VirtualDataPointTag);
-                if (virtualDataPoint != null)
+                VirtualDataPoint? vp = null;
+
+                // 先从缓存获取，缓存未命中时查询数据库
+                if (!_virtualDataPointCache.TryGetValue(virtualResult.VirtualDataPointTag, out vp))
                 {
-                    var snapshotKey = -virtualDataPoint.Id;
+                    vp = await FindVirtualDataPointByTagAsync(virtualResult.VirtualDataPointTag);
+                    if (vp != null)
+                    {
+                        _virtualDataPointCache.TryAdd(virtualResult.VirtualDataPointTag, vp);
+                        
+                        // 更新设备虚拟数据点索引
+                        _deviceVirtualPointIds.AddOrUpdate(
+                            vp.DeviceId,
+                            new HashSet<int> { -vp.Id },
+                            (_, existing) =>
+                            {
+                                existing.Add(-vp.Id);
+                                return existing;
+                            });
+                    }
+                }
+
+                if (vp != null)
+                {
+                    var snapshotKey = -vp.Id;
 
                     // 更新快照
-                    await _snapshotLock.WaitAsync(cancellationToken);
+                    _snapshotLock.EnterWriteLock();
                     try
                     {
                         // 维护 Tag 索引
-                        _tagIndex[virtualDataPoint.Tag] = snapshotKey;
+                        _tagIndex[vp.Tag] = snapshotKey;
 
                         _dataSnapshot[snapshotKey] = new TimestampedData
                         {
                             Data = new CollectedData
                             {
                                 DataPointId = snapshotKey,
-                                Tag = virtualDataPoint.Tag,
-                                DeviceId = virtualDataPoint.DeviceId,
-                                DeviceName = virtualDataPoint.Device?.Name ?? "Unknown",
+                                Tag = vp.Tag,
+                                DeviceId = vp.DeviceId,
+                                DeviceName = vp.Device?.Name ?? "Unknown",
                                 Value = virtualResult.Value,
                                 Quality = virtualResult.Quality,
                                 Timestamp = virtualResult.Timestamp
@@ -712,7 +766,7 @@ public class DataCollectionService
                     }
                     finally
                     {
-                        _snapshotLock.Release();
+                        _snapshotLock.ExitWriteLock();
                     }
                 }
             }
@@ -721,10 +775,11 @@ public class DataCollectionService
 
     /// <summary>
     /// 清理指定设备的快照数据和 Tag 索引
+    /// 批量操作，减少锁持有时间
     /// </summary>
     private void ClearDeviceSnapshotData(int deviceId)
     {
-        _snapshotLock.Wait();
+        _snapshotLock.EnterWriteLock();
         try
         {
             // 找出该设备的所有数据点
@@ -739,22 +794,22 @@ public class DataCollectionService
                 _dataSnapshot.Remove(key);
             }
 
-            // 从 Tag 索引中移除
-            var tagKeysToRemove = _tagIndex
-                .Where(kvp => _dataSnapshot.ContainsKey(kvp.Value) == false)
-                .Select(kvp => kvp.Key)
-                .ToList();
-
-            foreach (var tagKey in tagKeysToRemove)
-            {
-                _tagIndex.TryRemove(tagKey, out _);
-            }
-
             _logger.LogDebug("设备 ID={DeviceId} 的快照数据已清理，移除 {Count} 个数据点", deviceId, keysToRemove.Count);
         }
         finally
         {
-            _snapshotLock.Release();
+            _snapshotLock.ExitWriteLock();
+        }
+
+        // 锁外清理 Tag 索引（ConcurrentDictionary 本身线程安全）
+        var tagKeysToRemove = _tagIndex
+            .Where(kvp => !_dataSnapshot.ContainsKey(kvp.Value))
+            .Select(kvp => kvp.Key)
+            .ToList();
+
+        foreach (var tagKey in tagKeysToRemove)
+        {
+            _tagIndex.TryRemove(tagKey, out _);
         }
     }
 
