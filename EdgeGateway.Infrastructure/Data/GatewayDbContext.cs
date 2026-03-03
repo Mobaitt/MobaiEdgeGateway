@@ -57,7 +57,9 @@ public class GatewayDbContext : DbContext
             entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Tag).IsRequired().HasMaxLength(200);
             entity.Property(e => e.Address).IsRequired().HasMaxLength(200);
-            entity.HasIndex(e => e.Tag).IsUnique(); // Tag全局唯一
+            
+            // Tag 在同一设备下唯一（复合唯一索引）
+            entity.HasIndex(e => new { e.DeviceId, e.Tag }).IsUnique();
 
             // 数据点与通道映射：一个数据点对应多条映射记录
             entity.HasMany(e => e.ChannelMappings)
@@ -147,7 +149,7 @@ public class GatewayDbContext : DbContext
         });
 
         // ============ 种子数据（测试用）============
-        SeedTestData(modelBuilder);
+        // SeedTestData(modelBuilder);
     }
 
     /// <summary>

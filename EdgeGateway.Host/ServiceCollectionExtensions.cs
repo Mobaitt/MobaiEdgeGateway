@@ -107,6 +107,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IRuleEngine, EdgeGateway.Infrastructure.Rules.RuleEngine>();
         services.AddSingleton<IVirtualNodeEngine, EdgeGateway.Infrastructure.VirtualNodes.VirtualNodeEngine>();
 
+        // 数据库种子服务
+        services.AddSingleton<DatabaseSeeder>();
+
         // HTTP 客户端（供 HttpSendStrategy 使用）
         services.AddHttpClient("GatewayHttpClient");
 
@@ -121,5 +124,9 @@ public static class ServiceCollectionExtensions
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<GatewayDbContext>();
         await db.Database.EnsureCreatedAsync();
+        
+        // 初始化测试数据
+        var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
+        await seeder.InitializeTestDataAsync();
     }
 }
