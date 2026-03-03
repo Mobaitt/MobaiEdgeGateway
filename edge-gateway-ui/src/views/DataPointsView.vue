@@ -495,12 +495,11 @@ const loadVirtualDataPoints = async () => {
       ...item,
       isVirtual: true
     })) as DataPointWithVirtual[]
-    
+
     // 合并普通数据点和虚拟数据点
-    dataPoints.value = [
-      ...dataPoints.value.filter(item => !item.isVirtual),
-      ...virtualPoints
-    ]
+    // 确保在普通数据点已加载的基础上合并
+    const normalPoints = dataPoints.value.filter(item => !item.isVirtual)
+    dataPoints.value = [...normalPoints, ...virtualPoints]
   } catch (error) {
     console.error('加载虚拟数据点失败:', error)
   }
@@ -703,12 +702,16 @@ const openVirtualNodeEdit = (row: DataPointWithVirtual) => {
 }
 
 onMounted(() => {
-  fetchDevice()
-  fetchDataPoints()
-  loadVirtualDataPoints()
-  loadDataValueTypes()
-  loadModbusByteOrders()
-  startRealtimePolling()
+  // 使用 async/await 确保加载顺序
+  const init = async () => {
+    await fetchDevice()
+    await fetchDataPoints()
+    await loadVirtualDataPoints()
+    await loadDataValueTypes()
+    await loadModbusByteOrders()
+    startRealtimePolling()
+  }
+  init()
 })
 
 onUnmounted(() => {

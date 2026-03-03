@@ -212,6 +212,30 @@ public class DataCollectionService
     }
 
     /// <summary>
+    /// 初始化虚拟节点计算（服务启动时调用，确保虚拟节点有初始值）
+    /// </summary>
+    private async Task InitializeVirtualNodesAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            _logger.LogInformation("开始初始化虚拟节点计算...");
+
+            // 计算所有虚拟节点
+            var results = await _virtualNodeEngine.CalculateAllAsync(cancellationToken);
+
+            // 将计算结果更新到快照和实时数据服务
+            await UpdateVirtualNodeResultsToSnapshotAsync(results, cancellationToken);
+
+            _logger.LogInformation("虚拟节点初始化完成：{SuccessCount}/{TotalCount} 成功",
+                results.Count(r => r.Success), results.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "虚拟节点初始化计算失败");
+        }
+    }
+
+    /// <summary>
     /// 将全量快照数据批量推送给发送服务（超过 1 分钟未更新的数据置为 null）
     /// </summary>
     private async Task FlushSnapshotAsync(CancellationToken cancellationToken)
@@ -378,6 +402,9 @@ public class DataCollectionService
 
         // 启动数据聚合器
         StartAggregator(cancellationToken);
+
+        // 初始化虚拟节点计算（确保启动时虚拟节点有初始值）
+        await InitializeVirtualNodesAsync(cancellationToken);
 
         foreach (var device in devices)
         {
@@ -555,7 +582,7 @@ public class DataCollectionService
         // 创建 Scope 获取设备信息（避免 DbContext 并发问题）
         using var scope = _serviceProvider.CreateScope();
         var deviceRepo = scope.ServiceProvider.GetRequiredService<IDeviceRepository>();
-        
+
         // 从数据库加载设备（含数据点）
         var device = await deviceRepo.GetByIdAsync(deviceId);
         if (device == null || !device.IsEnabled)
@@ -566,6 +593,33 @@ public class DataCollectionService
 
         // 使用全局 CancellationToken.None（由服务生命周期管理）
         StartDeviceTask(device, CancellationToken.None);
+
+        // 设备启动后，触发该设备的虚拟节点计算
+        await InitializeDeviceVirtualNodesAsync(deviceId, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// 初始化指定设备的虚拟节点计算（设备启动时调用）
+    /// </summary>
+    private async Task InitializeDeviceVirtualNodesAsync(int deviceId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            _logger.LogInformation("开始初始化设备 ID={DeviceId} 的虚拟节点计算...", deviceId);
+
+            // 计算该设备的所有虚拟节点
+            var results = await _virtualNodeEngine.CalculateDeviceAsync(deviceId, cancellationToken);
+
+            // 将计算结果更新到快照和实时数据服务
+            await UpdateVirtualNodeResultsToSnapshotAsync(results, cancellationToken);
+
+            _logger.LogInformation("设备 ID={DeviceId} 虚拟节点初始化完成：{SuccessCount}/{TotalCount} 成功",
+                deviceId, results.Count(r => r.Success), results.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "设备 ID={DeviceId} 虚拟节点初始化计算失败", deviceId);
+        }
     }
 
     /// <summary>
@@ -622,36 +676,81 @@ public class DataCollectionService
                     data.Tag, data.Value, cancellationToken);
 
                 // 将虚拟节点计算结果也更新到快照
-                foreach (var virtualResult in virtualResults.Where(r => r.Success))
-                {
-                    // 使用虚拟数据点的 Tag 查找虚拟数据点
-                    if (!string.IsNullOrEmpty(virtualResult.VirtualDataPointTag))
-                    {
-                        var virtualDataPoint = await FindVirtualDataPointByTagAsync(virtualResult.VirtualDataPointTag);
-                        if (virtualDataPoint != null)
-                        {
-                            var snapshotKey = -virtualDataPoint.Id;
-                            _dataSnapshot[snapshotKey] = new TimestampedData
-                            {
-                                Data = new CollectedData
-                                {
-                                    DataPointId = snapshotKey,
-                                    Tag = virtualDataPoint.Tag,
-                                    DeviceId = virtualDataPoint.DeviceId,
-                                    DeviceName = virtualDataPoint.Device?.Name ?? "Unknown",
-                                    Value = virtualResult.Value,
-                                    Quality = virtualResult.Quality,
-                                    Timestamp = virtualResult.Timestamp
-                                },
-                                LastUpdateTime = DateTime.UtcNow
-                            };
-                        }
-                    }
-                }
+                await UpdateVirtualNodeResultsToSnapshotAsync(virtualResults, cancellationToken);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "虚拟节点计算失败，数据点：{Tag}", data.Tag);
+            }
+        }
+    }
+
+    /// <summary>
+    /// 将虚拟节点计算结果更新到快照和实时数据服务
+    /// </summary>
+    private async Task UpdateVirtualNodeResultsToSnapshotAsync(
+        List<Domain.Interfaces.VirtualNodeCalculationResult> virtualResults,
+        CancellationToken cancellationToken)
+    {
+        foreach (var virtualResult in virtualResults.Where(r => r.Success))
+        {
+            // 使用虚拟数据点的 Tag 查找虚拟数据点
+            if (!string.IsNullOrEmpty(virtualResult.VirtualDataPointTag))
+            {
+                var virtualDataPoint = await FindVirtualDataPointByTagAsync(virtualResult.VirtualDataPointTag);
+                if (virtualDataPoint != null)
+                {
+                    var snapshotKey = -virtualDataPoint.Id;
+                    
+                    // 更新快照
+                    await _snapshotLock.WaitAsync(cancellationToken);
+                    try
+                    {
+                        _dataSnapshot[snapshotKey] = new TimestampedData
+                        {
+                            Data = new CollectedData
+                            {
+                                DataPointId = snapshotKey,
+                                Tag = virtualDataPoint.Tag,
+                                DeviceId = virtualDataPoint.DeviceId,
+                                DeviceName = virtualDataPoint.Device?.Name ?? "Unknown",
+                                Value = virtualResult.Value,
+                                Quality = virtualResult.Quality,
+                                Timestamp = virtualResult.Timestamp
+                            },
+                            LastUpdateTime = DateTime.UtcNow
+                        };
+                    }
+                    finally
+                    {
+                        _snapshotLock.Release();
+                    }
+
+                    // 同时更新 Tag 缓存
+                    if (virtualResult.Value != null)
+                    {
+                        _tagDataCache[virtualDataPoint.Tag] = new TimestampedValue
+                        {
+                            Value = virtualResult.Value,
+                            Timestamp = DateTime.UtcNow
+                        };
+                    }
+
+                    // 更新实时数据服务
+                    _realtimeDataService.UpdateData(new[]
+                    {
+                        new CollectedData
+                        {
+                            DataPointId = snapshotKey,
+                            Tag = virtualDataPoint.Tag,
+                            DeviceId = virtualDataPoint.DeviceId,
+                            DeviceName = virtualDataPoint.Device?.Name ?? "Unknown",
+                            Value = virtualResult.Value,
+                            Quality = virtualResult.Quality,
+                            Timestamp = virtualResult.Timestamp
+                        }
+                    });
+                }
             }
         }
     }
