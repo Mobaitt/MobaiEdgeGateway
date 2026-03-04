@@ -96,8 +96,8 @@
 
         <el-table-column label="实时值" width="140" align="center">
           <template #default="{ row }">
-            <span v-if="realtimeData[row.tag]" class="mono realtime-value" :class="getQualityClass(realtimeData[row.tag].quality)">
-              {{ formatValue(realtimeData[row.tag].value, row.dataType) }}
+            <span v-if="getRealtimeData(row)" class="mono realtime-value" :class="getRowQualityClass(row)">
+              {{ formatRowValue(row) }}
               <span v-if="row.unit" class="value-unit">{{ row.unit }}</span>
             </span>
             <span v-else style="color:var(--text-muted);font-size:12px">—</span>
@@ -106,8 +106,8 @@
 
         <el-table-column prop="quality" label="质量" width="90" align="center" sortable>
           <template #default="{ row }">
-            <span v-if="realtimeData[row.tag]" class="badge mono" :class="getQualityClass(realtimeData[row.tag].quality)">
-              {{ realtimeData[row.tag].quality }}
+            <span v-if="getRowQualityText(row)" class="badge mono" :class="getRowQualityClass(row)">
+              {{ getRowQualityText(row) }}
             </span>
             <span v-else style="color:var(--text-muted);font-size:12px">—</span>
           </template>
@@ -369,7 +369,8 @@ const filteredDataPoints = computed(() => {
     const matchDataType = !filterDataType.value || itemDataType === filterDataType.value
 
     // 数据质量筛选
-    const quality = realtimeData.value[item.id]?.quality
+    const realtimeDataItem = getRealtimeData(item)
+    const quality = realtimeDataItem?.quality
     const matchQuality = !filterQuality.value || quality === filterQuality.value
 
     return matchText && matchDataType && matchQuality && matchType
@@ -543,11 +544,71 @@ const stopRealtimePolling = () => {
   }
 }
 
+/**
+ * 获取数据点的实时数据 Key
+ * 虚拟数据点直接使用 tag，普通数据点使用 deviceCode.tag 格式
+ */
+const getRealtimeDataKey = (row: DataPointWithVirtual): string => {
+  return row.isVirtual ? row.tag : (deviceCode.value + '.' + row.tag)
+}
+
+/**
+ * 获取数据点的实时数据
+ * @param row 数据点行数据
+ * @returns 实时数据项，无数据时返回 null
+ */
+const getRealtimeData = (row: DataPointWithVirtual): RealtimeDataItem | null => {
+  const key = getRealtimeDataKey(row)
+  return realtimeData.value[key] || null
+}
+
 const getQualityClass = (quality: string) => {
   if (quality === 'Good') return 'good'
   if (quality === 'Bad') return 'bad'
   if (quality === 'Uncertain') return 'uncertain'
   return ''
+}
+
+/**
+ * 获取数据点的质量等级类名
+ * @param row 数据点行数据
+ */
+const getRowQualityClass = (row: DataPointWithVirtual): string => {
+  const data = getRealtimeData(row)
+  return data ? getQualityClass(data.quality) : ''
+}
+
+/**
+ * 获取数据点的质量文本
+ * @param row 数据点行数据
+ */
+const getRowQualityText = (row: DataPointWithVirtual): string | null => {
+  const data = getRealtimeData(row)
+  return data ? data.quality : null
+}
+
+/**
+ * 格式化实时值显示
+ * @param row 数据点行数据
+ * @returns 格式化后的值字符串，无数据时返回 '—'
+ */
+const formatRowValue = (row: DataPointWithVirtual): string => {
+  const data = getRealtimeData(row)
+  if (!data || data.value === null || data.value === undefined) {
+    return '—'
+  }
+
+  const value = data.value
+  // 数字类型保留小数
+  if (typeof value === 'number') {
+    const strVal = value.toString()
+    if (strVal.includes('.')) {
+      return value.toFixed(2)
+    }
+    return strVal
+  }
+
+  return String(value)
 }
 
 const formatValue = (value: any, dataType: string | number) => {
