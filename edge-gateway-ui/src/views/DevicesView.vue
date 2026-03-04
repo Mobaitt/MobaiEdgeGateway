@@ -16,7 +16,9 @@
           :key="o.value" :label="o.label" :value="o.value"
         />
       </el-select>
+      <el-button :icon="Refresh" circle @click="manualRefresh" :loading="refreshing" title="刷新数据" />
       <span class="total-hint mono">共{{ filteredDevices.length }} 台设备</span>
+      <span v-if="autoRefreshEnabled" class="auto-refresh-hint">· 自动刷新中</span>
     </div>
 
     <!-- 设备卡片列表 -->
@@ -209,10 +211,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Plus, Edit, Delete, DataLine, Location, Timer, MagicStick, InfoFilled } from '@element-plus/icons-vue'
+import { Plus, Edit, Delete, DataLine, Location, Timer, MagicStick, InfoFilled, Refresh } from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import FormSection from '@/components/FormSection.vue'
 import AddCard from '@/components/AddCard.vue'
@@ -389,6 +391,46 @@ const fetchDevices = async () => {
   }
 }
 
+// 自动轮询机制
+const autoRefreshEnabled = ref(true)
+const refreshing = ref(false)
+let refreshTimer: number | null = null
+const REFRESH_INTERVAL = 3000 // 3 秒自动刷新一次
+
+const startAutoRefresh = () => {
+  if (!autoRefreshEnabled.value) return
+  refreshTimer = window.setInterval(async () => {
+    if (refreshing.value) return // 避免并发请求
+    refreshing.value = true
+    try {
+      await fetchDevices()
+    } catch (error) {
+      console.error('自动刷新失败:', error)
+    } finally {
+      refreshing.value = false
+    }
+  }, REFRESH_INTERVAL)
+}
+
+const stopAutoRefresh = () => {
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
+}
+
+const manualRefresh = async () => {
+  refreshing.value = true
+  try {
+    await fetchDevices()
+    ElMessage.success('数据已刷新')
+  } catch (error) {
+    ElMessage.error('刷新失败')
+  } finally {
+    refreshing.value = false
+  }
+}
+
 const openCreate = () => {
   editingDevice.value = null
   form.value = {
@@ -464,6 +506,11 @@ const goDataPoints = (row: DeviceItem) => {
 onMounted(() => {
   fetchDevices()
   loadCollectionProtocols()
+  startAutoRefresh()
+})
+
+onUnmounted(() => {
+  stopAutoRefresh()
 })
 </script>
 
@@ -473,6 +520,12 @@ onMounted(() => {
   display: flex; align-items: center; gap: 12px; margin-bottom: 20px;
 }
 .total-hint { font-size: 12px; color: var(--text-muted); margin-left: auto; }
+.auto-refresh-hint { font-size: 12px; color: var(--text-success); animation: pulse 2s infinite; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
 
 /* 设备编码：输入框与「自动生成」并排，避免遮挡 */
 .device-code-with-btn {
