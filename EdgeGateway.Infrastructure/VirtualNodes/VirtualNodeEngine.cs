@@ -12,6 +12,12 @@ namespace EdgeGateway.Infrastructure.VirtualNodes;
 /// <summary>
 /// 虚拟节点计算引擎实现 - 根据表达式计算虚拟数据点的值
 /// 虚拟节点依附于普通设备，可以像普通数据点一样被管理和发送
+///
+/// 优化特性：
+/// - 虚拟数据点缓存：避免频繁数据库查询
+/// - 依赖关系索引：快速查找依赖此数据点的虚拟节点
+/// - 计算结果缓存：500ms 内相同输入不重复计算
+/// - 信号量锁：防止同一虚拟点并发计算
 /// </summary>
 public class VirtualNodeEngine : IVirtualNodeEngine
 {
@@ -31,6 +37,14 @@ public class VirtualNodeEngine : IVirtualNodeEngine
 
     // 计算锁（防止同一虚拟点并发计算）
     private readonly ConcurrentDictionary<int, SemaphoreSlim> _calculationLocks = new();
+
+    // 计算结果缓存：VirtualDataPointId -> (缓存值，过期时间)
+    // 缓存 500ms，避免短时间内重复计算
+    private readonly ConcurrentDictionary<int, (object? Value, DateTime ExpireTime)> _calculationCache = new();
+    private readonly TimeSpan _cacheExpiration = TimeSpan.FromMilliseconds(500);
+
+    // 依赖关系缓存：VirtualDataPointId -> 依赖的 Tag 列表
+    private readonly ConcurrentDictionary<int, List<string>> _dependencyCache = new();
 
     public VirtualNodeEngine(
         IDbContextFactory<GatewayDbContext> dbContextFactory,
@@ -83,8 +97,10 @@ public class VirtualNodeEngine : IVirtualNodeEngine
                     return existing;
                 });
 
-            // 构建依赖索引
+            // 构建依赖索引和依赖关系缓存
             var dependencies = ParseDependencies(point.Expression);
+            _dependencyCache[point.Id] = dependencies;
+
             foreach (var depTag in dependencies)
             {
                 _dependencyIndex.AddOrUpdate(
@@ -111,6 +127,8 @@ public class VirtualNodeEngine : IVirtualNodeEngine
         _virtualPointCache.Clear();
         _deviceVirtualPointIndex.Clear();
         _dependencyIndex.Clear();
+        _calculationCache.Clear();
+        _dependencyCache.Clear();
         await LoadCacheAsync();
     }
 
@@ -118,14 +136,30 @@ public class VirtualNodeEngine : IVirtualNodeEngine
     {
         try
         {
+            // 检查计算结果缓存（500ms 内相同输入不重复计算）
+            if (_calculationCache.TryGetValue(virtualDataPoint.Id, out var cached) &&
+                DateTime.UtcNow < cached.ExpireTime)
+            {
+                _logger.LogDebug("虚拟数据点 {Tag} 使用缓存结果", virtualDataPoint.Tag);
+                return VirtualNodeCalculationResult.Ok(cached.Value, new Dictionary<string, object?>());
+            }
+
             // 获取锁
             var semaphore = _calculationLocks.GetOrAdd(virtualDataPoint.Id, _ => new SemaphoreSlim(1, 1));
             await semaphore.WaitAsync(cancellationToken);
 
             try
             {
-                // 解析依赖数据
-                var dependencies = ParseDependencies(virtualDataPoint.Expression);
+                // 再次检查缓存（防止等待锁期间缓存已更新）
+                if (_calculationCache.TryGetValue(virtualDataPoint.Id, out cached) &&
+                    DateTime.UtcNow < cached.ExpireTime)
+                {
+                    _logger.LogDebug("虚拟数据点 {Tag} 使用缓存结果（锁后检查）", virtualDataPoint.Tag);
+                    return VirtualNodeCalculationResult.Ok(cached.Value, new Dictionary<string, object?>());
+                }
+
+                // 从缓存获取依赖关系（避免重复解析表达式）
+                var dependencies = _dependencyCache.GetOrAdd(virtualDataPoint.Id, _ => ParseDependencies(virtualDataPoint.Expression));
                 var dependencyValues = new Dictionary<string, object?>();
 
                 foreach (var depTag in dependencies)
@@ -212,6 +246,9 @@ public class VirtualNodeEngine : IVirtualNodeEngine
                 // 设置虚拟数据点 ID 和 Tag
                 result.VirtualDataPointId = virtualDataPoint.Id;
                 result.VirtualDataPointTag = virtualDataPoint.Tag;
+
+                // 更新计算结果缓存（500ms 有效期）
+                _calculationCache[virtualDataPoint.Id] = (result.Value, DateTime.UtcNow + _cacheExpiration);
 
                 return result;
             }

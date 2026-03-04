@@ -39,10 +39,11 @@ public class DataCollectionService
     private readonly ILogger<DataCollectionService> _logger;
 
     // 每个设备的采集任务句柄（设备 Id → CancellationTokenSource）
-    private readonly Dictionary<int, CancellationTokenSource> _deviceTasks = new();
+    private readonly ConcurrentDictionary<int, CancellationTokenSource> _deviceTasks = new();
 
     // 全量数据快照：DataPointId → 带时间戳的采集数据（唯一数据源）
-    private readonly Dictionary<int, TimestampedData> _dataSnapshot = new();
+    // 使用 ConcurrentDictionary 替代 ReaderWriterLockSlim + Dictionary，提升并发性能
+    private readonly ConcurrentDictionary<int, TimestampedData> _dataSnapshot = new();
 
     // Tag 索引：Tag → DataPointId，支持按 Tag 快速查询
     private readonly ConcurrentDictionary<string, int> _tagIndex = new();
@@ -54,8 +55,6 @@ public class DataCollectionService
     // 设备 ID → 虚拟数据点 ID 列表，用于快速查找设备下的虚拟数据点
     private readonly ConcurrentDictionary<int, HashSet<int>> _deviceVirtualPointIds = new();
 
-    // 读写锁：支持多读单写，提升并发性能
-    private readonly ReaderWriterLockSlim _snapshotLock = new();
     private readonly int _aggregateWindowMs = 1000; // 聚合窗口：1 秒
     private readonly TimeSpan _dataExpiration = TimeSpan.FromSeconds(30); // 数据过期时间：30 秒
     private CancellationTokenSource? _aggregatorCts;
@@ -107,31 +106,22 @@ public class DataCollectionService
     /// 根据 Tag 获取快照数据值（供虚拟节点引擎使用）
     /// 通过 _tagIndex 快速定位 DataPointId，然后从 _dataSnapshot 查询
     /// 数据过期时间为 30 秒，过期数据返回 null
-    /// 使用读锁，支持高并发读取
+    /// 使用 ConcurrentDictionary，无需锁，支持高并发读取
     /// </summary>
     private object? GetSnapshotValue(string tag)
     {
         // 从快照中查询（通过 Tag 索引）
         if (_tagIndex.TryGetValue(tag, out var dataPointId))
         {
-            // 使用读锁，支持并发读取
-            _snapshotLock.EnterReadLock();
-            try
+            if (_dataSnapshot.TryGetValue(dataPointId, out var snapshotData))
             {
-                if (_dataSnapshot.TryGetValue(dataPointId, out var snapshotData))
+                // 数据过期，返回 null
+                if (snapshotData.IsExpired(_dataExpiration))
                 {
-                    // 数据过期，返回 null
-                    if (snapshotData.IsExpired(_dataExpiration))
-                    {
-                        return null;
-                    }
-
-                    return snapshotData.Data.Value;
+                    return null;
                 }
-            }
-            finally
-            {
-                _snapshotLock.ExitReadLock();
+
+                return snapshotData.Data.Value;
             }
         }
 
@@ -141,10 +131,10 @@ public class DataCollectionService
     /// <summary>
     /// 启动数据聚合器（后台任务，按窗口间隔批量推送全量数据）
     /// </summary>
-    public void StartAggregator(CancellationToken cancellationToken)
+    public async Task StartAggregatorAsync(CancellationToken cancellationToken)
     {
         // 预先加载所有通道绑定的数据点，确保即使未采集过也会出现在快照中
-        InitializeSnapshotFromMappings();
+        await InitializeSnapshotFromMappingsAsync();
 
         _aggregatorCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _aggregatorTask = Task.Run(async () =>
@@ -168,13 +158,14 @@ public class DataCollectionService
 
     /// <summary>
     /// 从数据库加载所有通道绑定的数据点，初始化快照（即使未采集过也会出现在快照中）
+    /// 使用 ConcurrentDictionary，无需锁
     /// </summary>
-    private void InitializeSnapshotFromMappings()
+    private async Task InitializeSnapshotFromMappingsAsync()
     {
         using var scope = _serviceProvider.CreateScope();
         var channelRepo = scope.ServiceProvider.GetRequiredService<IChannelRepository>();
 
-        var channels = channelRepo.GetEnabledWithMappingsAsync().Result;
+        var channels = await channelRepo.GetEnabledWithMappingsAsync();
         foreach (var channel in channels)
         {
             // 处理普通数据点映射
@@ -256,14 +247,13 @@ public class DataCollectionService
 
     /// <summary>
     /// 将全量快照数据批量推送给发送服务（超过 30 秒未更新的数据置为 null）
-    /// 使用读锁，支持读取期间并发写入
+    /// 使用 ConcurrentDictionary，无需锁，支持读取期间并发写入
     /// </summary>
     private async Task FlushSnapshotAsync(CancellationToken cancellationToken)
     {
-        _snapshotLock.EnterReadLock();
         try
         {
-            if (_dataSnapshot.Count == 0)
+            if (_dataSnapshot.IsEmpty)
                 return;
 
             // 预分配列表容量，避免扩容开销
@@ -290,10 +280,6 @@ public class DataCollectionService
         {
             _logger.LogError(ex, "数据聚合推送失败");
         }
-        finally
-        {
-            _snapshotLock.ExitReadLock();
-        }
     }
 
     /// <summary>
@@ -317,90 +303,76 @@ public class DataCollectionService
     /// 更新数据点到全量快照（线程安全）
     /// 质量为 Good 且 Value 不为 null 时，更新数据和 LastUpdateTime
     /// 质量为 Good 但 Value 为 null 时，保持上次成功值，不更新 LastUpdateTime（这样超过 30 秒会过期）
-    /// 使用写锁，但尽量减少锁持有时间
+    /// 使用 ConcurrentDictionary，无需锁
     /// </summary>
-    public async Task UpdateSnapshotAsync(IEnumerable<CollectedData> data, CancellationToken cancellationToken)
+    public Task UpdateSnapshotAsync(IEnumerable<CollectedData> data, CancellationToken cancellationToken)
     {
-        _snapshotLock.EnterWriteLock();
-        try
+        foreach (var item in data)
         {
-            foreach (var item in data)
+            // 只处理质量为 Good 的数据
+            if (item.Quality != DataQuality.Good)
             {
-                // 只处理质量为 Good 的数据
-                if (item.Quality != DataQuality.Good)
-                {
-                    // 采集失败时，保持快照中的上次成功值，不更新
-                    continue;
-                }
+                // 采集失败时，保持快照中的上次成功值，不更新
+                continue;
+            }
 
-                // 维护 Tag 索引
-                _tagIndex[item.Tag] = item.DataPointId;
+            // 维护 Tag 索引
+            _tagIndex[item.Tag] = item.DataPointId;
 
-                // 更新或添加数据点的最新值
-                if (_dataSnapshot.TryGetValue(item.DataPointId, out var existing))
+            // 更新或添加数据点的最新值
+            if (_dataSnapshot.TryGetValue(item.DataPointId, out var existing))
+            {
+                // 只有 Value 不为 null 时，才更新数据和 LastUpdateTime
+                if (item.Value != null)
                 {
-                    // 只有 Value 不为 null 时，才更新数据和 LastUpdateTime
-                    if (item.Value != null)
-                    {
-                        existing.Data = item;
-                        existing.LastUpdateTime = DateTime.UtcNow;
-                    }
-                    // 如果 Value 为 null，保持 existing.Data 和 LastUpdateTime 不变
-                    // 这样超过 30 秒后会自动过期
+                    existing.Data = item;
+                    existing.LastUpdateTime = DateTime.UtcNow;
                 }
-                else
+                // 如果 Value 为 null，保持 existing.Data 和 LastUpdateTime 不变
+                // 这样超过 30 秒后会自动过期
+            }
+            else
+            {
+                _dataSnapshot[item.DataPointId] = new TimestampedData
                 {
-                    _dataSnapshot[item.DataPointId] = new TimestampedData
-                    {
-                        Data = item,
-                        LastUpdateTime = item.Value != null ? DateTime.UtcNow : DateTime.MinValue
-                    };
-                }
+                    Data = item,
+                    LastUpdateTime = item.Value != null ? DateTime.UtcNow : DateTime.MinValue
+                };
             }
         }
-        finally
-        {
-            _snapshotLock.ExitWriteLock();
-        }
+
+        return Task.CompletedTask;
     }
 
     /// <summary>
     /// 获取指定设备的所有数据点快照数据（用于 realtime 接口）
     /// 超过 30 秒未更新的数据返回 null（Uncertain）
-    /// 使用读锁，支持并发读取
+    /// 使用 ConcurrentDictionary，无需锁，支持并发读取
     /// </summary>
     public List<CollectedData> GetDeviceSnapshotData(int deviceId)
     {
-        _snapshotLock.EnterReadLock();
-        try
+        var results = new List<CollectedData>();
+
+        // 遍历快照，筛选出该设备的所有数据点（包括虚拟数据点）
+        foreach (var kvp in _dataSnapshot)
         {
-            var results = new List<CollectedData>();
-            
-            // 遍历快照，筛选出该设备的所有数据点（包括虚拟数据点）
-            foreach (var kvp in _dataSnapshot)
+            if (kvp.Value.Data.DeviceId != deviceId)
+                continue;
+
+            // 使用 IsExpired 方法统一判断过期
+            if (kvp.Value.IsExpired(_dataExpiration))
             {
-                if (kvp.Value.Data.DeviceId != deviceId)
-                    continue;
-
-                // 使用 IsExpired 方法统一判断过期
-                if (kvp.Value.IsExpired(_dataExpiration))
-                {
-                    // 超过 30 秒没有成功数据，返回 null 占位数据
-                    results.Add(CreateTimeoutData(kvp.Value.Data));
-                }
-                else
-                {
-                    // 正常数据
-                    results.Add(kvp.Value.Data);
-                }
+                // 超过 30 秒没有成功数据，返回 null 占位数据
+                results.Add(CreateTimeoutData(kvp.Value.Data));
             }
+            else
+            {
+                // 正常数据
+                results.Add(kvp.Value.Data);
+            }
+        }
 
-            return results;
-        }
-        finally
-        {
-            _snapshotLock.ExitReadLock();
-        }
+        return results;
     }
 
     /// <summary>
@@ -416,7 +388,7 @@ public class DataCollectionService
         _logger.LogInformation("共发现 {Count} 台启用设备，开始启动采集任务", devices.Count);
 
         // 启动数据聚合器
-        StartAggregator(cancellationToken);
+        await StartAggregatorAsync(cancellationToken);
 
         // 初始化虚拟节点计算（确保启动时虚拟节点有初始值）
         await InitializeVirtualNodesAsync(cancellationToken);
@@ -506,14 +478,13 @@ public class DataCollectionService
     /// </summary>
     public void StopDevice(int deviceId)
     {
-        if (_deviceTasks.TryGetValue(deviceId, out var cts))
+        if (_deviceTasks.TryRemove(deviceId, out var cts))
         {
             cts.Cancel();
-            _deviceTasks.Remove(deviceId);
-            
+
             // 清理该设备的快照数据和 Tag 索引
             ClearDeviceSnapshotData(deviceId);
-            
+
             _logger.LogInformation("设备 ID [{DeviceId}] 采集任务已停止", deviceId);
         }
     }
@@ -586,14 +557,13 @@ public class DataCollectionService
     public async Task StartDeviceTaskByIdAsync(int deviceId)
     {
         // 如果任务已存在，先停止
-        if (_deviceTasks.TryGetValue(deviceId, out var existingCts))
+        if (_deviceTasks.TryRemove(deviceId, out var existingCts))
         {
             await existingCts.CancelAsync();
-            _deviceTasks.Remove(deviceId);
-            
+
             // 清理该设备的快照数据
             ClearDeviceSnapshotData(deviceId);
-            
+
             _logger.LogInformation("设备 ID [{DeviceId}] 原有采集任务已停止，准备重启", deviceId);
         }
 
@@ -742,32 +712,24 @@ public class DataCollectionService
                 {
                     var snapshotKey = -vp.Id;
 
-                    // 更新快照
-                    _snapshotLock.EnterWriteLock();
-                    try
-                    {
-                        // 维护 Tag 索引
-                        _tagIndex[vp.Tag] = snapshotKey;
+                    // 维护 Tag 索引
+                    _tagIndex[vp.Tag] = snapshotKey;
 
-                        _dataSnapshot[snapshotKey] = new TimestampedData
-                        {
-                            Data = new CollectedData
-                            {
-                                DataPointId = snapshotKey,
-                                Tag = vp.Tag,
-                                DeviceId = vp.DeviceId,
-                                DeviceName = vp.Device?.Name ?? "Unknown",
-                                Value = virtualResult.Value,
-                                Quality = virtualResult.Quality,
-                                Timestamp = virtualResult.Timestamp
-                            },
-                            LastUpdateTime = DateTime.UtcNow
-                        };
-                    }
-                    finally
+                    // 更新快照（ConcurrentDictionary 直接赋值即可，无需锁）
+                    _dataSnapshot[snapshotKey] = new TimestampedData
                     {
-                        _snapshotLock.ExitWriteLock();
-                    }
+                        Data = new CollectedData
+                        {
+                            DataPointId = snapshotKey,
+                            Tag = vp.Tag,
+                            DeviceId = vp.DeviceId,
+                            DeviceName = vp.Device?.Name ?? "Unknown",
+                            Value = virtualResult.Value,
+                            Quality = virtualResult.Quality,
+                            Timestamp = virtualResult.Timestamp
+                        },
+                        LastUpdateTime = DateTime.UtcNow
+                    };
                 }
             }
         }
@@ -776,32 +738,25 @@ public class DataCollectionService
     /// <summary>
     /// 清理指定设备的快照数据和 Tag 索引
     /// 批量操作，减少锁持有时间
+    /// 使用 ConcurrentDictionary，无需锁
     /// </summary>
     private void ClearDeviceSnapshotData(int deviceId)
     {
-        _snapshotLock.EnterWriteLock();
-        try
-        {
-            // 找出该设备的所有数据点
-            var keysToRemove = _dataSnapshot
-                .Where(kvp => kvp.Value.Data.DeviceId == deviceId)
-                .Select(kvp => kvp.Key)
-                .ToList();
+        // 找出该设备的所有数据点
+        var keysToRemove = _dataSnapshot
+            .Where(kvp => kvp.Value.Data.DeviceId == deviceId)
+            .Select(kvp => kvp.Key)
+            .ToList();
 
-            // 从快照中移除
-            foreach (var key in keysToRemove)
-            {
-                _dataSnapshot.Remove(key);
-            }
-
-            _logger.LogDebug("设备 ID={DeviceId} 的快照数据已清理，移除 {Count} 个数据点", deviceId, keysToRemove.Count);
-        }
-        finally
+        // 从快照中移除
+        foreach (var key in keysToRemove)
         {
-            _snapshotLock.ExitWriteLock();
+            _dataSnapshot.TryRemove(key, out _);
         }
 
-        // 锁外清理 Tag 索引（ConcurrentDictionary 本身线程安全）
+        _logger.LogDebug("设备 ID={DeviceId} 的快照数据已清理，移除 {Count} 个数据点", deviceId, keysToRemove.Count);
+
+        // 清理 Tag 索引（ConcurrentDictionary 本身线程安全）
         var tagKeysToRemove = _tagIndex
             .Where(kvp => !_dataSnapshot.ContainsKey(kvp.Value))
             .Select(kvp => kvp.Key)
