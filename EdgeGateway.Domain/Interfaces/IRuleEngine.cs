@@ -87,4 +87,24 @@ public interface IRuleEngine
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>规则执行结果列表</returns>
     Task<List<RuleExecutionResult>> ExecuteRulesBatchAsync(IEnumerable<CollectedData> dataList, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 加载规则到缓存
+    /// </summary>
+    Task LoadRulesCacheAsync();
+
+    /// <summary>
+    /// 主动刷新规则缓存（用于配置变更时）
+    /// </summary>
+    Task RefreshRulesCacheAsync();
+
+    /// <summary>
+    /// 清除指定数据点的规则缓存
+    /// </summary>
+    void InvalidateDataPointRulesCache(int dataPointId);
+
+    /// <summary>
+    /// 清除指定设备的规则缓存
+    /// </summary>
+    void InvalidateDeviceRulesCache(int deviceId);
 }

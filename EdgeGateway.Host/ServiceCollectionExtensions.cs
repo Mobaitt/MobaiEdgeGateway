@@ -1,6 +1,7 @@
 using EdgeGateway.Application.Services;
 using EdgeGateway.Domain.Enums;
 using EdgeGateway.Domain.Interfaces;
+using EdgeGateway.Domain.Options;
 using EdgeGateway.Infrastructure.Data;
 using EdgeGateway.Infrastructure.Http;
 using EdgeGateway.Infrastructure.Repositories;
@@ -25,6 +26,32 @@ public static class ServiceCollectionExtensions
         this IServiceCollection services,
         string dbPath = "gateway.db")
     {
+        // ========== 配置选项 ==========
+        // 注意：实际配置值从 Program.cs 中通过 IConfiguration 读取并配置
+        services.Configure<GatewayOptions>(options =>
+        {
+            // 这里提供默认值作为后备（当配置文件不存在时使用）
+            options.Collection.AggregateWindowMs = 1000;
+            options.Collection.DataExpirationSeconds = 30;
+            options.Collection.DefaultPollingIntervalMs = 1000;
+            options.Collection.MinPollingIntervalMs = 100;
+            options.Collection.MaxPollingIntervalMs = 60000;
+
+            options.Send.ChannelCacheExpirationSeconds = 30;
+            options.Send.HttpTimeoutMs = 5000;
+            options.Send.MqttQoS = 1;
+            options.Send.MaxConcurrentChannels = 10;
+
+            options.Rules.CacheExpirationMinutes = 5;
+
+            options.VirtualNodes.CalculationCacheMs = 500;
+            options.VirtualNodes.MaxConcurrentCalculations = 20;
+
+            options.Database.Type = "SQLite";
+            options.Database.ConnectionString = $"Data Source={dbPath}";
+            options.Database.EnableSensitiveDataLogging = false;
+        });
+
         // ========== 数据库 ==========
         services.AddDbContext<GatewayDbContext>(options =>
             options.UseSqlite($"Data Source={dbPath}")

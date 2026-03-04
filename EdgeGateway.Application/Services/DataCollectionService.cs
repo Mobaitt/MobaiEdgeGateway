@@ -1,9 +1,11 @@
 using EdgeGateway.Domain.Entities;
 using EdgeGateway.Domain.Interfaces;
+using EdgeGateway.Domain.Options;
 using EdgeGateway.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using System.Collections.Concurrent;
 
 namespace EdgeGateway.Application.Services;
@@ -37,6 +39,7 @@ public class DataCollectionService
     private readonly IVirtualNodeEngine _virtualNodeEngine;
     private readonly IDbContextFactory<GatewayDbContext> _dbContextFactory;
     private readonly ILogger<DataCollectionService> _logger;
+    private readonly GatewayOptions _options;
 
     // 每个设备的采集任务句柄（设备 Id → CancellationTokenSource）
     private readonly ConcurrentDictionary<int, CancellationTokenSource> _deviceTasks = new();
@@ -55,8 +58,13 @@ public class DataCollectionService
     // 设备 ID → 虚拟数据点 ID 列表，用于快速查找设备下的虚拟数据点
     private readonly ConcurrentDictionary<int, HashSet<int>> _deviceVirtualPointIds = new();
 
-    private readonly int _aggregateWindowMs = 1000; // 聚合窗口：1 秒
-    private readonly TimeSpan _dataExpiration = TimeSpan.FromSeconds(30); // 数据过期时间：30 秒
+    // 上次发送的值缓存：DataPointId → (Value, Timestamp)，用于变化检测
+    // 只有当数据点的值发生变化时才更新时间戳，避免发送重复数据
+    private readonly ConcurrentDictionary<int, (object? Value, DateTime Timestamp)> _lastSentValues = new();
+
+    private readonly int _aggregateWindowMs;
+    private readonly TimeSpan _dataExpiration;
+    private readonly bool _enableChangeDetection = true; // 是否启用变化检测
     private CancellationTokenSource? _aggregatorCts;
     private Task? _aggregatorTask;
 
@@ -85,7 +93,8 @@ public class DataCollectionService
         IRuleEngine ruleEngine,
         IVirtualNodeEngine virtualNodeEngine,
         IDbContextFactory<GatewayDbContext> dbContextFactory,
-        ILogger<DataCollectionService> logger)
+        ILogger<DataCollectionService> logger,
+        IOptions<GatewayOptions> options)
     {
         _serviceProvider     = serviceProvider;
         _strategyRegistry    = strategyRegistry;
@@ -94,6 +103,11 @@ public class DataCollectionService
         _virtualNodeEngine   = virtualNodeEngine;
         _dbContextFactory    = dbContextFactory;
         _logger              = logger;
+        _options             = options.Value;
+
+        // 从配置读取采集相关参数
+        _aggregateWindowMs = _options.Collection.AggregateWindowMs;
+        _dataExpiration = TimeSpan.FromSeconds(_options.Collection.DataExpirationSeconds);
 
         // 设置虚拟节点引擎的快照数据获取委托
         if (virtualNodeEngine is EdgeGateway.Infrastructure.VirtualNodes.VirtualNodeEngine engine)
@@ -248,6 +262,7 @@ public class DataCollectionService
     /// <summary>
     /// 将全量快照数据批量推送给发送服务（超过 30 秒未更新的数据置为 null）
     /// 使用 ConcurrentDictionary，无需锁，支持读取期间并发写入
+    /// 启用变化检测时，只发送值发生变化的数据点
     /// </summary>
     private async Task FlushSnapshotAsync(CancellationToken cancellationToken)
     {
@@ -258,6 +273,8 @@ public class DataCollectionService
 
             // 预分配列表容量，避免扩容开销
             var dataToSend = new List<CollectedData>(_dataSnapshot.Count);
+            var changedCount = 0;
+
             foreach (var kvp in _dataSnapshot)
             {
                 // 使用 IsExpired 方法统一判断过期
@@ -265,16 +282,39 @@ public class DataCollectionService
                 {
                     // 超过 30 秒没有成功数据，创建 null 占位数据
                     dataToSend.Add(CreateTimeoutData(kvp.Value.Data));
+                    changedCount++;
                 }
                 else
                 {
-                    // 正常数据
-                    dataToSend.Add(kvp.Value.Data);
+                    // 变化检测：只发送值发生变化的数据点
+                    if (_enableChangeDetection)
+                    {
+                        var currentValue = kvp.Value.Data.Value;
+                        var hasChanged = !_lastSentValues.TryGetValue(kvp.Key, out var lastSent) ||
+                                         !Equals(lastSent.Value, currentValue);
+
+                        if (hasChanged)
+                        {
+                            dataToSend.Add(kvp.Value.Data);
+                            changedCount++;
+                            // 更新上次发送的值
+                            _lastSentValues[kvp.Key] = (currentValue, DateTime.UtcNow);
+                        }
+                    }
+                    else
+                    {
+                        // 不启用变化检测，发送所有数据
+                        dataToSend.Add(kvp.Value.Data);
+                    }
                 }
             }
 
-            // 批量推送
-            await _sendService.DispatchAsync(dataToSend, cancellationToken);
+            // 批量推送（如果没有变化的数据，跳过推送）
+            if (changedCount > 0)
+            {
+                await _sendService.DispatchAsync(dataToSend, cancellationToken);
+                _logger.LogDebug("数据聚合推送：{Changed}/{Total} 个数据点有变化", changedCount, _dataSnapshot.Count);
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

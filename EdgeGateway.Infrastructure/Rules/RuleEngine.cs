@@ -2,20 +2,29 @@
 using EdgeGateway.Domain.Entities;
 using EdgeGateway.Domain.Enums;
 using EdgeGateway.Domain.Interfaces;
+using EdgeGateway.Domain.Options;
 using EdgeGateway.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 
 namespace EdgeGateway.Infrastructure.Rules;
 
 /// <summary>
 /// 规则引擎实现 - 对采集数据进行限制、转换、校验和计算
+///
+/// 优化特性：
+/// - 规则缓存：5 分钟过期，避免频繁查询数据库
+/// - 主动刷新：配置变更时可主动刷新缓存
+/// - 变化率校验：支持数据点级别的变化率限制
+/// - 死区过滤：支持死区过滤，减少冗余数据
 /// </summary>
 public class RuleEngine : IRuleEngine
 {
     private readonly IDbContextFactory<GatewayDbContext> _dbContextFactory;
     private readonly ILogger<RuleEngine> _logger;
+    private readonly GatewayOptions _options;
 
     // 规则缓存：DataPointId -> 规则列表（按优先级排序）
     private readonly ConcurrentDictionary<int, List<DataPointRule>> _dataPointRulesCache = new();
@@ -26,78 +35,126 @@ public class RuleEngine : IRuleEngine
     // 全局规则缓存
     private List<DataPointRule> _globalRulesCache = new();
 
-    // 规则缓存过期时间（5 分钟）
-    private readonly TimeSpan _cacheExpiration = TimeSpan.FromMinutes(5);
+    // 规则缓存过期时间（从配置读取，默认 5 分钟）
+    private readonly TimeSpan _cacheExpiration;
     private DateTime _lastCacheLoadTime = DateTime.MinValue;
+
+    // 缓存加载锁（防止并发刷新）
+    private readonly SemaphoreSlim _cacheLock = new(1, 1);
 
     // 上一次的值（用于变化率校验）
     private readonly ConcurrentDictionary<int, (object? Value, DateTime Timestamp)> _lastValues = new();
 
     public RuleEngine(
         IDbContextFactory<GatewayDbContext> dbContextFactory,
-        ILogger<RuleEngine> logger)
+        ILogger<RuleEngine> logger,
+        IOptions<GatewayOptions> options)
     {
         _dbContextFactory = dbContextFactory;
         _logger = logger;
+        _options = options.Value;
+
+        // 从配置读取规则引擎参数
+        _cacheExpiration = TimeSpan.FromMinutes(_options.Rules.CacheExpirationMinutes);
     }
 
     /// <summary>
-    /// 加载所有规则到缓存
+    /// 加载所有规则到缓存（线程安全，使用异步锁）
     /// </summary>
-    private async Task LoadRulesCacheAsync()
+    public async Task LoadRulesCacheAsync()
     {
         if (DateTime.UtcNow - _lastCacheLoadTime < _cacheExpiration)
             return;
 
-        await using var context = await _dbContextFactory.CreateDbContextAsync();
-
-        var allRules = await context.DataPointRules
-            .Include(r => r.DataPoint)
-            .Include(r => r.Device)
-            .Where(r => r.IsEnabled)
-            .OrderBy(r => r.Priority)
-            .ToListAsync();
-
-        // 分类缓存
-        _globalRulesCache = allRules.Where(r => r.DataPointId == null && r.DeviceId == null).ToList();
-
-        _dataPointRulesCache.Clear();
-        foreach (var rule in allRules.Where(r => r.DataPointId.HasValue))
+        await _cacheLock.WaitAsync();
+        try
         {
-            if (rule.DataPointId.HasValue)
-            {
-                _dataPointRulesCache.AddOrUpdate(
-                    rule.DataPointId.Value,
-                    new List<DataPointRule> { rule },
-                    (_, existing) =>
-                    {
-                        existing.Add(rule);
-                        existing.Sort((a, b) => a.Priority.CompareTo(b.Priority));
-                        return existing;
-                    });
-            }
-        }
+            // 双重检查，避免重复加载
+            if (DateTime.UtcNow - _lastCacheLoadTime < _cacheExpiration)
+                return;
 
-        _deviceRulesCache.Clear();
-        foreach (var rule in allRules.Where(r => r.DeviceId.HasValue))
+            await using var context = await _dbContextFactory.CreateDbContextAsync();
+
+            var allRules = await context.DataPointRules
+                .Include(r => r.DataPoint)
+                .Include(r => r.Device)
+                .Where(r => r.IsEnabled)
+                .OrderBy(r => r.Priority)
+                .ToListAsync();
+
+            // 分类缓存
+            _globalRulesCache = allRules.Where(r => r.DataPointId == null && r.DeviceId == null).ToList();
+
+            _dataPointRulesCache.Clear();
+            foreach (var rule in allRules.Where(r => r.DataPointId.HasValue))
+            {
+                if (rule.DataPointId.HasValue)
+                {
+                    _dataPointRulesCache.AddOrUpdate(
+                        rule.DataPointId.Value,
+                        new List<DataPointRule> { rule },
+                        (_, existing) =>
+                        {
+                            existing.Add(rule);
+                            existing.Sort((a, b) => a.Priority.CompareTo(b.Priority));
+                            return existing;
+                        });
+                }
+            }
+
+            _deviceRulesCache.Clear();
+            foreach (var rule in allRules.Where(r => r.DeviceId.HasValue))
+            {
+                if (rule.DeviceId.HasValue)
+                {
+                    _deviceRulesCache.AddOrUpdate(
+                        rule.DeviceId.Value,
+                        new List<DataPointRule> { rule },
+                        (_, existing) =>
+                        {
+                            existing.Add(rule);
+                            existing.Sort((a, b) => a.Priority.CompareTo(b.Priority));
+                            return existing;
+                        });
+                }
+            }
+
+            _lastCacheLoadTime = DateTime.UtcNow;
+            _logger.LogInformation("规则缓存已加载：全局 {_globalRules} 条，数据点 {_dataPointRules} 条，设备 {_deviceRules} 条",
+                _globalRulesCache.Count, _dataPointRulesCache.Count, _deviceRulesCache.Count);
+        }
+        finally
         {
-            if (rule.DeviceId.HasValue)
-            {
-                _deviceRulesCache.AddOrUpdate(
-                    rule.DeviceId.Value,
-                    new List<DataPointRule> { rule },
-                    (_, existing) =>
-                    {
-                        existing.Add(rule);
-                        existing.Sort((a, b) => a.Priority.CompareTo(b.Priority));
-                        return existing;
-                    });
-            }
+            _cacheLock.Release();
         }
+    }
 
-        _lastCacheLoadTime = DateTime.UtcNow;
-        _logger.LogInformation("规则缓存已加载：全局 {_globalRules} 条，数据点 {_dataPointRules} 条，设备 {_deviceRules} 条",
-            _globalRulesCache.Count, _dataPointRulesCache.Count, _deviceRulesCache.Count);
+    /// <summary>
+    /// 主动刷新规则缓存（用于配置变更时）
+    /// </summary>
+    public async Task RefreshRulesCacheAsync()
+    {
+        _lastCacheLoadTime = DateTime.MinValue; // 强制过期
+        await LoadRulesCacheAsync();
+        _logger.LogInformation("规则缓存已主动刷新");
+    }
+
+    /// <summary>
+    /// 清除指定数据点的规则缓存（用于配置变更时）
+    /// </summary>
+    public void InvalidateDataPointRulesCache(int dataPointId)
+    {
+        _dataPointRulesCache.TryRemove(dataPointId, out _);
+        _logger.LogDebug("数据点 ID={DataPointId} 的规则缓存已清除", dataPointId);
+    }
+
+    /// <summary>
+    /// 清除指定设备的规则缓存（用于配置变更时）
+    /// </summary>
+    public void InvalidateDeviceRulesCache(int deviceId)
+    {
+        _deviceRulesCache.TryRemove(deviceId, out _);
+        _logger.LogDebug("设备 ID={DeviceId} 的规则缓存已清除", deviceId);
     }
 
     /// <summary>

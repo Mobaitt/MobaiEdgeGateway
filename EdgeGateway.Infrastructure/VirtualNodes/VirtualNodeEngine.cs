@@ -2,9 +2,11 @@
 using EdgeGateway.Domain.Entities;
 using EdgeGateway.Domain.Enums;
 using EdgeGateway.Domain.Interfaces;
+using EdgeGateway.Domain.Options;
 using EdgeGateway.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using NCalc;
 
 namespace EdgeGateway.Infrastructure.VirtualNodes;
@@ -25,6 +27,7 @@ public class VirtualNodeEngine : IVirtualNodeEngine
     private readonly ILogger<VirtualNodeEngine> _logger;
     private readonly IRuleEngine? _ruleEngine;
     private Func<string, object?>? _getDataSnapshot; // 获取快照数据的委托
+    private readonly GatewayOptions _options;
 
     // 虚拟数据点缓存
     private readonly ConcurrentDictionary<int, VirtualDataPoint> _virtualPointCache = new();
@@ -39,23 +42,41 @@ public class VirtualNodeEngine : IVirtualNodeEngine
     private readonly ConcurrentDictionary<int, SemaphoreSlim> _calculationLocks = new();
 
     // 计算结果缓存：VirtualDataPointId -> (缓存值，过期时间)
-    // 缓存 500ms，避免短时间内重复计算
+    // 缓存时间从配置读取，避免短时间内重复计算
     private readonly ConcurrentDictionary<int, (object? Value, DateTime ExpireTime)> _calculationCache = new();
-    private readonly TimeSpan _cacheExpiration = TimeSpan.FromMilliseconds(500);
-
+    private readonly TimeSpan _cacheExpiration;
+    
     // 依赖关系缓存：VirtualDataPointId -> 依赖的 Tag 列表
     private readonly ConcurrentDictionary<int, List<string>> _dependencyCache = new();
+    
+    // 最大并发计算数
+    private readonly int _maxConcurrentCalculations;
 
     public VirtualNodeEngine(
         IDbContextFactory<GatewayDbContext> dbContextFactory,
         ILogger<VirtualNodeEngine> logger,
         IRuleEngine? ruleEngine = null,
-        Func<string, object?>? getDataSnapshot = null)
+        Func<string, object?>? getDataSnapshot = null,
+        IOptions<GatewayOptions> options = null)
     {
         _dbContextFactory = dbContextFactory;
         _logger = logger;
         _ruleEngine = ruleEngine;
         _getDataSnapshot = getDataSnapshot;
+        
+        if (options != null)
+        {
+            _options = options.Value;
+            // 从配置读取虚拟节点参数
+            _cacheExpiration = TimeSpan.FromMilliseconds(_options.VirtualNodes.CalculationCacheMs);
+            _maxConcurrentCalculations = _options.VirtualNodes.MaxConcurrentCalculations;
+        }
+        else
+        {
+            // 默认值（向后兼容）
+            _cacheExpiration = TimeSpan.FromMilliseconds(500);
+            _maxConcurrentCalculations = 20;
+        }
     }
     
     /// <summary>
@@ -280,14 +301,31 @@ public class VirtualNodeEngine : IVirtualNodeEngine
 
         var results = new List<VirtualNodeCalculationResult>();
 
-        foreach (var pointId in virtualPointIds)
+        // 并行计算无依赖关系的虚拟节点
+        // 使用 SemaphoreSlim 限制并发数，从配置读取，避免过度消耗资源
+        var maxConcurrency = Math.Min(virtualPointIds.Count, _maxConcurrentCalculations);
+        var semaphore = new SemaphoreSlim(maxConcurrency);
+        var tasks = virtualPointIds.Select(async pointId =>
         {
-            if (_virtualPointCache.TryGetValue(pointId, out var point))
+            await semaphore.WaitAsync(cancellationToken);
+            try
             {
-                var result = await CalculateAsync(point, cancellationToken);
-                results.Add(result);
+                if (_virtualPointCache.TryGetValue(pointId, out var point))
+                {
+                    var result = await CalculateAsync(point, cancellationToken);
+                    lock (results)
+                    {
+                        results.Add(result);
+                    }
+                }
             }
-        }
+            finally
+            {
+                semaphore.Release();
+            }
+        });
+
+        await Task.WhenAll(tasks);
 
         _logger.LogInformation("设备 ID={DeviceId} 虚拟节点计算完成：{SuccessCount}/{TotalCount} 成功",
             deviceId, results.Count(r => r.Success), results.Count);
@@ -302,11 +340,27 @@ public class VirtualNodeEngine : IVirtualNodeEngine
         var virtualPoints = _virtualPointCache.Values.ToList();
         var results = new List<VirtualNodeCalculationResult>();
 
-        foreach (var point in virtualPoints)
+        // 并行计算所有虚拟节点（限制并发数，从配置读取）
+        var maxConcurrency = Math.Min(virtualPoints.Count, _maxConcurrentCalculations);
+        var semaphore = new SemaphoreSlim(maxConcurrency);
+        var tasks = virtualPoints.Select(async point =>
         {
-            var result = await CalculateAsync(point, cancellationToken);
-            results.Add(result);
-        }
+            await semaphore.WaitAsync(cancellationToken);
+            try
+            {
+                var result = await CalculateAsync(point, cancellationToken);
+                lock (results)
+                {
+                    results.Add(result);
+                }
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+        });
+
+        await Task.WhenAll(tasks);
 
         _logger.LogInformation("虚拟节点计算完成：{SuccessCount}/{TotalCount} 成功",
             results.Count(r => r.Success), results.Count);

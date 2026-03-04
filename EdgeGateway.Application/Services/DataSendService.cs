@@ -1,8 +1,10 @@
 using EdgeGateway.Domain.Entities;
 using EdgeGateway.Domain.Interfaces;
+using EdgeGateway.Domain.Options;
 using EdgeGateway.Infrastructure.Strategies.Send;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace EdgeGateway.Application.Services;
 
@@ -20,6 +22,7 @@ public class DataSendService
     private readonly IServiceProvider _serviceProvider;
     private readonly SendStrategyRegistry _strategyRegistry;
     private readonly ILogger<DataSendService> _logger;
+    private readonly GatewayOptions _options;
 
     // 已初始化的发送策略实例缓存（通道 ID → 策略实例），避免重复连接
     private readonly Dictionary<int, ISendStrategy> _strategyCache = new();
@@ -29,16 +32,21 @@ public class DataSendService
     private List<Channel> _cachedChannels = new();
     private DateTime _cacheUpdateTime = DateTime.MinValue;
     private readonly SemaphoreSlim _cacheLock = new(1, 1);
-    private readonly TimeSpan _cacheExpiration = TimeSpan.FromSeconds(30); // 缓存过期时间：30 秒
+    private readonly TimeSpan _cacheExpiration;
 
     public DataSendService(
         IServiceProvider serviceProvider,
         SendStrategyRegistry strategyRegistry,
-        ILogger<DataSendService> logger)
+        ILogger<DataSendService> logger,
+        IOptions<GatewayOptions> options)
     {
         _serviceProvider  = serviceProvider;
         _strategyRegistry = strategyRegistry;
         _logger           = logger;
+        _options          = options.Value;
+
+        // 从配置读取发送相关参数
+        _cacheExpiration = TimeSpan.FromSeconds(_options.Send.ChannelCacheExpirationSeconds);
     }
 
     /// <summary>
