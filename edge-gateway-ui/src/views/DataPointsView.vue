@@ -96,7 +96,7 @@
 
         <el-table-column label="实时值" width="140" align="center">
           <template #default="{ row }">
-            <span v-if="getRealtimeData(row)" class="mono realtime-value" :class="getRowQualityClass(row)">
+            <span v-if="getRealtimeData(row)" class="mono realtime-value" :class="getQualityClass(getRealtimeData(row)!.quality)">
               {{ formatRowValue(row) }}
               <span v-if="row.unit" class="value-unit">{{ row.unit }}</span>
             </span>
@@ -106,8 +106,8 @@
 
         <el-table-column prop="quality" label="质量" width="90" align="center" sortable>
           <template #default="{ row }">
-            <span v-if="getRowQualityText(row)" class="badge mono" :class="getRowQualityClass(row)">
-              {{ getRowQualityText(row) }}
+            <span v-if="getRealtimeData(row)" class="badge mono" :class="getQualityClass(getRealtimeData(row)!.quality)">
+              {{ getRealtimeData(row)!.quality }}
             </span>
             <span v-else style="color:var(--text-muted);font-size:12px">—</span>
           </template>
@@ -511,18 +511,25 @@ const fetchRealtimeData = async () => {
     const res = await getDeviceRealtimeData(deviceId.value)
     const dataList = ((res as { data?: RealtimeDataItem[] })?.data ?? []) as RealtimeDataItem[]
 
-    // 使用 Tag 作为 key 存储实时数据，避免虚拟数据点 ID 问题
+    // 增量更新实时数据，避免全量替换导致的不必要渲染
     // 后端返回的 tag 已是完整格式（如 DEV001.Temperature）
-    const dataMap: Record<string, RealtimeDataItem> = {}
+    const newData: Record<string, RealtimeDataItem> = { ...realtimeData.value }
+    let hasChanges = false
+
     dataList.forEach((item) => {
       if (item.tag) {
-        dataMap[item.tag] = item
+        const oldItem = newData[item.tag]
+        // 只有当值或质量发生变化时才标记为有更新
+        if (!oldItem || oldItem.value !== item.value || oldItem.quality !== item.quality) {
+          newData[item.tag] = item
+          hasChanges = true
+        }
       }
     })
 
-    realtimeData.value = dataMap
-
-    if (dataList.length > 0) {
+    // 仅在有变化时更新，减少不必要的响应式触发
+    if (hasChanges) {
+      realtimeData.value = newData
       lastUpdateTime.value = new Date()
     }
   } catch (e) {
@@ -532,9 +539,10 @@ const fetchRealtimeData = async () => {
 
 const startRealtimePolling = () => {
   fetchRealtimeData()
+  // 使用 500ms 间隔以提高实时性
   realtimeTimer = window.setInterval(() => {
     fetchRealtimeData()
-  }, 1000) // 每秒刷新一次
+  }, 500)
 }
 
 const stopRealtimePolling = () => {
@@ -567,24 +575,6 @@ const getQualityClass = (quality: string) => {
   if (quality === 'Bad') return 'bad'
   if (quality === 'Uncertain') return 'uncertain'
   return ''
-}
-
-/**
- * 获取数据点的质量等级类名
- * @param row 数据点行数据
- */
-const getRowQualityClass = (row: DataPointWithVirtual): string => {
-  const data = getRealtimeData(row)
-  return data ? getQualityClass(data.quality) : ''
-}
-
-/**
- * 获取数据点的质量文本
- * @param row 数据点行数据
- */
-const getRowQualityText = (row: DataPointWithVirtual): string | null => {
-  const data = getRealtimeData(row)
-  return data ? data.quality : null
 }
 
 /**
