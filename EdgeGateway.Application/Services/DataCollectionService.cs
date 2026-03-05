@@ -96,14 +96,14 @@ public class DataCollectionService
         ILogger<DataCollectionService> logger,
         IOptions<GatewayOptions> options)
     {
-        _serviceProvider     = serviceProvider;
-        _strategyRegistry    = strategyRegistry;
-        _sendService         = sendService;
-        _ruleEngine          = ruleEngine;
-        _virtualNodeEngine   = virtualNodeEngine;
-        _dbContextFactory    = dbContextFactory;
-        _logger              = logger;
-        _options             = options.Value;
+        _serviceProvider = serviceProvider;
+        _strategyRegistry = strategyRegistry;
+        _sendService = sendService;
+        _ruleEngine = ruleEngine;
+        _virtualNodeEngine = virtualNodeEngine;
+        _dbContextFactory = dbContextFactory;
+        _logger = logger;
+        _options = options.Value;
 
         // 从配置读取采集相关参数
         _aggregateWindowMs = _options.Collection.AggregateWindowMs;
@@ -207,7 +207,8 @@ public class DataCollectionService
             }
 
             // 处理虚拟数据点映射
-            foreach (var mapping in channel.VirtualDataPointMappings.Where(m => m.IsEnabled && m.VirtualDataPointId.HasValue))
+            foreach (var mapping in channel.VirtualDataPointMappings.Where(m =>
+                         m.IsEnabled && m.VirtualDataPointId.HasValue))
             {
                 var virtualDataPointId = mapping.VirtualDataPointId!.Value;
                 // 虚拟数据点使用负 ID 存储，以区分于普通数据点
@@ -284,28 +285,35 @@ public class DataCollectionService
                     dataToSend.Add(CreateTimeoutData(kvp.Value.Data));
                     changedCount++;
                 }
-                else
+                else if (_enableChangeDetection)
                 {
                     // 变化检测：只发送值发生变化的数据点
-                    if (_enableChangeDetection)
+                    var currentValue = kvp.Value.Data.Value;
+                    
+                    // 如果当前值为 null，使用上次发送的值（保持数据连续性）
+                    if (currentValue == null && _lastSentValues.TryGetValue(kvp.Key, out var lastValue))
                     {
-                        var currentValue = kvp.Value.Data.Value;
-                        var hasChanged = !_lastSentValues.TryGetValue(kvp.Key, out var lastSent) ||
-                                         !Equals(lastSent.Value, currentValue);
+                        currentValue = lastValue.Value;
+                        kvp.Value.Data.Value = currentValue;
+                    }
+                    
+                    // 判断是否发生变化（包括 null 值变化）
+                    var hasChanged = !_lastSentValues.TryGetValue(kvp.Key, out var lastSent) 
+                                     || !Equals(lastSent.Value, currentValue);
 
-                        if (hasChanged)
-                        {
-                            dataToSend.Add(kvp.Value.Data);
-                            changedCount++;
-                            // 更新上次发送的值
-                            _lastSentValues[kvp.Key] = (currentValue, DateTime.UtcNow);
-                        }
-                    }
-                    else
+                    if (hasChanged)
                     {
-                        // 不启用变化检测，发送所有数据
                         dataToSend.Add(kvp.Value.Data);
+                        changedCount++;
+                        
+                        // 更新上次发送的值（包括 null 值）
+                        _lastSentValues[kvp.Key] = (currentValue, DateTime.UtcNow);
                     }
+                }
+                else
+                {
+                    // 不启用变化检测，发送所有数据
+                    dataToSend.Add(kvp.Value.Data);
                 }
             }
 
@@ -496,7 +504,7 @@ public class DataCollectionService
 
                     // 计算剩余等待时间（扣除采集耗时，尽量保证周期准确）
                     var elapsed = (DateTime.UtcNow - cycleStart).TotalMilliseconds;
-                    var waitMs  = Math.Max(0, device.PollingIntervalMs - elapsed);
+                    var waitMs = Math.Max(0, device.PollingIntervalMs - elapsed);
                     await Task.Delay((int)waitMs, cts.Token);
                 }
             }
@@ -580,7 +588,9 @@ public class DataCollectionService
                 {
                     await _aggregatorTask;
                 }
-                catch (OperationCanceledException) { }
+                catch (OperationCanceledException)
+                {
+                }
             }
 
             // 刷新剩余快照数据
@@ -653,7 +663,8 @@ public class DataCollectionService
     /// <summary>
     /// 执行规则引擎处理采集数据
     /// </summary>
-    private async Task<List<CollectedData>> ExecuteRuleEngineAsync(List<CollectedData> collectedData, CancellationToken cancellationToken)
+    private async Task<List<CollectedData>> ExecuteRuleEngineAsync(List<CollectedData> collectedData,
+        CancellationToken cancellationToken)
     {
         var processedData = new List<CollectedData>();
 
@@ -735,7 +746,7 @@ public class DataCollectionService
                     if (vp != null)
                     {
                         _virtualDataPointCache.TryAdd(virtualResult.VirtualDataPointTag, vp);
-                        
+
                         // 更新设备虚拟数据点索引
                         _deviceVirtualPointIds.AddOrUpdate(
                             vp.DeviceId,
