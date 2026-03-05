@@ -1,12 +1,13 @@
+using System.Collections.Concurrent;
 using EdgeGateway.Domain.Entities;
 using EdgeGateway.Domain.Interfaces;
 using EdgeGateway.Domain.Options;
 using EdgeGateway.Infrastructure.Data;
+using EdgeGateway.Infrastructure.VirtualNodes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System.Collections.Concurrent;
 
 namespace EdgeGateway.Application.Services;
 
@@ -57,14 +58,10 @@ public class DataCollectionService
 
     // 设备 ID → 虚拟数据点 ID 列表，用于快速查找设备下的虚拟数据点
     private readonly ConcurrentDictionary<int, HashSet<int>> _deviceVirtualPointIds = new();
-
-    // 上次发送的值缓存：DataPointId → (Value, Timestamp)，用于变化检测
-    // 只有当数据点的值发生变化时才更新时间戳，避免发送重复数据
-    private readonly ConcurrentDictionary<int, (object? Value, DateTime Timestamp)> _lastSentValues = new();
+    
 
     private readonly int _aggregateWindowMs;
     private readonly TimeSpan _dataExpiration;
-    private readonly bool _enableChangeDetection = true; // 是否启用变化检测
     private CancellationTokenSource? _aggregatorCts;
     private Task? _aggregatorTask;
 
@@ -110,7 +107,7 @@ public class DataCollectionService
         _dataExpiration = TimeSpan.FromSeconds(_options.Collection.DataExpirationSeconds);
 
         // 设置虚拟节点引擎的快照数据获取委托
-        if (virtualNodeEngine is EdgeGateway.Infrastructure.VirtualNodes.VirtualNodeEngine engine)
+        if (virtualNodeEngine is VirtualNodeEngine engine)
         {
             engine.SetDataSnapshotGetter(GetSnapshotValue);
         }
@@ -279,50 +276,51 @@ public class DataCollectionService
             foreach (var kvp in _dataSnapshot)
             {
                 // 使用 IsExpired 方法统一判断过期
-                if (kvp.Value.IsExpired(_dataExpiration))
-                {
-                    // 超过 30 秒没有成功数据，创建 null 占位数据
-                    dataToSend.Add(CreateTimeoutData(kvp.Value.Data));
-                    changedCount++;
-                }
-                else if (_enableChangeDetection)
-                {
-                    // 变化检测：只发送值发生变化的数据点
-                    var currentValue = kvp.Value.Data.Value;
-                    
-                    // 如果当前值为 null，使用上次发送的值（保持数据连续性）
-                    if (currentValue == null && _lastSentValues.TryGetValue(kvp.Key, out var lastValue))
-                    {
-                        currentValue = lastValue.Value;
-                        kvp.Value.Data.Value = currentValue;
-                    }
-                    
-                    // 判断是否发生变化（包括 null 值变化）
-                    var hasChanged = !_lastSentValues.TryGetValue(kvp.Key, out var lastSent) 
-                                     || !Equals(lastSent.Value, currentValue);
-
-                    if (hasChanged)
-                    {
-                        dataToSend.Add(kvp.Value.Data);
-                        changedCount++;
-                        
-                        // 更新上次发送的值（包括 null 值）
-                        _lastSentValues[kvp.Key] = (currentValue, DateTime.UtcNow);
-                    }
-                }
-                else
-                {
-                    // 不启用变化检测，发送所有数据
-                    dataToSend.Add(kvp.Value.Data);
-                }
+                // if (kvp.Value.IsExpired(_dataExpiration))
+                // {
+                //     // 超过 30 秒没有成功数据，创建 null 占位数据
+                //     dataToSend.Add(CreateTimeoutData(kvp.Value.Data));
+                //     changedCount++;
+                // }
+                // else if (_enableChangeDetection)
+                // {
+                //     // 变化检测：只发送值发生变化的数据点
+                //     var currentValue = kvp.Value.Data.Value;
+                //     
+                //     // 如果当前值为 null，使用上次发送的值（保持数据连续性）
+                //     if (currentValue == null && _lastSentValues.TryGetValue(kvp.Key, out var lastValue))
+                //     {
+                //         currentValue = lastValue.Value;
+                //         kvp.Value.Data.Value = currentValue;
+                //     }
+                //     
+                //     // 判断是否发生变化（包括 null 值变化）
+                //     var hasChanged = !_lastSentValues.TryGetValue(kvp.Key, out var lastSent) 
+                //                      || !Equals(lastSent.Value, currentValue);
+                //
+                //     if (hasChanged)
+                //     {
+                //         dataToSend.Add(kvp.Value.Data);
+                //         changedCount++;
+                //         
+                //         // 更新上次发送的值（包括 null 值）
+                //         _lastSentValues[kvp.Key] = (currentValue, DateTime.UtcNow);
+                //     }
+                // }
+                // else
+                // {
+                //     // 不启用变化检测，发送所有数据
+                //     dataToSend.Add(kvp.Value.Data);
+                // }
+                dataToSend.Add(kvp.Value.Data);
             }
 
             // 批量推送（如果没有变化的数据，跳过推送）
-            if (changedCount > 0)
-            {
-                await _sendService.DispatchAsync(dataToSend, cancellationToken);
-                _logger.LogDebug("数据聚合推送：{Changed}/{Total} 个数据点有变化", changedCount, _dataSnapshot.Count);
-            }
+            // if (changedCount > 0)
+            // {
+            await _sendService.DispatchAsync(dataToSend, cancellationToken);
+            _logger.LogDebug("数据聚合推送：{Changed}/{Total} 个数据点有变化", changedCount, _dataSnapshot.Count);
+            // }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -406,18 +404,7 @@ public class DataCollectionService
         {
             if (kvp.Value.Data.DeviceId != deviceId)
                 continue;
-
-            // 使用 IsExpired 方法统一判断过期
-            if (kvp.Value.IsExpired(_dataExpiration))
-            {
-                // 超过 30 秒没有成功数据，返回 null 占位数据
-                results.Add(CreateTimeoutData(kvp.Value.Data));
-            }
-            else
-            {
-                // 正常数据
-                results.Add(kvp.Value.Data);
-            }
+            results.Add(kvp.Value.Data);
         }
 
         return results;
@@ -729,7 +716,7 @@ public class DataCollectionService
     /// 使用虚拟数据点缓存，避免频繁数据库查询
     /// </summary>
     private async Task UpdateVirtualNodeResultsToSnapshotAsync(
-        List<Domain.Interfaces.VirtualNodeCalculationResult> virtualResults,
+        List<VirtualNodeCalculationResult> virtualResults,
         CancellationToken cancellationToken)
     {
         foreach (var virtualResult in virtualResults.Where(r => r.Success))
