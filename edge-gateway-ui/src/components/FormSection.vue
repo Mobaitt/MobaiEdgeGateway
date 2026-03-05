@@ -22,7 +22,7 @@ defineProps<{
   margin-bottom: 16px;
   padding: 14px;
   background: var(--bg-base);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius);
   border: 1px solid var(--border-subtle);
 }
 .form-section:last-child {

@@ -845,7 +845,7 @@ onUnmounted(() => {
 }
 .realtime-value.good { color: var(--text-success); }
 .realtime-value.bad { color: var(--text-danger); }
-.realtime-value.uncertain { color: var(--text-warning); }
+.realtime-value.uncertain { color: var(--text-warn); }
 .value-unit {
   font-size: 11px;
   color: var(--text-muted);
@@ -856,14 +856,14 @@ onUnmounted(() => {
 /* 数据质量徽章 */
 .badge.good { background: rgba(82,196,26,0.15); color: var(--text-success); border-color: rgba(82,196,26,0.3); }
 .badge.bad { background: rgba(240,89,89,0.15); color: var(--text-danger); border-color: rgba(240,89,89,0.3); }
-.badge.uncertain { background: rgba(250,173,40,0.15); color: var(--text-warning); border-color: rgba(250,173,40,0.3); }
+.badge.uncertain { background: rgba(250,173,40,0.15); color: var(--text-warn); border-color: rgba(250,173,40,0.3); }
 
 /* 表单分组 */
 .form-section {
   margin-bottom: 16px;
   padding: 14px;
   background: var(--bg-base);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius);
   border: 1px solid var(--border-subtle);
 }
 .form-section:last-child {
