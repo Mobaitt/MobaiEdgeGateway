@@ -414,7 +414,7 @@ public class ModbusCollectionStrategy : ICollectionStrategy
     {
         return new CollectedData
         {
-            Tag = $"{deviceCode}.{dp.Tag}",  // 设备编码。数据点 Tag = 全局唯一 Tag
+            Tag = dp.Tag,  // 设备编码。数据点 Tag = 全局唯一 Tag
             DataPointId = dp.Id,
             DeviceId = dp.DeviceId,
             DeviceName = deviceCode,
