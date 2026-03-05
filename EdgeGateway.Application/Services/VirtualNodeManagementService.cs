@@ -9,21 +9,23 @@ namespace EdgeGateway.Application.Services;
 
 /// <summary>
 /// 虚拟节点管理服务 - 负责虚拟数据点的 CRUD
-/// 虚拟节点依附于普通设备，可以像普通数据点一样被管理和发送
 /// </summary>
 public class VirtualNodeManagementService
 {
     private readonly IDbContextFactory<GatewayDbContext> _dbContextFactory;
     private readonly IVirtualNodeEngine _virtualNodeEngine;
+    private readonly DataCollectionService _dataCollectionService;
     private readonly ILogger<VirtualNodeManagementService> _logger;
 
     public VirtualNodeManagementService(
         IDbContextFactory<GatewayDbContext> dbContextFactory,
         IVirtualNodeEngine virtualNodeEngine,
+        DataCollectionService dataCollectionService,
         ILogger<VirtualNodeManagementService> logger)
     {
         _dbContextFactory = dbContextFactory;
         _virtualNodeEngine = virtualNodeEngine;
+        _dataCollectionService = dataCollectionService;
         _logger = logger;
     }
 
@@ -157,40 +159,43 @@ public class VirtualNodeManagementService
     }
 
     /// <summary>
-    /// 触发单个虚拟数据点计算
+    /// 获取虚拟数据点当前值（从快照）
     /// </summary>
-    public async Task<VirtualNodeCalculationResult> CalculateVirtualDataPointAsync(int id)
+    public Task<VirtualNodeCalculationResult> CalculateVirtualDataPointAsync(int id)
     {
-        var dataPoint = await GetVirtualDataPointByIdAsync(id);
-        if (dataPoint == null)
-            throw new InvalidOperationException($"虚拟数据点 ID={id} 不存在");
+        var snapshotData = _dataCollectionService.GetVirtualDataPointSnapshot(id);
+        var result = snapshotData != null
+            ? new VirtualNodeCalculationResult
+            {
+                Success = snapshotData.Value != null,
+                Value = snapshotData.Value,
+                Quality = snapshotData.Quality,
+                Timestamp = snapshotData.Timestamp,
+                VirtualDataPointId = id,
+                VirtualDataPointTag = snapshotData.Tag
+            }
+            : new VirtualNodeCalculationResult
+            {
+                Success = false,
+                ErrorMessage = "数据不存在或已过期",
+                Quality = DataQuality.Uncertain,
+                VirtualDataPointId = id
+            };
 
-        var result = await _virtualNodeEngine.CalculateAsync(dataPoint);
-        _logger.LogInformation("虚拟数据点 [{PointName}] 计算完成：{Value}", dataPoint.Name, result.Value);
-        return result;
+        return Task.FromResult(result);
     }
 
     /// <summary>
-    /// 计算指定设备下的所有启用的虚拟数据点
+    /// 获取设备下所有虚拟数据点当前值（从快照）
     /// </summary>
-    public async Task<List<VirtualNodeCalculationResult>> CalculateDeviceVirtualDataPointsAsync(int deviceId)
-    {
-        var results = await _virtualNodeEngine.CalculateDeviceAsync(deviceId);
-        _logger.LogInformation("设备 ID={DeviceId} 虚拟节点计算完成，成功 {SuccessCount}/{TotalCount}",
-            deviceId, results.Count(r => r.Success), results.Count);
-        return results;
-    }
+    public Task<List<VirtualNodeCalculationResult>> CalculateDeviceVirtualDataPointsAsync(int deviceId) =>
+        Task.FromResult(_dataCollectionService.GetDeviceVirtualDataPointSnapshots(deviceId));
 
     /// <summary>
-    /// 计算所有启用的虚拟数据点
+    /// 获取所有虚拟数据点当前值（从快照）
     /// </summary>
-    public async Task<List<VirtualNodeCalculationResult>> CalculateAllVirtualDataPointsAsync()
-    {
-        var results = await _virtualNodeEngine.CalculateAllAsync();
-        _logger.LogInformation("虚拟节点计算完成，成功 {SuccessCount}/{TotalCount}",
-            results.Count(r => r.Success), results.Count);
-        return results;
-    }
+    public Task<List<VirtualNodeCalculationResult>> CalculateAllVirtualDataPointsAsync() =>
+        Task.FromResult(_dataCollectionService.GetAllVirtualDataPointSnapshots());
 
     /// <summary>
     /// 解析表达式中的依赖 Tags

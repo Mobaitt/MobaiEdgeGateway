@@ -391,20 +391,59 @@ public class DataCollectionService
     }
 
     /// <summary>
-    /// 获取指定设备的所有数据点快照数据（用于 realtime 接口）
-    /// 超过 30 秒未更新的数据返回 null（Uncertain）
-    /// 使用 ConcurrentDictionary，无需锁，支持并发读取
+    /// 获取指定设备的所有数据点快照数据
     /// </summary>
-    public List<CollectedData> GetDeviceSnapshotData(int deviceId)
-    {
-        var results = new List<CollectedData>();
+    public List<CollectedData> GetDeviceSnapshotData(int deviceId) =>
+        _dataSnapshot.Values.Where(x => x.Data.DeviceId == deviceId).Select(x => x.Data).ToList();
 
-        // 遍历快照，筛选出该设备的所有数据点（包括虚拟数据点）
+    /// <summary>
+    /// 获取指定虚拟数据点的快照数据
+    /// 虚拟数据点使用负 ID 存储在快照中
+    /// </summary>
+    public CollectedData? GetVirtualDataPointSnapshot(int virtualDataPointId)
+    {
+        if (_dataSnapshot.TryGetValue(-virtualDataPointId, out var snapshotData) &&
+            !snapshotData.IsExpired(_dataExpiration))
+        {
+            return snapshotData.Data;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// 获取指定设备的所有虚拟数据点快照数据
+    /// </summary>
+    public List<VirtualNodeCalculationResult> GetDeviceVirtualDataPointSnapshots(int deviceId) =>
+        GetVirtualDataPointSnapshotsCore(deviceId);
+
+    /// <summary>
+    /// 获取所有虚拟数据点的快照数据
+    /// </summary>
+    public List<VirtualNodeCalculationResult> GetAllVirtualDataPointSnapshots() =>
+        GetVirtualDataPointSnapshotsCore(null);
+
+    /// <summary>
+    /// 核心方法：获取虚拟数据点快照
+    /// </summary>
+    private List<VirtualNodeCalculationResult> GetVirtualDataPointSnapshotsCore(int? deviceId)
+    {
+        var results = new List<VirtualNodeCalculationResult>();
+
         foreach (var kvp in _dataSnapshot)
         {
-            if (kvp.Value.Data.DeviceId != deviceId)
-                continue;
-            results.Add(kvp.Value.Data);
+            // 虚拟数据点使用负 ID
+            if (kvp.Key > 0) continue;
+            if (deviceId.HasValue && kvp.Value.Data.DeviceId != deviceId.Value) continue;
+
+            results.Add(new VirtualNodeCalculationResult
+            {
+                Success = kvp.Value.Data.Value != null,
+                Value = kvp.Value.Data.Value,
+                Quality = kvp.Value.Data.Quality,
+                Timestamp = kvp.Value.Data.Timestamp,
+                VirtualDataPointId = -kvp.Key,
+                VirtualDataPointTag = kvp.Value.Data.Tag
+            });
         }
 
         return results;
@@ -426,7 +465,7 @@ public class DataCollectionService
         await StartAggregatorAsync(cancellationToken);
 
         // 初始化虚拟节点计算（确保启动时虚拟节点有初始值）
-        await InitializeVirtualNodesAsync(cancellationToken);
+        // await InitializeVirtualNodesAsync(cancellationToken);
 
         foreach (var device in devices)
         {
@@ -620,7 +659,7 @@ public class DataCollectionService
         StartDeviceTask(device, CancellationToken.None);
 
         // 设备启动后，触发该设备的虚拟节点计算
-        await InitializeDeviceVirtualNodesAsync(deviceId, CancellationToken.None);
+        // await InitializeDeviceVirtualNodesAsync(deviceId, CancellationToken.None);
     }
 
     /// <summary>
