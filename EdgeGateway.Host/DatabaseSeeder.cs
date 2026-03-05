@@ -48,7 +48,8 @@ public class DatabaseSeeder
                 new() { Name = "模拟设备 002", Code = "SIM_DEVICE_002", Description = "液位流量模拟设备", Protocol = CollectionProtocol.Simulator, Address = "127.0.0.1", Port = 0, PollingIntervalMs = 1000, IsEnabled = true },
                 new() { Name = "模拟设备 003", Code = "SIM_DEVICE_003", Description = "环境监测模拟设备", Protocol = CollectionProtocol.Simulator, Address = "127.0.0.1", Port = 0, PollingIntervalMs = 1000, IsEnabled = true },
                 new() { Name = "产线模拟设备", Code = "SIM_PROD_LINE", Description = "产线监测模拟设备", Protocol = CollectionProtocol.Simulator, Address = "127.0.0.1", Port = 0, PollingIntervalMs = 2000, IsEnabled = true },
-                new() { Name = "动力站模拟设备", Code = "SIM_POWER", Description = "动力站监测模拟设备", Protocol = CollectionProtocol.Simulator, Address = "127.0.0.1", Port = 0, PollingIntervalMs = 3000, IsEnabled = true }
+                new() { Name = "动力站模拟设备", Code = "SIM_POWER", Description = "动力站监测模拟设备", Protocol = CollectionProtocol.Simulator, Address = "127.0.0.1", Port = 0, PollingIntervalMs = 3000, IsEnabled = true },
+                new() { Name = "冷站模拟设备", Code = "SIM_CHILLER", Description = "冷站系统模拟设备", Protocol = CollectionProtocol.Simulator, Address = "127.0.0.1", Port = 0, PollingIntervalMs = 2000, IsEnabled = true }
             };
 
             await context.Devices.AddRangeAsync(devices);
@@ -62,65 +63,79 @@ public class DatabaseSeeder
             var device1 = devices.First(d => d.Code == "SIM_DEVICE_001");
             dataPoints.AddRange(new[]
             {
-                new DataPoint { DeviceId = device1.Id, Name = "温度 01", Tag = "Temperature01", Description = "主温度传感器", Address = "40001", DataType = DataValueType.Float, Unit = "℃" },
-                new DataPoint { DeviceId = device1.Id, Name = "温度 02", Tag = "Temperature02", Description = "辅助温度传感器", Address = "40003", DataType = DataValueType.Float, Unit = "℃" },
-                new DataPoint { DeviceId = device1.Id, Name = "温度 03", Tag = "Temperature03", Description = "环境温度", Address = "40005", DataType = DataValueType.Float, Unit = "℃" },
-                new DataPoint { DeviceId = device1.Id, Name = "压力 01", Tag = "Pressure01", Description = "主压力传感器", Address = "40007", DataType = DataValueType.Float, Unit = "MPa" },
-                new DataPoint { DeviceId = device1.Id, Name = "压力 02", Tag = "Pressure02", Description = "辅助压力", Address = "40009", DataType = DataValueType.Float, Unit = "MPa" },
-                new DataPoint { DeviceId = device1.Id, Name = "湿度", Tag = "Humidity", Description = "环境湿度", Address = "40011", DataType = DataValueType.Float, Unit = "%RH" }
+                new DataPoint { DeviceId = device1.Id, Name = "温度 01", Tag = "SIM_DEVICE_001.Temperature01", Description = "主温度传感器", Address = "40001", DataType = DataValueType.Float, Unit = "℃" },
+                new DataPoint { DeviceId = device1.Id, Name = "温度 02", Tag = "SIM_DEVICE_001.Temperature02", Description = "辅助温度传感器", Address = "40003", DataType = DataValueType.Float, Unit = "℃" },
+                new DataPoint { DeviceId = device1.Id, Name = "温度 03", Tag = "SIM_DEVICE_001.Temperature03", Description = "环境温度", Address = "40005", DataType = DataValueType.Float, Unit = "℃" },
+                new DataPoint { DeviceId = device1.Id, Name = "压力 01", Tag = "SIM_DEVICE_001.Pressure01", Description = "主压力传感器", Address = "40007", DataType = DataValueType.Float, Unit = "MPa" },
+                new DataPoint { DeviceId = device1.Id, Name = "压力 02", Tag = "SIM_DEVICE_001.Pressure02", Description = "辅助压力", Address = "40009", DataType = DataValueType.Float, Unit = "MPa" },
+                new DataPoint { DeviceId = device1.Id, Name = "湿度", Tag = "SIM_DEVICE_001.Humidity", Description = "环境湿度", Address = "40011", DataType = DataValueType.Float, Unit = "%RH" }
             });
 
             // 设备 2 数据点（液位、流量）
             var device2 = devices.First(d => d.Code == "SIM_DEVICE_002");
             dataPoints.AddRange(new[]
             {
-                new DataPoint { DeviceId = device2.Id, Name = "液位 01", Tag = "Level01", Description = "主液位传感器", Address = "40001", DataType = DataValueType.Float, Unit = "m" },
-                new DataPoint { DeviceId = device2.Id, Name = "液位 02", Tag = "Level02", Description = "备用液位", Address = "40003", DataType = DataValueType.Float, Unit = "m" },
-                new DataPoint { DeviceId = device2.Id, Name = "流量 01", Tag = "Flow01", Description = "入口流量", Address = "40005", DataType = DataValueType.Float, Unit = "m³/h" },
-                new DataPoint { DeviceId = device2.Id, Name = "流量 02", Tag = "Flow02", Description = "出口流量", Address = "40007", DataType = DataValueType.Float, Unit = "m³/h" },
-                new DataPoint { DeviceId = device2.Id, Name = "温度", Tag = "Temperature", Description = "介质温度", Address = "40009", DataType = DataValueType.Float, Unit = "℃" },
-                new DataPoint { DeviceId = device2.Id, Name = "密度", Tag = "Density", Description = "介质密度", Address = "40011", DataType = DataValueType.Float, Unit = "kg/m³" }
+                new DataPoint { DeviceId = device2.Id, Name = "液位 01", Tag = "SIM_DEVICE_002.Level01", Description = "主液位传感器", Address = "40001", DataType = DataValueType.Float, Unit = "m" },
+                new DataPoint { DeviceId = device2.Id, Name = "液位 02", Tag = "SIM_DEVICE_002.Level02", Description = "备用液位", Address = "40003", DataType = DataValueType.Float, Unit = "m" },
+                new DataPoint { DeviceId = device2.Id, Name = "流量 01", Tag = "SIM_DEVICE_002.Flow01", Description = "入口流量", Address = "40005", DataType = DataValueType.Float, Unit = "m³/h" },
+                new DataPoint { DeviceId = device2.Id, Name = "流量 02", Tag = "SIM_DEVICE_002.Flow02", Description = "出口流量", Address = "40007", DataType = DataValueType.Float, Unit = "m³/h" },
+                new DataPoint { DeviceId = device2.Id, Name = "温度", Tag = "SIM_DEVICE_002.Temperature", Description = "介质温度", Address = "40009", DataType = DataValueType.Float, Unit = "℃" },
+                new DataPoint { DeviceId = device2.Id, Name = "密度", Tag = "SIM_DEVICE_002.Density", Description = "介质密度", Address = "40011", DataType = DataValueType.Float, Unit = "kg/m³" }
             });
 
             // 设备 3 数据点（环境监测）
             var device3 = devices.First(d => d.Code == "SIM_DEVICE_003");
             dataPoints.AddRange(new[]
             {
-                new DataPoint { DeviceId = device3.Id, Name = "PM2.5", Tag = "PM25", Description = "PM2.5 浓度", Address = "40001", DataType = DataValueType.Float, Unit = "μg/m³" },
-                new DataPoint { DeviceId = device3.Id, Name = "PM10", Tag = "PM10", Description = "PM10 浓度", Address = "40003", DataType = DataValueType.Float, Unit = "μg/m³" },
-                new DataPoint { DeviceId = device3.Id, Name = "CO2", Tag = "CO2", Description = "二氧化碳浓度", Address = "40005", DataType = DataValueType.Float, Unit = "ppm" },
-                new DataPoint { DeviceId = device3.Id, Name = "TVOC", Tag = "TVOC", Description = "总挥发性有机物", Address = "40007", DataType = DataValueType.Float, Unit = "ppb" },
-                new DataPoint { DeviceId = device3.Id, Name = "温度", Tag = "Temperature", Description = "环境温度", Address = "40009", DataType = DataValueType.Float, Unit = "℃" },
-                new DataPoint { DeviceId = device3.Id, Name = "湿度", Tag = "Humidity", Description = "环境湿度", Address = "40011", DataType = DataValueType.Float, Unit = "%RH" },
-                new DataPoint { DeviceId = device3.Id, Name = "大气压", Tag = "Pressure", Description = "大气压力", Address = "40013", DataType = DataValueType.Float, Unit = "hPa" },
-                new DataPoint { DeviceId = device3.Id, Name = "噪声", Tag = "Noise", Description = "噪声分贝", Address = "40015", DataType = DataValueType.Float, Unit = "dB" }
+                new DataPoint { DeviceId = device3.Id, Name = "PM2.5", Tag = "SIM_DEVICE_003.PM25", Description = "PM2.5 浓度", Address = "40001", DataType = DataValueType.Float, Unit = "μg/m³" },
+                new DataPoint { DeviceId = device3.Id, Name = "PM10", Tag = "SIM_DEVICE_003.PM10", Description = "PM10 浓度", Address = "40003", DataType = DataValueType.Float, Unit = "μg/m³" },
+                new DataPoint { DeviceId = device3.Id, Name = "CO2", Tag = "SIM_DEVICE_003.CO2", Description = "二氧化碳浓度", Address = "40005", DataType = DataValueType.Float, Unit = "ppm" },
+                new DataPoint { DeviceId = device3.Id, Name = "TVOC", Tag = "SIM_DEVICE_003.TVOC", Description = "总挥发性有机物", Address = "40007", DataType = DataValueType.Float, Unit = "ppb" },
+                new DataPoint { DeviceId = device3.Id, Name = "温度", Tag = "SIM_DEVICE_003.Temperature", Description = "环境温度", Address = "40009", DataType = DataValueType.Float, Unit = "℃" },
+                new DataPoint { DeviceId = device3.Id, Name = "湿度", Tag = "SIM_DEVICE_003.Humidity", Description = "环境湿度", Address = "40011", DataType = DataValueType.Float, Unit = "%RH" },
+                new DataPoint { DeviceId = device3.Id, Name = "大气压", Tag = "SIM_DEVICE_003.Pressure", Description = "大气压力", Address = "40013", DataType = DataValueType.Float, Unit = "hPa" },
+                new DataPoint { DeviceId = device3.Id, Name = "噪声", Tag = "SIM_DEVICE_003.Noise", Description = "噪声分贝", Address = "40015", DataType = DataValueType.Float, Unit = "dB" }
             });
 
             // 产线设备数据点
             var deviceProd = devices.First(d => d.Code == "SIM_PROD_LINE");
             dataPoints.AddRange(new[]
             {
-                new DataPoint { DeviceId = deviceProd.Id, Name = "主轴温度", Tag = "SpindleTemp", Description = "主轴温度", Address = "40001", DataType = DataValueType.Float, Unit = "℃" },
-                new DataPoint { DeviceId = deviceProd.Id, Name = "主轴转速", Tag = "SpindleSpeed", Description = "主轴转速", Address = "40003", DataType = DataValueType.Float, Unit = "rpm" },
-                new DataPoint { DeviceId = deviceProd.Id, Name = "进给速度", Tag = "FeedRate", Description = "进给速度", Address = "40005", DataType = DataValueType.Float, Unit = "mm/min" },
-                new DataPoint { DeviceId = deviceProd.Id, Name = "切削力", Tag = "CuttingForce", Description = "切削力", Address = "40007", DataType = DataValueType.Float, Unit = "N" },
-                new DataPoint { DeviceId = deviceProd.Id, Name = "振动", Tag = "Vibration", Description = "振动值", Address = "40009", DataType = DataValueType.Float, Unit = "mm/s" },
-                new DataPoint { DeviceId = deviceProd.Id, Name = "功率", Tag = "Power", Description = "主轴功率", Address = "40011", DataType = DataValueType.Float, Unit = "kW" }
+                new DataPoint { DeviceId = deviceProd.Id, Name = "主轴温度", Tag = "SIM_PROD_LINE.SpindleTemp", Description = "主轴温度", Address = "40001", DataType = DataValueType.Float, Unit = "℃" },
+                new DataPoint { DeviceId = deviceProd.Id, Name = "主轴转速", Tag = "SIM_PROD_LINE.SpindleSpeed", Description = "主轴转速", Address = "40003", DataType = DataValueType.Float, Unit = "rpm" },
+                new DataPoint { DeviceId = deviceProd.Id, Name = "进给速度", Tag = "SIM_PROD_LINE.FeedRate", Description = "进给速度", Address = "40005", DataType = DataValueType.Float, Unit = "mm/min" },
+                new DataPoint { DeviceId = deviceProd.Id, Name = "切削力", Tag = "SIM_PROD_LINE.CuttingForce", Description = "切削力", Address = "40007", DataType = DataValueType.Float, Unit = "N" },
+                new DataPoint { DeviceId = deviceProd.Id, Name = "振动", Tag = "SIM_PROD_LINE.Vibration", Description = "振动值", Address = "40009", DataType = DataValueType.Float, Unit = "mm/s" },
+                new DataPoint { DeviceId = deviceProd.Id, Name = "功率", Tag = "SIM_PROD_LINE.Power", Description = "主轴功率", Address = "40011", DataType = DataValueType.Float, Unit = "kW" }
             });
 
             // 动力站设备数据点
             var devicePower = devices.First(d => d.Code == "SIM_POWER");
             dataPoints.AddRange(new[]
             {
-                new DataPoint { DeviceId = devicePower.Id, Name = "电压 A", Tag = "VoltageA", Description = "A 相电压", Address = "40001", DataType = DataValueType.Float, Unit = "V" },
-                new DataPoint { DeviceId = devicePower.Id, Name = "电压 B", Tag = "VoltageB", Description = "B 相电压", Address = "40003", DataType = DataValueType.Float, Unit = "V" },
-                new DataPoint { DeviceId = devicePower.Id, Name = "电压 C", Tag = "VoltageC", Description = "C 相电压", Address = "40005", DataType = DataValueType.Float, Unit = "V" },
-                new DataPoint { DeviceId = devicePower.Id, Name = "电流 A", Tag = "CurrentA", Description = "A 相电流", Address = "40007", DataType = DataValueType.Float, Unit = "A" },
-                new DataPoint { DeviceId = devicePower.Id, Name = "电流 B", Tag = "CurrentB", Description = "B 相电流", Address = "40009", DataType = DataValueType.Float, Unit = "A" },
-                new DataPoint { DeviceId = devicePower.Id, Name = "电流 C", Tag = "CurrentC", Description = "C 相电流", Address = "40011", DataType = DataValueType.Float, Unit = "A" },
-                new DataPoint { DeviceId = devicePower.Id, Name = "功率因数", Tag = "PowerFactor", Description = "功率因数", Address = "40013", DataType = DataValueType.Float, Unit = "" },
-                new DataPoint { DeviceId = devicePower.Id, Name = "频率", Tag = "Frequency", Description = "电网频率", Address = "40015", DataType = DataValueType.Float, Unit = "Hz" },
-                new DataPoint { DeviceId = devicePower.Id, Name = "累计电量", Tag = "TotalEnergy", Description = "累计电量", Address = "40017", DataType = DataValueType.Float, Unit = "kWh" }
+                new DataPoint { DeviceId = devicePower.Id, Name = "电压 A", Tag = "SIM_POWER.VoltageA", Description = "A 相电压", Address = "40001", DataType = DataValueType.Float, Unit = "V" },
+                new DataPoint { DeviceId = devicePower.Id, Name = "电压 B", Tag = "SIM_POWER.VoltageB", Description = "B 相电压", Address = "40003", DataType = DataValueType.Float, Unit = "V" },
+                new DataPoint { DeviceId = devicePower.Id, Name = "电压 C", Tag = "SIM_POWER.VoltageC", Description = "C 相电压", Address = "40005", DataType = DataValueType.Float, Unit = "V" },
+                new DataPoint { DeviceId = devicePower.Id, Name = "电流 A", Tag = "SIM_POWER.CurrentA", Description = "A 相电流", Address = "40007", DataType = DataValueType.Float, Unit = "A" },
+                new DataPoint { DeviceId = devicePower.Id, Name = "电流 B", Tag = "SIM_POWER.CurrentB", Description = "B 相电流", Address = "40009", DataType = DataValueType.Float, Unit = "A" },
+                new DataPoint { DeviceId = devicePower.Id, Name = "电流 C", Tag = "SIM_POWER.CurrentC", Description = "C 相电流", Address = "40011", DataType = DataValueType.Float, Unit = "A" },
+                new DataPoint { DeviceId = devicePower.Id, Name = "功率因数", Tag = "SIM_POWER.PowerFactor", Description = "功率因数", Address = "40013", DataType = DataValueType.Float, Unit = "" },
+                new DataPoint { DeviceId = devicePower.Id, Name = "频率", Tag = "SIM_POWER.Frequency", Description = "电网频率", Address = "40015", DataType = DataValueType.Float, Unit = "Hz" },
+                new DataPoint { DeviceId = devicePower.Id, Name = "累计电量", Tag = "SIM_POWER.TotalEnergy", Description = "累计电量", Address = "40017", DataType = DataValueType.Float, Unit = "kWh" }
+            });
+
+            // 冷站设备数据点
+            var deviceChiller = devices.First(d => d.Code == "SIM_CHILLER");
+            dataPoints.AddRange(new[]
+            {
+                new DataPoint { DeviceId = deviceChiller.Id, Name = "冷冻水供水温度", Tag = "SIM_CHILLER.ChilledWaterSupply", Description = "冷冻水供水温度", Address = "40001", DataType = DataValueType.Float, Unit = "℃" },
+                new DataPoint { DeviceId = deviceChiller.Id, Name = "冷冻水回水温度", Tag = "SIM_CHILLER.ChilledWaterReturn", Description = "冷冻水回水温度", Address = "40003", DataType = DataValueType.Float, Unit = "℃" },
+                new DataPoint { DeviceId = deviceChiller.Id, Name = "冷却水供水温度", Tag = "SIM_CHILLER.CoolingWaterSupply", Description = "冷却水供水温度", Address = "40005", DataType = DataValueType.Float, Unit = "℃" },
+                new DataPoint { DeviceId = deviceChiller.Id, Name = "冷却水回水温度", Tag = "SIM_CHILLER.CoolingWaterReturn", Description = "冷却水回水温度", Address = "40007", DataType = DataValueType.Float, Unit = "℃" },
+                new DataPoint { DeviceId = deviceChiller.Id, Name = "冷冻水流量", Tag = "SIM_CHILLER.ChilledWaterFlow", Description = "冷冻水流量", Address = "40009", DataType = DataValueType.Float, Unit = "m³/h" },
+                new DataPoint { DeviceId = deviceChiller.Id, Name = "冷却水流量", Tag = "SIM_CHILLER.CoolingWaterFlow", Description = "冷却水流量", Address = "40011", DataType = DataValueType.Float, Unit = "m³/h" },
+                new DataPoint { DeviceId = deviceChiller.Id, Name = "压缩机功率", Tag = "SIM_CHILLER.CompressorPower", Description = "压缩机功率", Address = "40013", DataType = DataValueType.Float, Unit = "kW" },
+                new DataPoint { DeviceId = deviceChiller.Id, Name = "COP", Tag = "SIM_CHILLER.COP", Description = "性能系数", Address = "40015", DataType = DataValueType.Float, Unit = "" }
             });
 
             await context.DataPoints.AddRangeAsync(dataPoints);
@@ -146,7 +161,11 @@ public class DatabaseSeeder
                 // 动力站虚拟点
                 new() { DeviceId = devicePower.Id, Name = "三相平均电压", Tag = "SIM_POWER.Virtual.AvgVoltage", Description = "三相平均电压", Expression = "Avg(SIM_POWER.VoltageA, SIM_POWER.VoltageB, SIM_POWER.VoltageC)", CalculationType = CalculationType.Average, DataType = DataValueType.Float, Unit = "V", DependencyTags = "[\"SIM_POWER.VoltageA\",\"SIM_POWER.VoltageB\",\"SIM_POWER.VoltageC\"]" },
                 new() { DeviceId = devicePower.Id, Name = "三相平均电流", Tag = "SIM_POWER.Virtual.AvgCurrent", Description = "三相平均电流", Expression = "Avg(SIM_POWER.CurrentA, SIM_POWER.CurrentB, SIM_POWER.CurrentC)", CalculationType = CalculationType.Average, DataType = DataValueType.Float, Unit = "A", DependencyTags = "[\"SIM_POWER.CurrentA\",\"SIM_POWER.CurrentB\",\"SIM_POWER.CurrentC\"]" },
-                new() { DeviceId = devicePower.Id, Name = "总功率", Tag = "SIM_POWER.Virtual.TotalPower", Description = "估算总功率", Expression = "SIM_POWER.VoltageA * SIM_POWER.CurrentA + SIM_POWER.VoltageB * SIM_POWER.CurrentB + SIM_POWER.VoltageC * SIM_POWER.CurrentC", CalculationType = CalculationType.Custom, DataType = DataValueType.Float, Unit = "kW", DependencyTags = "[\"SIM_POWER.VoltageA\",\"SIM_POWER.CurrentA\",\"SIM_POWER.VoltageB\",\"SIM_POWER.CurrentB\",\"SIM_POWER.VoltageC\",\"SIM_POWER.CurrentC\"]" }
+                new() { DeviceId = devicePower.Id, Name = "总功率", Tag = "SIM_POWER.Virtual.TotalPower", Description = "估算总功率", Expression = "SIM_POWER.VoltageA * SIM_POWER.CurrentA + SIM_POWER.VoltageB * SIM_POWER.CurrentB + SIM_POWER.VoltageC * SIM_POWER.CurrentC", CalculationType = CalculationType.Custom, DataType = DataValueType.Float, Unit = "kW", DependencyTags = "[\"SIM_POWER.VoltageA\",\"SIM_POWER.CurrentA\",\"SIM_POWER.VoltageB\",\"SIM_POWER.CurrentB\",\"SIM_POWER.VoltageC\",\"SIM_POWER.CurrentC\"]" },
+                // 冷站设备虚拟点
+                new() { DeviceId = deviceChiller.Id, Name = "供回水温差", Tag = "SIM_CHILLER.Virtual.TempDiff", Description = "冷冻水供回水温差", Expression = "SIM_CHILLER.ChilledWaterSupply - SIM_CHILLER.ChilledWaterReturn", CalculationType = CalculationType.Custom, DataType = DataValueType.Float, Unit = "℃", DependencyTags = "[\"SIM_CHILLER.ChilledWaterSupply\",\"SIM_CHILLER.ChilledWaterReturn\"]" },
+                new() { DeviceId = deviceChiller.Id, Name = "瞬时冷量", Tag = "SIM_CHILLER.Virtual.CoolingPower", Description = "瞬时冷量", Expression = "(SIM_CHILLER.ChilledWaterSupply - SIM_CHILLER.ChilledWaterReturn) * SIM_CHILLER.ChilledWaterFlow * 1.163", CalculationType = CalculationType.Custom, DataType = DataValueType.Float, Unit = "kW", DependencyTags = "[\"SIM_CHILLER.ChilledWaterSupply\",\"SIM_CHILLER.ChilledWaterReturn\",\"SIM_CHILLER.ChilledWaterFlow\"]" },
+                new() { DeviceId = deviceChiller.Id, Name = "平均水温", Tag = "SIM_CHILLER.Virtual.AvgWaterTemp", Description = "冷冻水平均温度", Expression = "Avg(SIM_CHILLER.ChilledWaterSupply, SIM_CHILLER.ChilledWaterReturn)", CalculationType = CalculationType.Average, DataType = DataValueType.Float, Unit = "℃", DependencyTags = "[\"SIM_CHILLER.ChilledWaterSupply\",\"SIM_CHILLER.ChilledWaterReturn\"]" }
             };
 
             await context.VirtualDataPoints.AddRangeAsync(virtualPoints);

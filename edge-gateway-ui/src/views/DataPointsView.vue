@@ -552,13 +552,6 @@ const stopRealtimePolling = () => {
   }
 }
 
-/**
- * 获取数据点的实时数据 Key
- * 虚拟数据点直接使用 tag，普通数据点使用 deviceCode.tag 格式
- */
-const getRealtimeDataKey = (row: DataPointWithVirtual): string => {
-  return row.isVirtual ? row.tag : (deviceCode.value + '.' + row.tag)
-}
 
 /**
  * 获取数据点的实时数据
@@ -566,8 +559,7 @@ const getRealtimeDataKey = (row: DataPointWithVirtual): string => {
  * @returns 实时数据项，无数据时返回 null
  */
 const getRealtimeData = (row: DataPointWithVirtual): RealtimeDataItem | null => {
-  const key = getRealtimeDataKey(row)
-  return realtimeData.value[key] || null
+  return realtimeData.value[row.tag] || null
 }
 
 const getQualityClass = (quality: string) => {
