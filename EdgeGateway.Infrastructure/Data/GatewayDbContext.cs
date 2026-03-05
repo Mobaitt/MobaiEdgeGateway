@@ -57,9 +57,9 @@ public class GatewayDbContext : DbContext
             entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Tag).IsRequired().HasMaxLength(200);
             entity.Property(e => e.Address).IsRequired().HasMaxLength(200);
-            
-            // Tag 在同一设备下唯一（复合唯一索引）
-            entity.HasIndex(e => new { e.DeviceId, e.Tag }).IsUnique();
+
+            // Tag 全局唯一
+            entity.HasIndex(e => e.Tag).IsUnique();
 
             // 数据点与通道映射：一个数据点对应多条映射记录
             entity.HasMany(e => e.ChannelMappings)
@@ -135,7 +135,9 @@ public class GatewayDbContext : DbContext
             entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Tag).IsRequired().HasMaxLength(200);
             entity.Property(e => e.Expression).IsRequired();
-            entity.HasIndex(e => e.Tag).IsUnique(); // Tag 全局唯一
+
+            // Tag 全局唯一
+            entity.HasIndex(e => e.Tag).IsUnique();
 
             // 虚拟数据点属于某个设备
             entity.HasOne(vp => vp.Device)
@@ -174,12 +176,12 @@ public class GatewayDbContext : DbContext
             UpdatedAt = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc)
         });
 
-        // 添加数据点（Tag 不包含设备编码，采集时添加）
+        // 添加数据点（Tag 使用全局唯一格式：DeviceCode.Tag）
         modelBuilder.Entity<DataPoint>().HasData(
             new DataPoint
             {
                 Id = 1, DeviceId = 1,
-                Name = "温度", Tag = "Temperature",
+                Name = "温度", Tag = "DEV_SIMULATOR_001.Temperature",
                 Address = "40001", DataType = Domain.Enums.DataValueType.Float,
                 Unit = "℃", IsEnabled = true, RegisterLength = 2,
                 ModbusSlaveId = 1, ModbusFunctionCode = 3, ModbusByteOrder = Domain.Enums.ModbusByteOrder.ABCD,
@@ -188,7 +190,7 @@ public class GatewayDbContext : DbContext
             new DataPoint
             {
                 Id = 2, DeviceId = 1,
-                Name = "压力", Tag = "Pressure",
+                Name = "压力", Tag = "DEV_SIMULATOR_001.Pressure",
                 Address = "40002", DataType = Domain.Enums.DataValueType.Float,
                 Unit = "MPa", IsEnabled = true, RegisterLength = 2,
                 ModbusSlaveId = 1, ModbusFunctionCode = 3, ModbusByteOrder = Domain.Enums.ModbusByteOrder.ABCD,
