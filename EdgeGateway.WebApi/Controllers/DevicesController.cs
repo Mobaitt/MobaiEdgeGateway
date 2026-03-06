@@ -18,15 +18,18 @@ public class DevicesController : ControllerBase
 {
     private readonly DeviceManagementService _deviceService;
     private readonly DataCollectionService _collectionService;
+    private readonly VirtualNodeManagementService _virtualNodeService;
     private readonly ILogger<DevicesController> _logger;
 
     public DevicesController(
         DeviceManagementService deviceService,
         DataCollectionService collectionService,
+        VirtualNodeManagementService virtualNodeService,
         ILogger<DevicesController> logger)
     {
         _deviceService      = deviceService;
         _collectionService  = collectionService;
+        _virtualNodeService = virtualNodeService;
         _logger             = logger;
     }
 
@@ -36,11 +39,21 @@ public class DevicesController : ControllerBase
     public async Task<IActionResult> GetAll()
     {
         var devices = await _deviceService.GetAllDevicesAsync();
-        var result  = devices.Select(MapToListItem).ToList();
+        var allVirtualPoints = await _virtualNodeService.GetAllVirtualDataPointsAsync();
+        
+        // 按设备 ID 分组统计虚拟点位数量
+        var virtualPointCounts = allVirtualPoints
+            .GroupBy(vp => vp.DeviceId)
+            .ToDictionary(g => g.Key, g => g.Count());
+        
+        var result = devices.Select(d => 
+            MapToListItem(d, virtualPointCounts.GetValueOrDefault(d.Id, 0))
+        ).ToList();
+        
         return Ok(ApiResponse<List<DeviceListItem>>.Ok(result, $"共 {result.Count} 台设备"));
     }
 
-    /// <summary>根据ID获取设备详情</summary>
+    /// <summary>根据 ID 获取设备详情</summary>
     [HttpGet("{id:int}")]
     [ProducesResponseType(typeof(ApiResponse<DeviceResponse>), 200)]
     [ProducesResponseType(typeof(ApiResponse), 404)]
@@ -50,7 +63,8 @@ public class DevicesController : ControllerBase
         if (device == null)
             return NotFound(ApiResponse.Fail($"设备 ID={id} 不存在"));
 
-        return Ok(ApiResponse<DeviceResponse>.Ok(MapToDetail(device)));
+        var virtualPointCount = (await _virtualNodeService.GetVirtualDataPointsByDeviceIdAsync(id)).Count;
+        return Ok(ApiResponse<DeviceResponse>.Ok(MapToDetail(device, virtualPointCount)));
     }
 
     /// <summary>新增设备</summary>
@@ -72,10 +86,10 @@ public class DevicesController : ControllerBase
         };
 
         var created = await _deviceService.CreateDeviceAsync(device);
-        _logger.LogInformation("新增设备: {Name} (ID={Id})", created.Name, created.Id);
+        _logger.LogInformation("新增设备：{Name} (ID={Id})", created.Name, created.Id);
 
         return CreatedAtAction(nameof(GetById), new { id = created.Id },
-            ApiResponse<DeviceResponse>.Ok(MapToDetail(created), "设备创建成功"));
+            ApiResponse<DeviceResponse>.Ok(MapToDetail(created, 0), "设备创建成功"));
     }
 
     /// <summary>更新设备信息</summary>
@@ -110,7 +124,7 @@ public class DevicesController : ControllerBase
             return NotFound(ApiResponse.Fail($"设备 ID={id} 不存在"));
 
         await _deviceService.DeleteDeviceAsync(id);
-        _logger.LogInformation("删除设备: {Name} (ID={Id})", device.Name, id);
+        _logger.LogInformation("删除设备：{Name} (ID={Id})", device.Name, id);
         return Ok(ApiResponse.Ok("设备删除成功"));
     }
 
@@ -126,7 +140,6 @@ public class DevicesController : ControllerBase
 
         if (device.IsEnabled)
         {
-            // 当前是启用状态，执行禁用操作 -> 停止采集
             await _deviceService.DisableDeviceAsync(id);
             _deviceService.StopDeviceCollection(id);
             _logger.LogInformation("设备已禁用：{Name} (ID={Id})", device.Name, id);
@@ -134,7 +147,6 @@ public class DevicesController : ControllerBase
         }
         else
         {
-            // 当前是禁用状态，执行启用操作 -> 启动采集
             await _deviceService.EnableDeviceAsync(id);
             await _deviceService.StartDeviceCollectionAsync(id);
             _logger.LogInformation("设备已启用：{Name} (ID={Id})", device.Name, id);
@@ -176,7 +188,6 @@ public class DevicesController : ControllerBase
     [ProducesResponseType(typeof(ApiResponse<List<DataPointRealtimeResponse>>), 200)]
     public IActionResult GetDeviceRealtimeData(int deviceId)
     {
-        // 从 DataCollectionService 的全量快照获取数据（保持数据连贯性）
         var realtimeData = _collectionService.GetDeviceSnapshotData(deviceId);
         var result = realtimeData.Select(d => new DataPointRealtimeResponse
         {
@@ -217,7 +228,6 @@ public class DevicesController : ControllerBase
 
         var created = await _deviceService.CreateDataPointAsync(dataPoint);
 
-        // 如果设备已启用，重新加载采集任务
         if (device.IsEnabled)
         {
             await _collectionService.ReloadDeviceAsync(deviceId, HttpContext.RequestAborted);
@@ -243,9 +253,8 @@ public class DevicesController : ControllerBase
         if (dataPoint == null || dataPoint.DeviceId != deviceId)
             return NotFound(ApiResponse.Fail($"数据点 ID={dataPointId} 不存在"));
 
-        // 记录配置变更字段
-        var configChanged = req.Address != null || req.DataType.HasValue || 
-                           req.ModbusSlaveId.HasValue || req.ModbusFunctionCode.HasValue || 
+        var configChanged = req.Address != null || req.DataType.HasValue ||
+                           req.ModbusSlaveId.HasValue || req.ModbusFunctionCode.HasValue ||
                            req.ModbusByteOrder.HasValue || req.RegisterLength.HasValue ||
                            req.IsEnabled.HasValue;
 
@@ -262,11 +271,10 @@ public class DevicesController : ControllerBase
 
         await _deviceService.UpdateDataPointAsync(dataPoint);
 
-        // 如果采集配置变更，重新加载设备采集任务
         if (configChanged && device.IsEnabled)
         {
             await _collectionService.ReloadDeviceAsync(deviceId, HttpContext.RequestAborted);
-            _logger.LogInformation("数据点 ID={DataPointId} 配置变更，已重新加载设备 ID={DeviceId} 采集任务", 
+            _logger.LogInformation("数据点 ID={DataPointId} 配置变更，已重新加载设备 ID={DeviceId} 采集任务",
                 dataPointId, deviceId);
         }
 
@@ -282,7 +290,6 @@ public class DevicesController : ControllerBase
 
         await _deviceService.DeleteDataPointAsync(dataPointId);
 
-        // 如果设备已启用，重新加载采集任务
         if (device != null && device.IsEnabled)
         {
             await _collectionService.ReloadDeviceAsync(deviceId, HttpContext.RequestAborted);
@@ -295,7 +302,7 @@ public class DevicesController : ControllerBase
 
     // ==================== 映射方法 ====================
 
-    private static DeviceListItem MapToListItem(Device d) => new()
+    private static DeviceListItem MapToListItem(Device d, int virtualPointCount = 0) => new()
     {
         Id             = d.Id,
         Name           = d.Name,
@@ -304,10 +311,10 @@ public class DevicesController : ControllerBase
         Address        = d.Address,
         PollingIntervalMs = d.PollingIntervalMs,
         IsEnabled      = d.IsEnabled,
-        DataPointCount = d.DataPoints.Count
+        DataPointCount = d.DataPoints.Count + virtualPointCount
     };
 
-    private static DeviceResponse MapToDetail(Device d) => new()
+    private static DeviceResponse MapToDetail(Device d, int virtualPointCount = 0) => new()
     {
         Id                = d.Id,
         Name              = d.Name,
@@ -319,7 +326,7 @@ public class DevicesController : ControllerBase
         Port              = d.Port,
         IsEnabled         = d.IsEnabled,
         PollingIntervalMs = d.PollingIntervalMs,
-        DataPointCount    = d.DataPoints.Count,
+        DataPointCount    = d.DataPoints.Count + virtualPointCount,
         CreatedAt         = d.CreatedAt,
         UpdatedAt         = d.UpdatedAt
     };
