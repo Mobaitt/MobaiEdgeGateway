@@ -207,14 +207,14 @@ const virtualMappedIds = computed(() => new Set(mappings.value.filter(m => m.isV
 const isMapped = (id: number) => mappedIds.value.has(id)
 const isVirtualMapped = (id: number) => virtualMappedIds.value.has(id)
 
-// 获取指定设备的所有虚拟数据点（已绑定的不显示在可选列表中）
+// 获取指定设备的所有虚拟数据点（包括已绑定的，用于回显）
 const getVirtualPointsByDevice = (deviceId: number) => {
   const device = deviceTree.value.find(d => d.id === deviceId)
   if (!device) return []
-  return (device.virtualPoints || []).filter(vp => !isVirtualMapped(vp.id))
+  return device.virtualPoints || []
 }
 
-// 获取指定设备下匹配的虚拟数据点（用于搜索过滤）
+// 获取指定设备下匹配的虚拟数据点（用于搜索过滤，包括已绑定的）
 const getFilteredVirtualPointsByDevice = (deviceId: number) => {
   const virtualPoints = getVirtualPointsByDevice(deviceId)
   if (!dpSearch.value) return virtualPoints
