@@ -60,8 +60,18 @@
       </div>
       <div class="toolbar-right">
         <el-button :icon="Refresh" circle @click="refreshData" :loading="refreshing" title="刷新数据" />
-        <el-button type="primary" :icon="Plus" @click="openCreate">新增数据点</el-button>
-        <el-button type="success" :icon="Cpu" @click="goToVirtualNodes">虚拟节点</el-button>
+        <el-dropdown split-button type="primary" @click="openCreate">
+          <el-icon><Plus /></el-icon>
+          新增数据点
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item @click="openCreate">普通数据点</el-dropdown-item>
+              <el-dropdown-item @click="openVirtualNodeCreate">
+                <el-icon><Cpu /></el-icon> 虚拟节点
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
     </div>
 
@@ -120,7 +130,7 @@
               size="small"
               active-color="#38dcc4"
               inactive-color="#999"
-              @change="toggleDataPoint(row)"
+              @change="row.isVirtual ? toggleVirtualNode(row) : toggleDataPoint(row)"
             />
           </template>
         </el-table-column>
@@ -134,13 +144,13 @@
         <el-table-column label="操作" width="140" align="right" fixed="right">
           <template #default="{ row }">
             <el-button v-if="row.isVirtual" size="small" text type="success" @click="openVirtualNodeEdit(row)">
-              <el-icon><Edit /></el-icon>
+              <el-icon><Edit /></el-icon> 编辑
             </el-button>
             <el-button v-else size="small" text type="primary" @click="openEdit(row)">
-              <el-icon><Edit /></el-icon>
+              <el-icon><Edit /></el-icon> 编辑
             </el-button>
-            <el-button size="small" text type="danger" @click="confirmDelete(row)">
-              <el-icon><Delete /></el-icon>
+            <el-button size="small" text type="danger" @click="row.isVirtual ? confirmDeleteVirtualNode(row) : confirmDelete(row)">
+              <el-icon><Delete /></el-icon> 删除
             </el-button>
           </template>
         </el-table-column>
@@ -265,6 +275,91 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 虚拟节点对话框 -->
+    <el-dialog
+      v-model="virtualNodeDialogVisible"
+      :title="editingVirtualNode ? '编辑虚拟节点' : '新增虚拟节点'"
+      width="720px"
+      destroy-on-close
+      class="datapoint-dialog app-dialog"
+      align-center
+    >
+      <el-form ref="virtualNodeFormRef" :model="virtualNodeForm" :rules="virtualNodeFormRules" label-width="120px" label-position="left">
+        <div class="form-section">
+          <div class="section-title"><el-icon><Document /></el-icon> 基本信息</div>
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <el-form-item label="名称" prop="name">
+                <el-input v-model="virtualNodeForm.name" placeholder="如：平均温度" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="Tag" prop="tag">
+                <el-input v-model="virtualNodeForm.tag" placeholder="DEV001.TempAvg" class="mono-input" />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-form-item label="描述">
+            <el-input v-model="virtualNodeForm.description" placeholder="可选描述" type="textarea" :rows="2" />
+          </el-form-item>
+        </div>
+
+        <div class="form-section">
+          <div class="section-title"><el-icon><Cpu /></el-icon> 计算配置</div>
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <el-form-item label="计算类型" prop="calculationType">
+                <el-select v-model="virtualNodeForm.calculationType" placeholder="选择计算类型" style="width:100%">
+                  <el-option label="自定义表达式" :value="1" />
+                  <el-option label="平均值" :value="2" />
+                  <el-option label="最大值" :value="3" />
+                  <el-option label="最小值" :value="4" />
+                  <el-option label="求和" :value="5" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="数据类型" prop="dataType">
+                <el-select v-model="virtualNodeForm.dataType" placeholder="选择类型" style="width:100%">
+                  <el-option v-for="o in DataValueTypeOptions" :key="o.value" :label="o.label" :value="o.value" />
+                </el-select>
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row :gutter="20">
+            <el-col :span="12">
+              <el-form-item label="单位">
+                <el-input v-model="virtualNodeForm.unit" placeholder="℃、MPa" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="是否启用">
+                <el-switch v-model="virtualNodeForm.isEnabled" active-color="#38dcc4" />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-form-item label="计算表达式" prop="expression">
+            <el-input
+              v-model="virtualNodeForm.expression"
+              type="textarea"
+              :rows="3"
+              placeholder="如：(Point1 + Point2) / 2 或 Avg(Temp1, Temp2, Temp3)"
+            />
+            <div class="form-hint">
+              <el-icon><InfoFilled /></el-icon>
+              <span>支持四则运算和函数：Avg, Max, Min, Sum, Abs, Sqrt, Pow 等。引用其他数据点使用 Tag 名称。</span>
+            </div>
+          </el-form-item>
+        </div>
+      </el-form>
+      <template #footer>
+        <el-button @click="virtualNodeDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="virtualNodeSubmitting" @click="submitVirtualNodeForm">
+          {{ editingVirtualNode ? '保存修改' : '创建虚拟节点' }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -274,7 +369,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { Plus, Delete, ArrowLeft, Document, Setting, Connection, InfoFilled, Edit, Refresh, Search, MagicStick, Cpu } from '@element-plus/icons-vue'
 import { getDataPoints, createDataPoint, updateDataPoint, toggleDataPoint as apiToggleDataPoint, deleteDataPoint, getDeviceRealtimeData, getDevice } from '@/api/device'
-import { getVirtualDataPointsByDevice } from '@/api/virtualNode'
+import { getVirtualDataPointsByDevice, createVirtualDataPoint, updateVirtualDataPoint, deleteVirtualDataPoint } from '@/api/virtualNode'
 import { getDataValueTypes, getModbusByteOrders } from '@/api/enums'
 import { formatDateTime } from '@/api/constants'
 import { CollectionProtocol } from '@/api/constants'
@@ -297,6 +392,18 @@ type DataPointForm = {
   modbusFunctionCode: number
   modbusByteOrder: number
   registerLength: number
+}
+
+type VirtualNodeForm = {
+  deviceId: number
+  name: string
+  tag: string
+  description: string
+  expression: string
+  calculationType: number
+  dataType: number
+  unit: string
+  isEnabled: boolean
 }
 
 const route = useRoute()
@@ -433,15 +540,15 @@ const rules = {
   name: [{ required: true, message: '请输入名称' }],
   tag: [
     { required: true, message: '请输入标签' },
-    { 
-      pattern: /^[A-Z0-9_]+\.[A-Z0-9_]+$/i, 
-      message: 'Tag 格式不正确，应为：设备编码。数据点标识（例：DEV_PLC_001.Temperature）' 
+    {
+      pattern: /^[A-Z0-9_]+\.[A-Z0-9_]+$/i,
+      message: 'Tag 格式不正确，应为：设备编码。数据点标识（例：DEV_PLC_001.Temperature）'
     },
     {
       validator: async (rule, value, callback) => {
         if (!value) return callback()
         if (editingDataPoint.value && value === editingDataPoint.value.tag) return callback()
-        
+
         try {
           const res = await getDataPoints(deviceId.value)
           const points = (res as { data?: any[] })?.data || []
@@ -459,6 +566,55 @@ const rules = {
   ],
   address: [{ required: true, message: '请输入地址' }],
   dataType: [{ required: true, message: '请选择数据类型' }]
+}
+
+// 虚拟节点表单引用和状态
+const virtualNodeFormRef = ref<any>(null)
+const virtualNodeDialogVisible = ref(false)
+const editingVirtualNode = ref<VirtualDataPoint | null>(null)
+const virtualNodeSubmitting = ref(false)
+
+// 虚拟节点表单数据
+const virtualNodeForm = ref<VirtualNodeForm>({
+  deviceId: deviceId.value,
+  name: '',
+  tag: '',
+  description: '',
+  expression: '',
+  calculationType: 1,
+  dataType: 1,
+  unit: '',
+  isEnabled: true
+})
+
+// 虚拟节点表单验证规则
+const virtualNodeFormRules = {
+  name: [{ required: true, message: '请输入名称', trigger: 'blur' }],
+  tag: [
+    { required: true, message: '请输入 Tag', trigger: 'blur' },
+    {
+      validator: async (rule, value, callback) => {
+        if (!value) return callback()
+        if (editingVirtualNode.value && value === editingVirtualNode.value.tag) return callback()
+
+        try {
+          const res = await getVirtualDataPointsByDevice(deviceId.value)
+          const points = (res as { data?: any[] })?.data || []
+          if (points.some(p => p.tag === value)) {
+            callback(new Error('该 Tag 已存在'))
+          } else {
+            callback()
+          }
+        } catch (error) {
+          callback()
+        }
+      },
+      trigger: 'blur'
+    }
+  ],
+  expression: [{ required: true, message: '请输入计算表达式', trigger: 'blur' }],
+  calculationType: [{ required: true, message: '请选择计算类型', trigger: 'change' }],
+  dataType: [{ required: true, message: '请选择数据类型', trigger: 'change' }]
 }
 
 const fetchDevice = async () => {
@@ -735,15 +891,122 @@ const confirmDelete = (row: DataPointItem) => {
     .catch(() => {})
 }
 
-// 跳转到虚拟节点页面
-const goToVirtualNodes = () => {
-  router.push({ path: '/virtual-nodes', query: { deviceId: deviceId.value } })
+// 打开虚拟节点创建对话框
+const openVirtualNodeCreate = () => {
+  editingVirtualNode.value = null
+  virtualNodeForm.value = {
+    deviceId: deviceId.value,
+    name: '',
+    tag: '',
+    description: '',
+    expression: '',
+    calculationType: 1,
+    dataType: 1,
+    unit: '',
+    isEnabled: true
+  }
+  virtualNodeDialogVisible.value = true
 }
 
 // 打开虚拟节点编辑对话框
 const openVirtualNodeEdit = (row: DataPointWithVirtual) => {
   if (row.isVirtual) {
-    router.push({ path: '/virtual-nodes', query: { deviceId: deviceId.value, editId: row.id } })
+    const vp = row as VirtualDataPoint
+    editingVirtualNode.value = vp
+    virtualNodeForm.value = {
+      deviceId: vp.deviceId,
+      name: vp.name,
+      tag: vp.tag,
+      description: vp.description || '',
+      expression: vp.expression,
+      calculationType: vp.calculationType,
+      dataType: vp.dataType,
+      unit: vp.unit || '',
+      isEnabled: vp.isEnabled
+    }
+    virtualNodeDialogVisible.value = true
+  }
+}
+
+// 提交虚拟节点表单
+const submitVirtualNodeForm = async () => {
+  if (!virtualNodeFormRef.value) return
+
+  await virtualNodeFormRef.value.validate(async (valid) => {
+    if (!valid) return
+
+    virtualNodeSubmitting.value = true
+    try {
+      if (editingVirtualNode.value) {
+        // 编辑模式
+        await updateVirtualDataPoint(editingVirtualNode.value.id, {
+          id: editingVirtualNode.value.id,
+          deviceId: virtualNodeForm.value.deviceId,
+          name: virtualNodeForm.value.name,
+          tag: virtualNodeForm.value.tag,
+          description: virtualNodeForm.value.description,
+          expression: virtualNodeForm.value.expression,
+          calculationType: virtualNodeForm.value.calculationType,
+          dataType: virtualNodeForm.value.dataType,
+          unit: virtualNodeForm.value.unit,
+          isEnabled: virtualNodeForm.value.isEnabled
+        })
+        ElMessage.success('虚拟节点更新成功')
+      } else {
+        // 创建模式
+        await createVirtualDataPoint(virtualNodeForm.value)
+        ElMessage.success('虚拟节点创建成功')
+      }
+      virtualNodeDialogVisible.value = false
+      loadVirtualDataPoints()
+    } catch (error: any) {
+      ElMessage.error(`操作失败：${error.message || '未知错误'}`)
+    } finally {
+      virtualNodeSubmitting.value = false
+    }
+  })
+}
+
+// 删除虚拟节点
+const confirmDeleteVirtualNode = (row: DataPointWithVirtual) => {
+  if (!row.isVirtual) return
+
+  ElMessageBox.confirm(`确定要删除虚拟节点 "${row.tag}" 吗？`, '删除确认', {
+    type: 'warning',
+    confirmButtonText: '删除',
+    cancelButtonText: '取消'
+  })
+    .then(async () => {
+      await deleteVirtualDataPoint(row.id)
+      ElMessage.success('删除成功')
+      loadVirtualDataPoints()
+    })
+    .catch(() => {})
+}
+
+// 切换虚拟节点启用状态
+const toggleVirtualNode = async (row: DataPointWithVirtual) => {
+  if (!row.isVirtual) return
+
+  const vp = row as VirtualDataPoint
+  try {
+    await updateVirtualDataPoint(vp.id, {
+      id: vp.id,
+      deviceId: vp.deviceId,
+      name: vp.name,
+      tag: vp.tag,
+      description: vp.description || '',
+      expression: vp.expression,
+      calculationType: vp.calculationType,
+      dataType: vp.dataType,
+      unit: vp.unit || '',
+      isEnabled: vp.isEnabled
+    })
+    ElMessage.success(vp.isEnabled ? '虚拟节点已启用' : '虚拟节点已禁用')
+  } catch (error: any) {
+    // 恢复状态
+    vp.isEnabled = !vp.isEnabled
+    ElMessage.error(`操作失败：${error.message || '未知错误'}`)
   }
 }
 
