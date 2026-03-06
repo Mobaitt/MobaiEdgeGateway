@@ -63,122 +63,32 @@
       </el-table>
     </div>
 
-    <!-- 创建/编辑对话框 -->
-    <el-dialog
+    <!-- 创建/编辑规则弹窗 -->
+    <RuleDialog
       v-model="dialogVisible"
-      :title="isEdit ? '编辑规则' : '新建规则'"
-      width="600px"
-      class="app-dialog rule-dialog-compact"
-      destroy-on-close
-      align-center
-      @close="resetForm"
-    >
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
-        <el-form-item label="规则名称" prop="name">
-          <el-input v-model="form.name" placeholder="请输入规则名称" />
-        </el-form-item>
-        <el-form-item label="规则类型" prop="ruleType">
-          <el-select v-model="form.ruleType" placeholder="请选择规则类型" style="width: 100%">
-            <el-option label="限制规则" :value="0" />
-            <el-option label="转换规则" :value="1" />
-            <el-option label="校验规则" :value="2" />
-            <el-option label="计算规则" :value="3" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="设备" prop="deviceId">
-          <el-select v-model="form.deviceId" placeholder="可选，留空表示不绑定设备" clearable style="width: 100%">
-            <el-option
-              v-for="device in devices"
-              :key="device.id"
-              :label="device.name"
-              :value="device.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="数据点" prop="dataPointId">
-          <el-select v-model="form.dataPointId" placeholder="可选，留空表示全局规则" clearable style="width: 100%">
-            <el-option
-              v-for="point in filteredDataPoints"
-              :key="point.id"
-              :label="point.name"
-              :value="point.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="优先级" prop="priority">
-          <el-input-number v-model="form.priority" :min="0" :max="1000" />
-          <div class="form-tip">数值越小优先级越高</div>
-        </el-form-item>
-        <el-form-item label="失败处理" prop="onFailure">
-          <el-select v-model="form.onFailure" placeholder="请选择失败处理方式" style="width: 100%">
-            <el-option label="放行" :value="0" />
-            <el-option label="拒绝" :value="1" />
-            <el-option label="使用默认值" :value="2" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="默认值" prop="defaultValue" v-if="form.onFailure === 2">
-          <el-input v-model="form.defaultValue" placeholder="失败时使用的默认值" />
-        </el-form-item>
-        <el-form-item label="规则配置" prop="ruleConfig">
-          <el-input
-            v-model="form.ruleConfig"
-            type="textarea"
-            :rows="6"
-            placeholder="JSON 格式配置"
-          />
-          <div class="form-tip">
-            <el-link type="primary" @click="showConfigHelp">查看配置帮助</el-link>
-          </div>
-        </el-form-item>
-        <el-form-item label="描述" prop="description">
-          <el-input v-model="form.description" type="textarea" :rows="2" />
-        </el-form-item>
-        <el-form-item label="启用" prop="isEnabled">
-          <el-switch v-model="form.isEnabled" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submitForm" :loading="submitting">确定</el-button>
-      </template>
-    </el-dialog>
+      :editing-rule="editingRule"
+      :devices="devices"
+      :data-points="dataPoints"
+      :submitting="submitting"
+      @submit="handleSubmit"
+      @close="handleDialogClose"
+      @show-help="showConfigHelp"
+    />
 
     <!-- 测试对话框 -->
-    <el-dialog v-model="testDialogVisible" title="测试规则" width="600px" class="app-dialog" align-center>
-      <el-form :model="testForm" label-width="100px">
-        <el-form-item label="测试值">
-          <el-input v-model="testForm.value" placeholder="输入测试值" />
-        </el-form-item>
-        <el-form-item label="测试结果">
-          <el-input
-            v-model="testResult"
-            type="textarea"
-            :rows="8"
-            readonly
-            placeholder="点击测试按钮查看结果"
-          />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="testDialogVisible = false">关闭</el-button>
-        <el-button type="primary" @click="runTest" :loading="testing">测试</el-button>
-      </template>
-    </el-dialog>
+    <RuleTestDialog
+      v-model="testDialogVisible"
+      :rule="currentRule"
+      :testing="testing"
+      @test="runTest"
+      @close="handleTestDialogClose"
+    />
 
     <!-- 配置帮助对话框 -->
-    <el-dialog v-model="helpDialogVisible" title="规则配置帮助" width="700px" class="app-dialog" align-center>
-      <el-tabs>
-        <el-tab-pane label="校验规则 (Validation)">
-          <pre>{{ validationConfigExample }}</pre>
-        </el-tab-pane>
-        <el-tab-pane label="转换规则 (Transform)">
-          <pre>{{ transformConfigExample }}</pre>
-        </el-tab-pane>
-        <el-tab-pane label="限制规则 (Limit)">
-          <pre>{{ limitConfigExample }}</pre>
-        </el-tab-pane>
-      </el-tabs>
-    </el-dialog>
+    <RuleHelpDialog
+      v-model="helpDialogVisible"
+      @close="handleHelpDialogClose"
+    />
   </div>
 </template>
 
@@ -187,7 +97,10 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Edit, Delete } from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
-import type { Rule, CreateRuleRequest, RuleType, FailureAction, UpdateRuleRequest } from '@/types/rule'
+import RuleDialog from '@/dialogs/rule/RuleDialog.vue'
+import RuleTestDialog from '@/dialogs/rule/RuleTestDialog.vue'
+import RuleHelpDialog from '@/dialogs/rule/RuleHelpDialog.vue'
+import type { Rule, CreateRuleRequest, RuleType, UpdateRuleRequest } from '@/types/rule'
 import type { Device, DataPoint } from '@/types/device'
 import { getRules, createRule, updateRule, deleteRule as deleteRuleApi, toggleRule, testRule } from '@/api/rule'
 import { getDevices, getAllDataPoints } from '@/api/device'
@@ -202,8 +115,7 @@ const filterType = ref<RuleType | null>(null)
 const dialogVisible = ref(false)
 const testDialogVisible = ref(false)
 const helpDialogVisible = ref(false)
-const isEdit = ref(false)
-const formRef = ref()
+const editingRule = ref<Rule | null>(null)
 const currentRule = ref<Rule | null>(null)
 const testResult = ref('')
 
@@ -218,52 +130,6 @@ const form = reactive<CreateRuleRequest>({
   defaultValue: null,
   isEnabled: true,
   description: ''
-})
-
-const testForm = reactive({
-  value: ''
-})
-
-const validationConfigExample = `{
-  "ValidationType": 1,      // 1=Range 阈值校验
-  "MinValue": 0,            // 最小值
-  "MaxValue": 100           // 最大值
-}
-
-// 变化率校验
-{
-  "ValidationType": 2,      // 2=RateOfChange
-  "MaxRateOfChange": 10.5   // 每秒最大变化量
-}
-
-// 死区校验
-{
-  "ValidationType": 3,      // 3=DeadBand
-  "DeadBand": 0.5           // 死区值
-}`
-
-const transformConfigExample = `{
-  "TransformType": 1,       // 1=Linear 线性变换
-  "Scale": 1.8,             // y = kx + b 中的 k
-  "Offset": 32              // y = kx + b 中的 b
-}
-
-// 公式计算
-{
-  "TransformType": 2,       // 2=Formula
-  "Formula": "x * 2 + 10"   // NCalc 表达式
-}`
-
-const limitConfigExample = `{
-  "MinValue": 0,            // 最小值限制
-  "MaxValue": 100           // 最大值限制
-}`
-
-const filteredDataPoints = computed(() => {
-  if (form.deviceId) {
-    return dataPoints.value.filter(p => p.deviceId === form.deviceId)
-  }
-  return dataPoints.value
 })
 
 const getRuleTypeTag = (type: RuleType) => {
@@ -307,83 +173,41 @@ const loadDevicesAndPoints = async () => {
 }
 
 const openCreateDialog = () => {
-  isEdit.value = false
+  editingRule.value = null
   dialogVisible.value = true
 }
 
 const openEditDialog = (rule: Rule) => {
-  isEdit.value = true
-  currentRule.value = rule
-  form.name = rule.name
-  form.ruleType = rule.ruleType
-  form.deviceId = rule.deviceId
-  form.dataPointId = rule.dataPointId
-  form.priority = rule.priority
-  form.ruleConfig = rule.ruleConfig
-  form.onFailure = rule.onFailure
-  form.defaultValue = rule.defaultValue
-  form.isEnabled = rule.isEnabled
-  form.description = rule.description || ''
+  editingRule.value = rule
   dialogVisible.value = true
 }
 
 const openTestDialog = (rule: Rule) => {
   currentRule.value = rule
-  testForm.value = ''
   testResult.value = ''
   testDialogVisible.value = true
 }
 
-const resetForm = () => {
-  formRef.value?.resetFields()
-  currentRule.value = null
-  form.name = ''
-  form.ruleType = 2
-  form.deviceId = null
-  form.dataPointId = null
-  form.priority = 100
-  form.ruleConfig = '{}'
-  form.onFailure = 0
-  form.defaultValue = null
-  form.isEnabled = true
-  form.description = ''
-}
-
-const submitForm = async () => {
-  if (!formRef.value) return
-  
-  await formRef.value.validate(async (valid: boolean) => {
-    if (!valid) return
-    
-    submitting.value = true
-    try {
-      if (isEdit.value && currentRule.value) {
-        await updateRule(currentRule.value.id, {
-          id: currentRule.value.id,
-          name: form.name || '',
-          ruleType: form.ruleType,
-          deviceId: form.deviceId,
-          dataPointId: form.dataPointId,
-          priority: form.priority || 100,
-          ruleConfig: form.ruleConfig || '{}',
-          onFailure: form.onFailure || 0,
-          defaultValue: form.defaultValue,
-          isEnabled: form.isEnabled ?? true,
-          description: form.description
-        } as UpdateRuleRequest)
-        ElMessage.success('更新成功')
-      } else {
-        await createRule(form)
-        ElMessage.success('创建成功')
-      }
-      dialogVisible.value = false
-      loadRules()
-    } catch (error) {
-      ElMessage.error('操作失败')
-    } finally {
-      submitting.value = false
+const handleSubmit = async (data: CreateRuleRequest) => {
+  submitting.value = true
+  try {
+    if (editingRule.value) {
+      await updateRule(editingRule.value.id, {
+        id: editingRule.value.id,
+        ...data
+      } as UpdateRuleRequest)
+      ElMessage.success('更新成功')
+    } else {
+      await createRule(data)
+      ElMessage.success('创建成功')
     }
-  })
+    dialogVisible.value = false
+    loadRules()
+  } catch (error) {
+    ElMessage.error('操作失败')
+  } finally {
+    submitting.value = false
+  }
 }
 
 const toggleRuleStatus = async (rule: Rule) => {
@@ -411,9 +235,9 @@ const deleteRule = async (id: number) => {
   }
 }
 
-const runTest = async () => {
+const runTest = async (value: string) => {
   if (!currentRule.value) return
-  
+
   testing.value = true
   try {
     const result = await testRule(
@@ -426,7 +250,7 @@ const runTest = async () => {
         dataPointId: currentRule.value.dataPointId || 0,
         deviceId: currentRule.value.deviceId || 0,
         tag: 'test',
-        value: parseFloat(testForm.value) || testForm.value
+        value: parseFloat(value) || value
       }
     )
     testResult.value = JSON.stringify(result, null, 2)
@@ -440,6 +264,17 @@ const runTest = async () => {
 const showConfigHelp = () => {
   helpDialogVisible.value = true
 }
+
+const handleDialogClose = () => {
+  editingRule.value = null
+}
+
+const handleTestDialogClose = () => {
+  currentRule.value = null
+  testResult.value = ''
+}
+
+const handleHelpDialogClose = () => {}
 
 onMounted(() => {
   loadRules()
@@ -459,33 +294,17 @@ onMounted(() => {
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-lg);
   }
+
   .total-hint {
     font-size: 13px;
     color: var(--text-muted);
   }
+
   .table-wrap {
     background: var(--bg-card);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-lg);
     overflow: hidden;
-  }
-  .form-tip {
-    font-size: 12px;
-    color: var(--text-muted);
-    margin-top: 5px;
-  }
-  .form-tip .el-link {
-    color: var(--cyan);
-  }
-  pre {
-    background: var(--bg-base);
-    color: var(--text-secondary);
-    padding: 15px;
-    border-radius: var(--radius);
-    font-size: 12px;
-    overflow-x: auto;
-    border: 1px solid var(--border-subtle);
-    font-family: var(--font-mono);
   }
 }
 </style>

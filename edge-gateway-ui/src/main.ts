@@ -6,6 +6,7 @@ import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import router from './router'
 import App from './App.vue'
 import './styles/global.css'
+import './styles/dialogs.scss'
 import 'element-plus/dist/index.css'
 
 const app = createApp(App)

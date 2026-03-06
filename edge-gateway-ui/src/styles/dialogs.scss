@@ -1,0 +1,227 @@
+﻿// 通用弹窗样式
+.app-dialog {
+  .el-dialog__header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .el-dialog__title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  .el-dialog__body {
+    padding: 20px;
+    max-height: calc(90vh - 140px);
+    overflow-y: auto;
+  }
+
+  .el-dialog__footer {
+    padding: 12px 20px;
+    border-top: 1px solid var(--border-subtle);
+  }
+}
+
+// 紧凑弹窗（减少内边距）
+.app-dialog-compact {
+  .el-dialog__body {
+    padding: 16px;
+  }
+}
+
+// 表单区块通用样式
+.form-section {
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border-subtle);
+
+  &:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+
+  .el-icon {
+    color: var(--cyan);
+  }
+}
+
+// 协议提示
+.protocol-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: var(--bg-card);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+
+  .hint-icon {
+    color: var(--cyan);
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  .hint-code {
+    background: var(--bg-base);
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--cyan);
+  }
+}
+
+// 单行协议提示
+.protocol-hint-inline {
+  flex-direction: row !important;
+  gap: 6px;
+  margin-top: 6px !important;
+  padding: 5px 10px !important;
+  font-size: 11px !important;
+  line-height: 1.4;
+
+  .hint-icon {
+    font-size: 12px;
+  }
+}
+
+// 表单提示
+.form-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  line-height: 1.4;
+
+  .el-icon {
+    margin-right: 4px;
+  }
+}
+
+// 协议选项
+.protocol-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+
+  .protocol-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+}
+
+// 字节序选项
+.byte-order-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+
+  .byte-order-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+}
+
+// 模式单选组
+.mode-radio-group {
+  display: flex;
+  gap: 12px;
+
+  .el-radio {
+    margin-right: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+  }
+}
+
+// 内联表单项
+.form-item-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .form-hint {
+    margin-top: 0;
+  }
+}
+
+// 输入框与按钮同行
+.input-with-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .input-field {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .btn-auto-generate {
+    flex-shrink: 0;
+    padding: 0 10px;
+    font-size: 12px;
+    background: var(--bg-base) !important;
+    border: 1px solid var(--border-subtle) !important;
+    color: var(--text-secondary) !important;
+    transition: all 0.2s;
+
+    &:hover {
+      background: var(--bg-hover) !important;
+      border-color: var(--border-muted) !important;
+      color: var(--cyan) !important;
+    }
+
+    .el-icon {
+      margin-right: 4px;
+      font-size: 14px;
+    }
+  }
+}
+
+// 弹窗内表单样式统一
+.app-dialog {
+  .el-form-item__label {
+    color: var(--text-secondary) !important;
+    font-size: 13px;
+  }
+
+  .el-input__wrapper {
+    background: var(--bg-base) !important;
+    border-color: var(--border-muted) !important;
+  }
+
+  .el-select__wrapper {
+    background: var(--bg-base) !important;
+    border-color: var(--border-muted) !important;
+  }
+
+  .el-textarea__inner {
+    background: var(--bg-base) !important;
+    border-color: var(--border-muted) !important;
+    color: var(--text-primary) !important;
+  }
+
+  .el-input-number {
+    background: var(--bg-base) !important;
+    border: 1px solid var(--border-muted) !important;
+  }
+}

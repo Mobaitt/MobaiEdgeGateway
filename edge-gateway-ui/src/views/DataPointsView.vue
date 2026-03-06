@@ -158,218 +158,28 @@
     </div>
 
     <!-- 新增/编辑数据点弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="editingDataPoint ? '编辑数据点' : '新增数据点'" width="720px" destroy-on-close class="datapoint-dialog app-dialog" align-center>
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="90px" label-position="left">
-        
-        <!-- 基本信息 -->
-        <div class="form-section">
-          <div class="section-title"><el-icon><Document /></el-icon> 基本信息</div>
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="名称" prop="name">
-                <el-input v-model="form.name" placeholder="如：温度" @blur="generateTagIfEmpty" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="24">
-              <el-form-item label="Tag" prop="tag">
-                <div class="tag-with-btn">
-                  <el-input v-model="deviceCode" disabled class="mono-input tag-input" style="width:120px" />
-                  <span class="tag-separator">.</span>
-                  <el-input v-model="tagSuffix" placeholder="Temperature" class="mono-input tag-input" />
-                  <el-button size="small" text class="btn-auto-generate" @click="generateTag">
-                    <el-icon><MagicStick /></el-icon>
-                    <span>自动生成</span>
-                  </el-button>
-                </div>
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-form-item label="描述">
-            <el-input v-model="form.description" placeholder="可选描述信息" />
-          </el-form-item>
-        </div>
-
-        <!-- 采集配置 -->
-        <div class="form-section">
-          <div class="section-title"><el-icon><Setting /></el-icon> 采集配置</div>
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="地址" prop="address">
-                <el-input v-model="form.address" placeholder="40001" class="mono-input" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="数据类型" prop="dataType">
-                <el-select v-model="form.dataType" placeholder="选择类型" style="width:100%">
-                  <el-option v-for="o in DataValueTypeOptions" :key="o.value" :label="o.label" :value="o.value" />
-                </el-select>
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="单位">
-                <el-input v-model="form.unit" placeholder="℃、MPa" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="是否启用">
-                <el-switch v-model="form.isEnabled" active-color="#38dcc4" />
-              </el-form-item>
-            </el-col>
-          </el-row>
-        </div>
-
-        <!-- Modbus 配置：仅当设备为 Modbus 时显示 -->
-        <div v-if="isModbusDevice" class="form-section">
-          <div class="section-title"><el-icon><Connection /></el-icon> Modbus 配置</div>
-          <el-row :gutter="20">
-            <el-col :span="8">
-              <el-form-item label="从站地址">
-                <el-input-number v-model="form.modbusSlaveId" :min="1" :max="247" :step="1" style="width:100%" controls-position="right" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="8">
-              <el-form-item label="功能码">
-                <el-select v-model="form.modbusFunctionCode" placeholder="功能码" style="width:100%">
-                  <el-option label="01 - 读线圈" :value="1" />
-                  <el-option label="02 - 读离散输入" :value="2" />
-                  <el-option label="03 - 读保持寄存器" :value="3" />
-                  <el-option label="04 - 读输入寄存器" :value="4" />
-                </el-select>
-              </el-form-item>
-            </el-col>
-            <el-col :span="8">
-              <el-form-item label="字节顺序">
-                <el-select v-model="form.modbusByteOrder" placeholder="字节序" style="width:100%">
-                  <el-option v-for="o in ModbusByteOrderOptions" :key="o.value" :label="o.label" :value="o.value">
-                    <div class="byte-order-option">
-                      <span>{{ o.label }}</span>
-                      <span class="byte-order-desc">{{ o.desc }}</span>
-                    </div>
-                  </el-option>
-                </el-select>
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-row :gutter="20" style="margin-top: 12px">
-            <el-col :span="8">
-              <el-form-item label="寄存器长度">
-                <el-select v-model="form.registerLength" placeholder="长度" style="width:100%">
-                  <el-option label="1 个寄存器 (16 位)" :value="1" />
-                  <el-option label="2 个寄存器 (32 位)" :value="2" />
-                  <el-option label="4 个寄存器 (64 位)" :value="4" />
-                </el-select>
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <div class="protocol-hint">
-            <el-icon class="hint-icon"><InfoFilled /></el-icon>
-            <span>32 位数据类型（Int32、UInt32、Float）需要 2 个寄存器，64 位数据类型（Int64、UInt64、Double）需要 4 个寄存器。</span>
-          </div>
-        </div>
-
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitting" @click="submitForm">
-          {{ editingDataPoint ? '保存修改' : '创建数据点' }}
-        </el-button>
-      </template>
-    </el-dialog>
+    <DataPointDialog
+      v-model="dialogVisible"
+      :editing-data-point="editingDataPoint"
+      :device-code="deviceCode"
+      :device-protocol="deviceProtocol"
+      :data-type-options="DataValueTypeOptions"
+      :byte-order-options="ModbusByteOrderOptions"
+      :submitting="submitting"
+      @submit="handleSubmit"
+      @close="handleDialogClose"
+    />
 
     <!-- 虚拟节点对话框 -->
-    <el-dialog
+    <VirtualNodeDialog
       v-model="virtualNodeDialogVisible"
-      :title="editingVirtualNode ? '编辑虚拟节点' : '新增虚拟节点'"
-      width="720px"
-      destroy-on-close
-      class="datapoint-dialog app-dialog"
-      align-center
-    >
-      <el-form ref="virtualNodeFormRef" :model="virtualNodeForm" :rules="virtualNodeFormRules" label-width="120px" label-position="left">
-        <div class="form-section">
-          <div class="section-title"><el-icon><Document /></el-icon> 基本信息</div>
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="名称" prop="name">
-                <el-input v-model="virtualNodeForm.name" placeholder="如：平均温度" @blur="generateVirtualTagIfEmpty" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="24">
-              <el-form-item label="Tag" prop="tag">
-                <div class="tag-with-btn">
-                  <el-input v-model="deviceCodeForVirtual" disabled class="mono-input tag-input" style="width:120px" />
-                  <span class="tag-separator">.</span>
-                  <el-input v-model="virtualTagSuffix" placeholder="TempAvg" class="mono-input tag-input" />
-                  <el-button size="small" text class="btn-auto-generate" @click="generateVirtualTag">
-                    <el-icon><MagicStick /></el-icon>
-                    <span>自动生成</span>
-                  </el-button>
-                </div>
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-form-item label="描述">
-            <el-input v-model="virtualNodeForm.description" placeholder="可选描述" type="textarea" :rows="2" />
-          </el-form-item>
-        </div>
-
-        <div class="form-section">
-          <div class="section-title"><el-icon><Cpu /></el-icon> 计算配置</div>
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="计算类型" prop="calculationType">
-                <el-select v-model="virtualNodeForm.calculationType" placeholder="选择计算类型" style="width:100%">
-                  <el-option label="自定义表达式" :value="1" />
-                  <el-option label="平均值" :value="2" />
-                  <el-option label="最大值" :value="3" />
-                  <el-option label="最小值" :value="4" />
-                  <el-option label="求和" :value="5" />
-                </el-select>
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="数据类型" prop="dataType">
-                <el-select v-model="virtualNodeForm.dataType" placeholder="选择类型" style="width:100%">
-                  <el-option v-for="o in DataValueTypeOptions" :key="o.value" :label="o.label" :value="o.value" />
-                </el-select>
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="单位">
-                <el-input v-model="virtualNodeForm.unit" placeholder="℃、MPa" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="是否启用">
-                <el-switch v-model="virtualNodeForm.isEnabled" active-color="#38dcc4" />
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-form-item label="计算表达式" prop="expression">
-            <el-input
-              v-model="virtualNodeForm.expression"
-              type="textarea"
-              :rows="3"
-              placeholder="如：(Point1 + Point2) / 2 或 Avg(Temp1, Temp2, Temp3)"
-            />
-            <div class="form-hint">
-              <el-icon><InfoFilled /></el-icon>
-              <span>支持四则运算和函数：Avg, Max, Min, Sum, Abs, Sqrt, Pow 等。引用其他数据点使用 Tag 名称。</span>
-            </div>
-          </el-form-item>
-        </div>
-      </el-form>
-      <template #footer>
-        <el-button @click="virtualNodeDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="virtualNodeSubmitting" @click="submitVirtualNodeForm">
-          {{ editingVirtualNode ? '保存修改' : '创建虚拟节点' }}
-        </el-button>
-      </template>
-    </el-dialog>
+      :editing-virtual-node="editingVirtualNode"
+      :device-code="deviceCode"
+      :data-type-options="DataValueTypeOptions"
+      :submitting="virtualNodeSubmitting"
+      @submit="handleVirtualSubmit"
+      @close="handleVirtualDialogClose"
+    />
   </div>
 </template>
 
@@ -386,6 +196,8 @@ import { CollectionProtocol } from '@/api/constants'
 import { nameToCode } from '@/utils/codeGenerate'
 import type { DataPointItem, RealtimeDataItem } from '@/types'
 import type { VirtualDataPoint } from '@/types/virtualNode'
+import DataPointDialog from '@/dialogs/dataPoint/DataPointDialog.vue'
+import VirtualNodeDialog from '@/dialogs/dataPoint/VirtualNodeDialog.vue'
 
 // 扩展的数据点类型，支持虚拟节点
 type DataPointWithVirtual = (DataPointItem | VirtualDataPoint) & { isVirtual?: boolean }
@@ -423,7 +235,7 @@ const DataValueTypeOptions = ref<any[]>([])
 const ModbusByteOrderOptions = ref<any[]>([])
 
 // 筛选器
-const filterType = ref<string>('') // '' = 全部，'normal' = 普通，'virtual' = 虚拟
+const filterType = ref<string>('')
 
 // 加载数据类型选项
 const loadDataValueTypes = async () => {
@@ -450,11 +262,8 @@ const refreshing = ref(false)
 const dataPoints = ref<DataPointWithVirtual[]>([])
 const enabledCount = computed(() => dataPoints.value.filter((item) => item.isEnabled).length)
 const deviceEnabled = ref(false)
-/** 当前设备编码，用于生成数据点 Tag（格式：设备编码.数据点标识） */
 const deviceCode = ref('')
-/** 当前设备的采集协议（1=Modbus, 2=OPC UA, 3=S7, 4=HTTP, 99=Simulator），用于按协议显示对应配置项 */
 const deviceProtocol = ref<number | null>(null)
-const isModbusDevice = computed(() => deviceProtocol.value === CollectionProtocol.Modbus.value)
 
 // 搜索和筛选
 const searchText = ref('')
@@ -464,7 +273,6 @@ const filterQuality = ref<string | null>(null)
 // 过滤后的数据点
 const filteredDataPoints = computed(() => {
   return dataPoints.value.filter((item) => {
-    // 类型筛选
     const isVirtual = !!item.isVirtual
     let matchType = true
     if (filterType.value === 'normal') {
@@ -473,7 +281,6 @@ const filteredDataPoints = computed(() => {
       matchType = isVirtual
     }
 
-    // 文本搜索
     const searchTextLower = searchText.value.toLowerCase()
     const matchText = !searchText.value ||
       item.tag.toLowerCase().includes(searchTextLower) ||
@@ -481,11 +288,9 @@ const filteredDataPoints = computed(() => {
       ('address' in item && item.address.toLowerCase().includes(searchTextLower)) ||
       ('expression' in item && (item.expression || '').toLowerCase().includes(searchTextLower))
 
-    // 数据类型筛选
     const itemDataType = typeof item.dataType === 'string' ? parseInt(item.dataType) : item.dataType
     const matchDataType = !filterDataType.value || itemDataType === filterDataType.value
 
-    // 数据质量筛选
     const realtimeDataItem = getRealtimeData(item)
     const quality = realtimeDataItem?.quality
     const matchQuality = !filterQuality.value || quality === filterQuality.value
@@ -494,7 +299,6 @@ const filteredDataPoints = computed(() => {
   })
 })
 
-// 获取数据类型标签
 const getDataTypeLabel = (dataType: string | number) => {
   if (typeof dataType === 'number') {
     const option = DataValueTypeOptions.value.find(o => o.value === dataType)
@@ -503,7 +307,6 @@ const getDataTypeLabel = (dataType: string | number) => {
   return dataType
 }
 
-// 刷新数据
 const refreshData = async () => {
   refreshing.value = true
   try {
@@ -518,122 +321,22 @@ const refreshData = async () => {
   }
 }
 
-// 过滤数据点
-const filterDataPoints = () => {
-  // computed 会自动处理，这里可以添加日志或其他逻辑
-}
+const filterDataPoints = () => {}
 
-// 实时数据 - 使用 Tag 作为 key，避免虚拟数据点 ID 匹配问题
+// 实时数据
 const realtimeData = ref<Record<string, RealtimeDataItem>>({})
 const lastUpdateTime = ref<Date | null>(null)
 let realtimeTimer: number | null = null
 
+// 数据点弹窗状态
 const dialogVisible = ref(false)
 const submitting = ref(false)
 const editingDataPoint = ref<DataPointItem | null>(null)
-const formRef = ref<any>()
 
-// 普通数据点 Tag 生成相关状态
-const tagSuffix = ref('')
-
-const form = ref<DataPointForm>({
-  name: '',
-  tag: '',
-  description: '',
-  address: '',
-  dataType: null,
-  unit: '',
-  isEnabled: true,
-  modbusSlaveId: 1,
-  modbusFunctionCode: 3,
-  modbusByteOrder: 1,
-  registerLength: 1
-})
-
-const rules = {
-  name: [{ required: true, message: '请输入名称' }],
-  tag: [
-    { required: true, message: '请输入标签' },
-    {
-      pattern: /^[A-Z0-9_]+\.[A-Z0-9_]+$/i,
-      message: 'Tag 格式不正确，应为：设备编码。数据点标识（例：DEV_PLC_001.Temperature）'
-    },
-    {
-      validator: async (rule, value, callback) => {
-        if (!value) return callback()
-        if (editingDataPoint.value && value === editingDataPoint.value.tag) return callback()
-
-        try {
-          const res = await getDataPoints(deviceId.value)
-          const points = (res as { data?: any[] })?.data || []
-          if (points.some(p => p.tag === value)) {
-            callback(new Error('该 Tag 已存在'))
-          } else {
-            callback()
-          }
-        } catch (error) {
-          callback()
-        }
-      },
-      trigger: 'blur'
-    }
-  ],
-  address: [{ required: true, message: '请输入地址' }],
-  dataType: [{ required: true, message: '请选择数据类型' }]
-}
-
-// 虚拟节点表单引用和状态
-const virtualNodeFormRef = ref<any>(null)
+// 虚拟节点弹窗状态
 const virtualNodeDialogVisible = ref(false)
 const editingVirtualNode = ref<VirtualDataPoint | null>(null)
 const virtualNodeSubmitting = ref(false)
-
-// 虚拟节点 Tag 生成相关状态
-const deviceCodeForVirtual = ref('')
-const virtualTagSuffix = ref('')
-
-// 虚拟节点表单数据
-const virtualNodeForm = ref<VirtualNodeForm>({
-  deviceId: deviceId.value,
-  name: '',
-  tag: '',
-  description: '',
-  expression: '',
-  calculationType: 1,
-  dataType: 1,
-  unit: '',
-  isEnabled: true
-})
-
-// 虚拟节点表单验证规则
-const virtualNodeFormRules = {
-  name: [{ required: true, message: '请输入名称', trigger: 'blur' }],
-  tag: [
-    { required: true, message: '请输入 Tag', trigger: 'blur' },
-    {
-      validator: async (rule, value, callback) => {
-        if (!value) return callback()
-        if (editingVirtualNode.value && value === editingVirtualNode.value.tag) return callback()
-
-        try {
-          const res = await getVirtualDataPointsByDevice(deviceId.value)
-          const points = (res as { data?: any[] })?.data || []
-          if (points.some(p => p.tag === value)) {
-            callback(new Error('该 Tag 已存在'))
-          } else {
-            callback()
-          }
-        } catch (error) {
-          callback()
-        }
-      },
-      trigger: 'blur'
-    }
-  ],
-  expression: [{ required: true, message: '请输入计算表达式', trigger: 'blur' }],
-  calculationType: [{ required: true, message: '请选择计算类型', trigger: 'change' }],
-  dataType: [{ required: true, message: '请选择数据类型', trigger: 'change' }]
-}
 
 const fetchDevice = async () => {
   try {
@@ -662,7 +365,6 @@ const fetchDataPoints = async () => {
   }
 }
 
-// 加载虚拟数据点
 const loadVirtualDataPoints = async () => {
   try {
     const res = await getVirtualDataPointsByDevice(deviceId.value)
@@ -671,8 +373,6 @@ const loadVirtualDataPoints = async () => {
       isVirtual: true
     })) as DataPointWithVirtual[]
 
-    // 合并普通数据点和虚拟数据点
-    // 确保在普通数据点已加载的基础上合并
     const normalPoints = dataPoints.value.filter(item => !item.isVirtual)
     dataPoints.value = [...normalPoints, ...virtualPoints]
   } catch (error) {
@@ -685,15 +385,12 @@ const fetchRealtimeData = async () => {
     const res = await getDeviceRealtimeData(deviceId.value)
     const dataList = ((res as { data?: RealtimeDataItem[] })?.data ?? []) as RealtimeDataItem[]
 
-    // 增量更新实时数据，避免全量替换导致的不必要渲染
-    // 后端返回的 tag 已是完整格式（如 DEV001.Temperature）
     const newData: Record<string, RealtimeDataItem> = { ...realtimeData.value }
     let hasChanges = false
 
     dataList.forEach((item) => {
       if (item.tag) {
         const oldItem = newData[item.tag]
-        // 只有当值或质量发生变化时才标记为有更新
         if (!oldItem || oldItem.value !== item.value || oldItem.quality !== item.quality) {
           newData[item.tag] = item
           hasChanges = true
@@ -701,7 +398,6 @@ const fetchRealtimeData = async () => {
       }
     })
 
-    // 仅在有变化时更新，减少不必要的响应式触发
     if (hasChanges) {
       realtimeData.value = newData
       lastUpdateTime.value = new Date()
@@ -713,7 +409,6 @@ const fetchRealtimeData = async () => {
 
 const startRealtimePolling = () => {
   fetchRealtimeData()
-  // 使用 500ms 间隔以提高实时性
   realtimeTimer = window.setInterval(() => {
     fetchRealtimeData()
   }, 500)
@@ -726,12 +421,6 @@ const stopRealtimePolling = () => {
   }
 }
 
-
-/**
- * 获取数据点的实时数据
- * @param row 数据点行数据
- * @returns 实时数据项，无数据时返回 null
- */
 const getRealtimeData = (row: DataPointWithVirtual): RealtimeDataItem | null => {
   return realtimeData.value[row.tag] || null
 }
@@ -743,11 +432,6 @@ const getQualityClass = (quality: string) => {
   return ''
 }
 
-/**
- * 格式化实时值显示
- * @param row 数据点行数据
- * @returns 格式化后的值字符串，无数据时返回 '—'
- */
 const formatRowValue = (row: DataPointWithVirtual): string => {
   const data = getRealtimeData(row)
   if (!data || data.value === null || data.value === undefined) {
@@ -755,7 +439,6 @@ const formatRowValue = (row: DataPointWithVirtual): string => {
   }
 
   const value = data.value
-  // 数字类型保留小数
   if (typeof value === 'number') {
     const strVal = value.toString()
     if (strVal.includes('.')) {
@@ -767,129 +450,34 @@ const formatRowValue = (row: DataPointWithVirtual): string => {
   return String(value)
 }
 
-const formatValue = (value: any, dataType: string | number) => {
-  if (value === null || value === undefined) return '—'
-
-  // 数字类型保留小数
-  if (typeof value === 'number') {
-    const strVal = value.toString()
-    if (strVal.includes('.')) {
-      return value.toFixed(2)
-    }
-    return strVal
-  }
-
-  return String(value)
-}
-
-// 切换数据点启用状态
 const toggleDataPoint = async (row: DataPointItem) => {
   try {
     await apiToggleDataPoint(deviceId.value, row.id, row.isEnabled)
     ElMessage.success(row.isEnabled ? '数据点已启用' : '数据点已禁用')
-    
-    // 如果设备已启用，采集服务会自动重新加载
   } catch (error: any) {
-    // 恢复状态
     row.isEnabled = !row.isEnabled
     ElMessage.error(`操作失败：${error.message || '未知错误'}`)
   }
 }
 
-// 根据数据类型自动设置寄存器长度
-watch(() => form.value.dataType, (newType) => {
-  if (newType === null) return
-  // 32 位数据类型：Int32(4), UInt32(5), Float(6)
-  if ([4, 5, 6].includes(newType)) {
-    form.value.registerLength = 2
-  }
-  // 64 位数据类型：Int64(7), UInt64(8), Double(9)
-  else if ([7, 8, 9].includes(newType)) {
-    form.value.registerLength = 4
-  }
-  // 16 位数据类型
-  else {
-    form.value.registerLength = 1
-  }
-})
-
-/** 根据名称生成 Tag：设备编码.名称转编码（如 温度 -> DEV001.WD） */
-const generateTag = () => {
-  if (!form.value.name?.trim()) {
-    ElMessage.warning('请先输入数据点名称')
-    return
-  }
-  if (!deviceCode.value) {
-    ElMessage.warning('无法获取设备编码，请稍后重试')
-    return
-  }
-  const suffix = nameToCode(form.value.name, 'TAG')
-  form.value.tag = `${deviceCode.value}.${suffix}`
-  ElMessage.success('Tag 已生成')
-}
-
-const generateTagIfEmpty = () => {
-  if (!form.value.tag && form.value.name && deviceCode.value) {
-    const suffix = nameToCode(form.value.name, 'TAG')
-    form.value.tag = `${deviceCode.value}.${suffix}`
-  }
-}
-
 const openCreate = () => {
   editingDataPoint.value = null
-  form.value = {
-    name: '',
-    tag: '',
-    description: '',
-    address: '',
-    dataType: null,
-    unit: '',
-    isEnabled: true,
-    modbusSlaveId: 1,
-    modbusFunctionCode: 3,
-    modbusByteOrder: 1,
-    registerLength: 1
-  }
-  tagSuffix.value = ''
   dialogVisible.value = true
 }
 
 const openEdit = (row: DataPointItem) => {
   editingDataPoint.value = row
-  form.value = {
-    name: row.name,
-    tag: row.tag,
-    description: row.description || '',
-    address: row.address,
-    dataType: row.dataTypeValue ?? (typeof row.dataType === 'number' ? row.dataType : null),
-    unit: row.unit || '',
-    isEnabled: row.isEnabled,
-    modbusSlaveId: row.modbusSlaveId || 1,
-    modbusFunctionCode: row.modbusFunctionCode || 3,
-    modbusByteOrder: row.modbusByteOrder || 1,
-    registerLength: row.registerLength || 1
-  }
-  // 解析 Tag 为设备 Code 和后缀
-  const tagParts = row.tag.split('.')
-  if (tagParts.length >= 2) {
-    tagSuffix.value = tagParts.slice(1).join('.')
-  } else {
-    tagSuffix.value = row.tag
-  }
   dialogVisible.value = true
 }
 
-const submitForm = async () => {
-  await formRef.value?.validate()
+const handleSubmit = async (data: DataPointForm) => {
   submitting.value = true
   try {
     if (editingDataPoint.value) {
-      // 编辑模式
-      await updateDataPoint(deviceId.value, editingDataPoint.value.id, form.value)
+      await updateDataPoint(deviceId.value, editingDataPoint.value.id, data)
       ElMessage.success('数据点更新成功')
     } else {
-      // 创建模式
-      await createDataPoint(deviceId.value, form.value)
+      await createDataPoint(deviceId.value, data)
       ElMessage.success('数据点创建成功')
     }
     dialogVisible.value = false
@@ -911,130 +499,46 @@ const confirmDelete = (row: DataPointItem) => {
       await deleteDataPoint(deviceId.value, row.id)
       ElMessage.success('删除成功')
       fetchDataPoints()
-      // 清除该数据点的实时数据
-      delete realtimeData.value[row.id]
+      delete realtimeData.value[row.tag]
     })
     .catch(() => {})
 }
 
-// 打开虚拟节点创建对话框
+// 虚拟节点相关
 const openVirtualNodeCreate = () => {
   editingVirtualNode.value = null
-  virtualNodeForm.value = {
-    deviceId: deviceId.value,
-    name: '',
-    tag: '',
-    description: '',
-    expression: '',
-    calculationType: 1,
-    dataType: 1,
-    unit: '',
-    isEnabled: true
-  }
-  deviceCodeForVirtual.value = deviceCode.value
-  virtualTagSuffix.value = ''
   virtualNodeDialogVisible.value = true
 }
 
-// 打开虚拟节点编辑对话框
 const openVirtualNodeEdit = (row: DataPointWithVirtual) => {
   if (row.isVirtual) {
-    const vp = row as VirtualDataPoint
-    editingVirtualNode.value = vp
-    virtualNodeForm.value = {
-      deviceId: vp.deviceId,
-      name: vp.name,
-      tag: vp.tag,
-      description: vp.description || '',
-      expression: vp.expression,
-      calculationType: vp.calculationType,
-      dataType: vp.dataType,
-      unit: vp.unit || '',
-      isEnabled: vp.isEnabled
-    }
-    // 解析 Tag 为设备 Code 和后缀
-    deviceCodeForVirtual.value = deviceCode.value
-    const tagParts = vp.tag.split('.')
-    if (tagParts.length >= 2) {
-      virtualTagSuffix.value = tagParts.slice(1).join('.')
-    } else {
-      virtualTagSuffix.value = vp.tag
-    }
+    editingVirtualNode.value = row as VirtualDataPoint
     virtualNodeDialogVisible.value = true
   }
 }
 
-// 根据虚拟节点名称生成 Tag 后缀
-const generateVirtualTag = () => {
-  if (!virtualNodeForm.value.name?.trim()) {
-    ElMessage.warning('请先输入虚拟节点名称')
-    return
-  }
-  if (!deviceCode.value) {
-    ElMessage.warning('无法获取设备编码，请稍后重试')
-    return
-  }
-  const suffix = nameToCode(virtualNodeForm.value.name, 'TAG')
-  virtualTagSuffix.value = suffix
-  virtualNodeForm.value.tag = `${deviceCode.value}.${suffix}`
-  ElMessage.success('Tag 已生成')
-}
-
-const generateVirtualTagIfEmpty = () => {
-  if (!virtualNodeForm.value.tag && virtualNodeForm.value.name && deviceCode.value) {
-    const suffix = nameToCode(virtualNodeForm.value.name, 'TAG')
-    virtualTagSuffix.value = suffix
-    virtualNodeForm.value.tag = `${deviceCode.value}.${suffix}`
-  }
-}
-
-// 监听 virtualTagSuffix 变化，同步更新 virtualNodeForm.tag
-watch(virtualTagSuffix, (newSuffix) => {
-  if (deviceCodeForVirtual.value && newSuffix) {
-    virtualNodeForm.value.tag = `${deviceCodeForVirtual.value}.${newSuffix}`
-  }
-})
-
-// 提交虚拟节点表单
-const submitVirtualNodeForm = async () => {
-  if (!virtualNodeFormRef.value) return
-
-  await virtualNodeFormRef.value.validate(async (valid) => {
-    if (!valid) return
-
-    virtualNodeSubmitting.value = true
-    try {
-      if (editingVirtualNode.value) {
-        // 编辑模式
-        await updateVirtualDataPoint(editingVirtualNode.value.id, {
-          id: editingVirtualNode.value.id,
-          deviceId: virtualNodeForm.value.deviceId,
-          name: virtualNodeForm.value.name,
-          tag: virtualNodeForm.value.tag,
-          description: virtualNodeForm.value.description,
-          expression: virtualNodeForm.value.expression,
-          calculationType: virtualNodeForm.value.calculationType,
-          dataType: virtualNodeForm.value.dataType,
-          unit: virtualNodeForm.value.unit,
-          isEnabled: virtualNodeForm.value.isEnabled
-        })
-        ElMessage.success('虚拟节点更新成功')
-      } else {
-        // 创建模式
-        await createVirtualDataPoint(virtualNodeForm.value)
-        ElMessage.success('虚拟节点创建成功')
-      }
-      virtualNodeDialogVisible.value = false
-      loadVirtualDataPoints()
-    } catch (error: any) {
-      ElMessage.error(`操作失败：${error.message || '未知错误'}`)
-    } finally {
-      virtualNodeSubmitting.value = false
+const handleVirtualSubmit = async (data: VirtualNodeForm) => {
+  virtualNodeSubmitting.value = true
+  try {
+    if (editingVirtualNode.value) {
+      await updateVirtualDataPoint(editingVirtualNode.value.id, {
+        id: editingVirtualNode.value.id,
+        ...data
+      })
+      ElMessage.success('虚拟节点更新成功')
+    } else {
+      await createVirtualDataPoint(data)
+      ElMessage.success('虚拟节点创建成功')
     }
-  })
+    virtualNodeDialogVisible.value = false
+    loadVirtualDataPoints()
+  } catch (error: any) {
+    ElMessage.error(`操作失败：${error.message || '未知错误'}`)
+  } finally {
+    virtualNodeSubmitting.value = false
+  }
 }
 
-// 删除虚拟节点
 const confirmDeleteVirtualNode = (row: DataPointWithVirtual) => {
   if (!row.isVirtual) return
 
@@ -1051,7 +555,6 @@ const confirmDeleteVirtualNode = (row: DataPointWithVirtual) => {
     .catch(() => {})
 }
 
-// 切换虚拟节点启用状态
 const toggleVirtualNode = async (row: DataPointWithVirtual) => {
   if (!row.isVirtual) return
 
@@ -1071,14 +574,20 @@ const toggleVirtualNode = async (row: DataPointWithVirtual) => {
     })
     ElMessage.success(vp.isEnabled ? '虚拟节点已启用' : '虚拟节点已禁用')
   } catch (error: any) {
-    // 恢复状态
     vp.isEnabled = !vp.isEnabled
     ElMessage.error(`操作失败：${error.message || '未知错误'}`)
   }
 }
 
+const handleDialogClose = () => {
+  editingDataPoint.value = null
+}
+
+const handleVirtualDialogClose = () => {
+  editingVirtualNode.value = null
+}
+
 onMounted(() => {
-  // 使用 async/await 确保加载顺序
   const init = async () => {
     await fetchDevice()
     await fetchDataPoints()
@@ -1095,31 +604,98 @@ onUnmounted(() => {
 })
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .page-header {
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: 20px;
 }
-.header-left { display: flex; align-items: center; gap: 14px; }
-.back-btn { color: var(--text-muted) !important; padding: 0 !important; }
-.title-block { display: flex; align-items: baseline; gap: 12px; }
-.page-title  { font-size: 22px; font-weight: 800; color: var(--text-primary); }
-.device-tag  { font-size: 12px; color: var(--cyan); background: var(--cyan-dim); padding: 2px 10px; border-radius: 10px; border: 1px solid rgba(56,220,196,0.25); }
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.back-btn {
+  color: var(--text-muted) !important;
+  padding: 0 !important;
+}
+
+.title-block {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.page-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.device-tag {
+  font-size: 12px;
+  color: var(--cyan);
+  background: var(--cyan-dim);
+  padding: 2px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(56, 220, 196, 0.25);
+}
 
 .stats-bar {
-  display: flex; gap: 32px; margin-bottom: 16px;
-  padding: 14px 20px; background: var(--bg-card);
-  border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
+  display: flex;
+  gap: 32px;
+  margin-bottom: 16px;
+  padding: 14px 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
 }
-.stat-item { display: flex; align-items: baseline; gap: 8px; }
-.s-num   { font-size: 24px; font-weight: 700; color: var(--text-primary); }
-.s-label { font-size: 12px; color: var(--text-muted); }
 
-.table-wrap { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); overflow: hidden; }
-.tag-text  { font-size: 13px; color: var(--cyan); }
-.addr-text { font-size: 13px; color: var(--text-secondary); }
-.time-text { font-size: 11px; color: var(--text-muted); }
-:deep(.mono-input .el-input__inner) { font-family: var(--font-mono); }
+.stat-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.s-num {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.s-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.table-wrap {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.tag-text {
+  font-size: 13px;
+  color: var(--cyan);
+}
+
+.addr-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.time-text {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+:deep(.mono-input .el-input__inner) {
+  font-family: var(--font-mono);
+}
 
 /* 工具栏样式 */
 .toolbar {
@@ -1133,38 +709,18 @@ onUnmounted(() => {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
 }
+
 .toolbar-left {
   display: flex;
   align-items: center;
   gap: 12px;
   flex: 1;
 }
+
 .toolbar-right {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-/* Modbus 配置展示 */
-.modbus-config {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  font-size: 11px;
-  font-family: var(--font-mono);
-  color: var(--text-secondary);
-}
-.config-item {
-  background: var(--bg-base);
-  padding: 2px 6px;
-  border-radius: 4px;
-  border: 1px solid var(--border-muted);
-}
-.config-item:hover {
-  background: var(--cyan-dim);
-  border-color: var(--cyan);
-  color: var(--cyan);
 }
 
 /* 实时数据值样式 */
@@ -1173,9 +729,19 @@ onUnmounted(() => {
   font-weight: 600;
   color: var(--text-primary);
 }
-.realtime-value.good { color: var(--text-success); }
-.realtime-value.bad { color: var(--text-danger); }
-.realtime-value.uncertain { color: var(--text-warn); }
+
+.realtime-value.good {
+  color: var(--text-success);
+}
+
+.realtime-value.bad {
+  color: var(--text-danger);
+}
+
+.realtime-value.uncertain {
+  color: var(--text-warn);
+}
+
 .value-unit {
   font-size: 11px;
   color: var(--text-muted);
@@ -1184,75 +750,27 @@ onUnmounted(() => {
 }
 
 /* 数据质量徽章 */
-.badge.good { background: rgba(82,196,26,0.15); color: var(--text-success); border-color: rgba(82,196,26,0.3); }
-.badge.bad { background: rgba(240,89,89,0.15); color: var(--text-danger); border-color: rgba(240,89,89,0.3); }
-.badge.uncertain { background: rgba(250,173,40,0.15); color: var(--text-warn); border-color: rgba(250,173,40,0.3); }
-
-/* 表单分组 */
-.form-section {
-  margin-bottom: 16px;
-  padding: 14px;
-  background: var(--bg-base);
-  border-radius: var(--radius);
-  border: 1px solid var(--border-subtle);
-}
-.form-section:last-child {
-  margin-bottom: 0;
-}
-.section-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 12px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--border-subtle);
-}
-.section-title .el-icon {
-  color: var(--cyan);
-  font-size: 14px;
+.badge.good {
+  background: rgba(82, 196, 26, 0.15);
+  color: var(--text-success);
+  border-color: rgba(82, 196, 26, 0.3);
 }
 
-/* Tag 与自动生成按钮同行 */
-.tag-with-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.tag-with-btn .tag-input { flex: 1; min-width: 0; }
-.tag-with-btn .btn-auto-generate {
-  flex-shrink: 0;
-  background: var(--bg-base) !important;
-  border: 1px solid var(--border-subtle) !important;
-  color: var(--text-secondary) !important;
-}
-.tag-with-btn .btn-auto-generate:hover {
-  background: var(--bg-hover) !important;
-  border-color: var(--border-muted) !important;
-  color: var(--cyan) !important;
+.badge.bad {
+  background: rgba(240, 89, 89, 0.15);
+  color: var(--text-danger);
+  border-color: rgba(240, 89, 89, 0.3);
 }
 
-/* 虚拟节点 Tag 输入样式 */
-.tag-with-btn .tag-separator {
-  color: var(--text-muted);
-  font-size: 14px;
-  padding: 0 4px;
+.badge.uncertain {
+  background: rgba(250, 173, 40, 0.15);
+  color: var(--text-warn);
+  border-color: rgba(250, 173, 40, 0.3);
 }
 
-/* 弹窗内表单覆盖（全局已提供基础样式） */
-:deep(.mono-input .el-input__inner) { font-family: var(--font-mono); }
-
-/* 字节序选项样式 */
-.byte-order-option {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.byte-order-desc {
-  font-size: 11px;
-  color: var(--text-muted);
+.badge.info {
+  background: rgba(66, 153, 225, 0.15);
+  color: var(--text-secondary);
+  border-color: rgba(66, 153, 225, 0.3);
 }
 </style>
