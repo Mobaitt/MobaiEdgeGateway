@@ -40,17 +40,18 @@ export interface DataPointItem {
 export interface VirtualDataPoint {
   id: number
   deviceId: number
+  deviceName?: string | null
   name: string
   tag: string
   description?: string
   expression: string
   calculationType: number
   dataType: number
-  unit?: string
+  unit?: string | null
   isEnabled: boolean
-  dependencyTags: string
-  lastValueJson?: string
-  lastCalculationTime?: string
+  dependencyTags: string[]
+  lastValue?: unknown | null
+  lastCalculationTime?: string | null
   createdAt?: string
 }
 
@@ -109,6 +110,7 @@ export interface DeviceNode {
   name: string
   code: string
   dataPoints: DataPointItem[]
+  virtualPoints?: VirtualDataPoint[]
 }
 
 /** 实时数据点 */
