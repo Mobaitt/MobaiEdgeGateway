@@ -153,7 +153,7 @@ public class VirtualNodeEngine : IVirtualNodeEngine
         await LoadCacheAsync();
     }
 
-    public async Task<VirtualNodeCalculationResult> CalculateAsync(VirtualDataPoint virtualDataPoint, CancellationToken cancellationToken = default)
+    private async Task<VirtualNodeCalculationResult> CalculateAsync(VirtualDataPoint virtualDataPoint, CancellationToken cancellationToken = default)
     {
         try
         {

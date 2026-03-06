@@ -83,15 +83,7 @@ public interface IVirtualNodeEngine
     /// 刷新缓存
     /// </summary>
     Task RefreshCacheAsync();
-
-    /// <summary>
-    /// 计算单个虚拟数据点
-    /// </summary>
-    /// <param name="virtualDataPoint">虚拟数据点</param>
-    /// <param name="cancellationToken">取消令牌</param>
-    /// <returns>计算结果</returns>
-    Task<VirtualNodeCalculationResult> CalculateAsync(VirtualDataPoint virtualDataPoint, CancellationToken cancellationToken = default);
-
+    
     /// <summary>
     /// 计算指定设备下的所有启用的虚拟数据点
     /// </summary>

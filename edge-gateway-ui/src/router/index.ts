@@ -41,12 +41,6 @@ const routes: RouteRecordRaw[] = [
         name: 'Rules',
         component: () => import('@/views/RulesView.vue'),
         meta: { title: '规则管理', icon: 'Setting' }
-      },
-      {
-        path: 'virtual-nodes',
-        name: 'VirtualNodes',
-        component: () => import('@/views/VirtualNodesView.vue'),
-        meta: { title: '虚拟节点', icon: 'Cpu' }
       }
     ]
   }

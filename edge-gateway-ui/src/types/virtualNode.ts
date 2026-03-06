@@ -7,19 +7,19 @@
 export interface VirtualDataPoint {
   id: number
   deviceId: number
-  deviceName: string | null
+  deviceName?: string | null
   name: string
   tag: string
-  description: string | null
+  description?: string
   expression: string
   calculationType: CalculationType
   dataType: DataValueType
-  unit: string | null
+  unit?: string | null
   isEnabled: boolean
   dependencyTags: string[]
-  lastCalculationTime: string | null
-  lastValue: any | null
-  createdAt: string
+  lastCalculationTime?: string | null
+  lastValue?: any | null
+  createdAt?: string
 }
 
 /**
@@ -51,18 +51,4 @@ export interface UpdateVirtualDataPointRequest {
   dataType: DataValueType
   unit?: string
   isEnabled: boolean
-}
-
-/**
- * 虚拟节点计算结果
- */
-export interface VirtualNodeCalculationResult {
-  success: boolean
-  value: any
-  quality: number
-  errorMessage: string | null
-  timestamp: string
-  virtualDataPointId: number
-  virtualDataPointTag: string | null
-  dependencyValues: Record<string, any>
 }

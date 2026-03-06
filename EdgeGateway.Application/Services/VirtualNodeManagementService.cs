@@ -158,52 +158,5 @@ public class VirtualNodeManagementService
         _logger.LogInformation("虚拟数据点 [{PointName}] 删除成功，ID={PointId}", dataPoint.Name, dataPoint.Id);
     }
 
-    /// <summary>
-    /// 获取虚拟数据点当前值（从快照）
-    /// </summary>
-    public Task<VirtualNodeCalculationResult> CalculateVirtualDataPointAsync(int id)
-    {
-        var snapshotData = _dataCollectionService.GetVirtualDataPointSnapshot(id);
-        var result = snapshotData != null
-            ? new VirtualNodeCalculationResult
-            {
-                Success = snapshotData.Value != null,
-                Value = snapshotData.Value,
-                Quality = snapshotData.Quality,
-                Timestamp = snapshotData.Timestamp,
-                VirtualDataPointId = id,
-                VirtualDataPointTag = snapshotData.Tag
-            }
-            : new VirtualNodeCalculationResult
-            {
-                Success = false,
-                ErrorMessage = "数据不存在或已过期",
-                Quality = DataQuality.Uncertain,
-                VirtualDataPointId = id
-            };
-
-        return Task.FromResult(result);
-    }
-
-    /// <summary>
-    /// 获取设备下所有虚拟数据点当前值（从快照）
-    /// </summary>
-    public Task<List<VirtualNodeCalculationResult>> CalculateDeviceVirtualDataPointsAsync(int deviceId) =>
-        Task.FromResult(_dataCollectionService.GetDeviceVirtualDataPointSnapshots(deviceId));
-
-    /// <summary>
-    /// 获取所有虚拟数据点当前值（从快照）
-    /// </summary>
-    public Task<List<VirtualNodeCalculationResult>> CalculateAllVirtualDataPointsAsync() =>
-        Task.FromResult(_dataCollectionService.GetAllVirtualDataPointSnapshots());
-
-    /// <summary>
-    /// 解析表达式中的依赖 Tags
-    /// </summary>
-    public List<string> ParseExpressionDependencies(string expression)
-    {
-        return _virtualNodeEngine.ParseDependencies(expression);
-    }
-
     #endregion
 }

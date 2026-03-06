@@ -1,6 +1,5 @@
 ﻿using EdgeGateway.Domain.Entities;
 using EdgeGateway.Domain.Enums;
-using EdgeGateway.Domain.Interfaces;
 
 namespace EdgeGateway.WebApi.DTOs.Response;
 
@@ -88,34 +87,4 @@ public class VirtualDataPointResponse
             CreatedAt = point.CreatedAt
         };
     }
-}
-
-/// <summary>
-/// 虚拟节点计算结果响应
-/// </summary>
-public class VirtualNodeCalculationResultResponse
-{
-    /// <summary>是否成功</summary>
-    public bool Success { get; set; }
-
-    /// <summary>计算结果值</summary>
-    public object? Value { get; set; }
-
-    /// <summary>数据质量</summary>
-    public DataQuality Quality { get; set; }
-
-    /// <summary>错误消息</summary>
-    public string? ErrorMessage { get; set; }
-
-    /// <summary>计算时间戳</summary>
-    public DateTime Timestamp { get; set; }
-
-    /// <summary>虚拟数据点 ID</summary>
-    public int VirtualDataPointId { get; set; }
-
-    /// <summary>虚拟数据点 Tag</summary>
-    public string? VirtualDataPointTag { get; set; }
-
-    /// <summary>依赖数据值</summary>
-    public Dictionary<string, object?> DependencyValues { get; set; } = new();
 }
