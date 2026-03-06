@@ -170,10 +170,12 @@
                 <el-input v-model="form.name" placeholder="如：温度" @blur="generateTagIfEmpty" />
               </el-form-item>
             </el-col>
-            <el-col :span="12">
+            <el-col :span="24">
               <el-form-item label="Tag" prop="tag">
                 <div class="tag-with-btn">
-                  <el-input v-model="form.tag" placeholder="DEV001.Temperature" class="mono-input tag-input" />
+                  <el-input v-model="deviceCode" disabled class="mono-input tag-input" style="width:120px" />
+                  <span class="tag-separator">.</span>
+                  <el-input v-model="tagSuffix" placeholder="Temperature" class="mono-input tag-input" />
                   <el-button size="small" text class="btn-auto-generate" @click="generateTag">
                     <el-icon><MagicStick /></el-icon>
                     <span>自动生成</span>
@@ -291,12 +293,20 @@
           <el-row :gutter="20">
             <el-col :span="12">
               <el-form-item label="名称" prop="name">
-                <el-input v-model="virtualNodeForm.name" placeholder="如：平均温度" />
+                <el-input v-model="virtualNodeForm.name" placeholder="如：平均温度" @blur="generateVirtualTagIfEmpty" />
               </el-form-item>
             </el-col>
-            <el-col :span="12">
+            <el-col :span="24">
               <el-form-item label="Tag" prop="tag">
-                <el-input v-model="virtualNodeForm.tag" placeholder="DEV001.TempAvg" class="mono-input" />
+                <div class="tag-with-btn">
+                  <el-input v-model="deviceCodeForVirtual" disabled class="mono-input tag-input" style="width:120px" />
+                  <span class="tag-separator">.</span>
+                  <el-input v-model="virtualTagSuffix" placeholder="TempAvg" class="mono-input tag-input" />
+                  <el-button size="small" text class="btn-auto-generate" @click="generateVirtualTag">
+                    <el-icon><MagicStick /></el-icon>
+                    <span>自动生成</span>
+                  </el-button>
+                </div>
               </el-form-item>
             </el-col>
           </el-row>
@@ -522,6 +532,10 @@ const dialogVisible = ref(false)
 const submitting = ref(false)
 const editingDataPoint = ref<DataPointItem | null>(null)
 const formRef = ref<any>()
+
+// 普通数据点 Tag 生成相关状态
+const tagSuffix = ref('')
+
 const form = ref<DataPointForm>({
   name: '',
   tag: '',
@@ -573,6 +587,10 @@ const virtualNodeFormRef = ref<any>(null)
 const virtualNodeDialogVisible = ref(false)
 const editingVirtualNode = ref<VirtualDataPoint | null>(null)
 const virtualNodeSubmitting = ref(false)
+
+// 虚拟节点 Tag 生成相关状态
+const deviceCodeForVirtual = ref('')
+const virtualTagSuffix = ref('')
 
 // 虚拟节点表单数据
 const virtualNodeForm = ref<VirtualNodeForm>({
@@ -832,6 +850,7 @@ const openCreate = () => {
     modbusByteOrder: 1,
     registerLength: 1
   }
+  tagSuffix.value = ''
   dialogVisible.value = true
 }
 
@@ -849,6 +868,13 @@ const openEdit = (row: DataPointItem) => {
     modbusFunctionCode: row.modbusFunctionCode || 3,
     modbusByteOrder: row.modbusByteOrder || 1,
     registerLength: row.registerLength || 1
+  }
+  // 解析 Tag 为设备 Code 和后缀
+  const tagParts = row.tag.split('.')
+  if (tagParts.length >= 2) {
+    tagSuffix.value = tagParts.slice(1).join('.')
+  } else {
+    tagSuffix.value = row.tag
   }
   dialogVisible.value = true
 }
@@ -905,6 +931,8 @@ const openVirtualNodeCreate = () => {
     unit: '',
     isEnabled: true
   }
+  deviceCodeForVirtual.value = deviceCode.value
+  virtualTagSuffix.value = ''
   virtualNodeDialogVisible.value = true
 }
 
@@ -924,9 +952,48 @@ const openVirtualNodeEdit = (row: DataPointWithVirtual) => {
       unit: vp.unit || '',
       isEnabled: vp.isEnabled
     }
+    // 解析 Tag 为设备 Code 和后缀
+    deviceCodeForVirtual.value = deviceCode.value
+    const tagParts = vp.tag.split('.')
+    if (tagParts.length >= 2) {
+      virtualTagSuffix.value = tagParts.slice(1).join('.')
+    } else {
+      virtualTagSuffix.value = vp.tag
+    }
     virtualNodeDialogVisible.value = true
   }
 }
+
+// 根据虚拟节点名称生成 Tag 后缀
+const generateVirtualTag = () => {
+  if (!virtualNodeForm.value.name?.trim()) {
+    ElMessage.warning('请先输入虚拟节点名称')
+    return
+  }
+  if (!deviceCode.value) {
+    ElMessage.warning('无法获取设备编码，请稍后重试')
+    return
+  }
+  const suffix = nameToCode(virtualNodeForm.value.name, 'TAG')
+  virtualTagSuffix.value = suffix
+  virtualNodeForm.value.tag = `${deviceCode.value}.${suffix}`
+  ElMessage.success('Tag 已生成')
+}
+
+const generateVirtualTagIfEmpty = () => {
+  if (!virtualNodeForm.value.tag && virtualNodeForm.value.name && deviceCode.value) {
+    const suffix = nameToCode(virtualNodeForm.value.name, 'TAG')
+    virtualTagSuffix.value = suffix
+    virtualNodeForm.value.tag = `${deviceCode.value}.${suffix}`
+  }
+}
+
+// 监听 virtualTagSuffix 变化，同步更新 virtualNodeForm.tag
+watch(virtualTagSuffix, (newSuffix) => {
+  if (deviceCodeForVirtual.value && newSuffix) {
+    virtualNodeForm.value.tag = `${deviceCodeForVirtual.value}.${newSuffix}`
+  }
+})
 
 // 提交虚拟节点表单
 const submitVirtualNodeForm = async () => {
@@ -1165,6 +1232,13 @@ onUnmounted(() => {
   background: var(--bg-hover) !important;
   border-color: var(--border-muted) !important;
   color: var(--cyan) !important;
+}
+
+/* 虚拟节点 Tag 输入样式 */
+.tag-with-btn .tag-separator {
+  color: var(--text-muted);
+  font-size: 14px;
+  padding: 0 4px;
 }
 
 /* 弹窗内表单覆盖（全局已提供基础样式） */
