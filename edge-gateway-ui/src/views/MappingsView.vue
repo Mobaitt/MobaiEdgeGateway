@@ -69,74 +69,80 @@
     </div>
 
     <!-- 绑定数据点弹窗 -->
-    <el-dialog v-model="bindDialogVisible" title="绑定数据点到通道" width="900px" destroy-on-close class="bind-dialog app-dialog" align-center>
+    <el-dialog v-model="bindDialogVisible" title="绑定数据点到通道" width="900px" destroy-on-close class="bind-dialog app-dialog" align-center top="5vh">
       <div class="bind-layout">
         <!-- 左：设备树选择数据点 -->
         <div class="device-selector">
-          <div class="selector-title">
-            <el-icon><Monitor /></el-icon> 选择数据点
+          <div class="selector-header">
+            <div class="selector-title">
+              <el-icon><Monitor /></el-icon> 选择数据点
+            </div>
+            <el-input v-model="dpSearch" placeholder="搜索数据点或设备..." prefix-icon="Search" size="small" clearable class="search-input" />
           </div>
-          <el-input v-model="dpSearch" placeholder="搜索数据点或设备..." prefix-icon="Search" size="small" clearable />
 
-          <div class="device-tree">
-            <div v-for="dev in filteredDeviceTree" :key="dev.id" class="dev-group">
-              <div class="dev-group-title">
-                <el-checkbox
-                  :model-value="isDeviceAllSelected(dev)"
-                  :indeterminate="isDeviceIndeterminate(dev)"
-                  @change="toggleDevice(dev)"
-                />
-                <el-icon size="13"><Monitor /></el-icon>
-                <span>{{ dev.name }}</span>
-                <span class="mono" style="color:var(--text-muted); font-size:11px">{{ dev.code }}</span>
-              </div>
-              <div class="dp-list">
-                <div
-                  v-for="dp in dev.dataPoints" :key="dp.id"
-                  class="dp-item"
-                  :class="{ already: isMapped(dp.id) }"
-                >
+          <div class="scroll-content">
+            <div class="device-tree">
+              <div v-for="dev in filteredDeviceTree" :key="dev.id" class="dev-group">
+                <div class="dev-group-title">
                   <el-checkbox
-                    :model-value="selectedIds.has(dp.id)"
-                    :disabled="isMapped(dp.id)"
-                    @change="(v) => toggleDp(dp.id, v)"
+                    :model-value="isDeviceAllSelected(dev)"
+                    :indeterminate="isDeviceIndeterminate(dev)"
+                    @change="toggleDevice(dev)"
                   />
-                  <div class="dp-info">
-                    <span class="mono" style="color:var(--cyan); font-size:12px">{{ dp.tag }}</span>
-                    <span v-if="dp.unit" style="color:var(--text-muted); font-size:11px">· {{ dp.unit }}</span>
-                    <el-tag v-if="isMapped(dp.id)" size="small" type="info" style="margin-left:6px; font-size:10px">已绑定</el-tag>
+                  <el-icon size="13"><Monitor /></el-icon>
+                  <span>{{ dev.name }}</span>
+                  <span class="mono" style="color:var(--text-muted); font-size:11px">{{ dev.code }}</span>
+                </div>
+                <div class="dp-list">
+                  <div
+                    v-for="dp in dev.dataPoints" :key="dp.id"
+                    class="dp-item"
+                    :class="{ already: isMapped(dp.id) }"
+                  >
+                    <el-checkbox
+                      :model-value="selectedIds.has(dp.id)"
+                      :disabled="isMapped(dp.id)"
+                      @change="(v) => toggleDp(dp.id, v)"
+                    />
+                    <div class="dp-info">
+                      <span class="mono" style="color:var(--cyan); font-size:12px">{{ dp.tag }}</span>
+                      <span v-if="dp.unit" style="color:var(--text-muted); font-size:11px">· {{ dp.unit }}</span>
+                      <el-tag v-if="isMapped(dp.id)" size="small" type="info" style="margin-left:6px; font-size:10px">已绑定</el-tag>
+                    </div>
                   </div>
                 </div>
               </div>
+              <div v-if="filteredDeviceTree.length === 0" class="empty-hint">无可用数据点</div>
             </div>
-            <div v-if="filteredDeviceTree.length === 0" class="empty-hint">无可用数据点</div>
-          </div>
 
-          <!-- 虚拟数据点区域 -->
-          <div class="virtual-section">
-            <div class="selector-title" style="margin-top:12px;">
-              <el-icon><Cpu /></el-icon> 选择虚拟数据点
-            </div>
-            <el-input v-model="virtualSearch" placeholder="搜索虚拟数据点..." prefix-icon="Search" size="small" clearable />
-            <div class="virtual-list">
-              <div
-                v-for="vp in filteredVirtualDataPoints"
-                :key="vp.id"
-                class="dp-item"
-                :class="{ already: isVirtualMapped(vp.id) }"
-              >
-                <el-checkbox
-                  :model-value="virtualSelectedIds.has(vp.id)"
-                  :disabled="isVirtualMapped(vp.id)"
-                  @change="(v) => toggleVirtualDp(vp.id, v)"
-                />
-                <div class="dp-info">
-                  <span class="mono" style="color:var(--purple); font-size:12px">{{ getVirtualPointFullTag(vp) }}</span>
-                  <span v-if="vp.unit" style="color:var(--text-muted); font-size:11px">· {{ vp.unit }}</span>
-                  <el-tag v-if="isVirtualMapped(vp.id)" size="small" type="info" style="margin-left:6px; font-size:10px">已绑定</el-tag>
+            <!-- 虚拟数据点区域 -->
+            <div class="virtual-section">
+              <div class="virtual-header">
+                <div class="selector-title virtual-title">
+                  <el-icon><Cpu /></el-icon> 选择虚拟数据点
                 </div>
+                <el-input v-model="virtualSearch" placeholder="搜索虚拟数据点..." prefix-icon="Search" size="small" clearable class="search-input" />
               </div>
-              <div v-if="virtualDataPoints.length === 0" class="empty-hint">暂无虚拟数据点</div>
+              <div class="virtual-list">
+                <div
+                  v-for="vp in filteredVirtualDataPoints"
+                  :key="vp.id"
+                  class="dp-item"
+                  :class="{ already: isVirtualMapped(vp.id) }"
+                >
+                  <el-checkbox
+                    :model-value="virtualSelectedIds.has(vp.id)"
+                    :disabled="isVirtualMapped(vp.id)"
+                    @change="(v) => toggleVirtualDp(vp.id, v)"
+                  />
+                  <div class="dp-info">
+                    <span class="mono" style="color:var(--purple); font-size:12px">{{ getVirtualPointFullTag(vp) }}</span>
+                    <span v-if="vp.unit" style="color:var(--text-muted); font-size:11px">· {{ vp.unit }}</span>
+                    <el-tag v-if="isVirtualMapped(vp.id)" size="small" type="info" style="margin-left:6px; font-size:10px">已绑定</el-tag>
+                  </div>
+                </div>
+                <div v-if="virtualDataPoints.length === 0" class="empty-hint">暂无虚拟数据点</div>
+              </div>
             </div>
           </div>
         </div>
@@ -433,55 +439,101 @@ onMounted(fetchMappings)
 
 
 /* 绑定弹窗布局 */
-:deep(.bind-dialog .el-dialog__body) { max-height: 60vh; }
-.bind-layout { 
-  display:grid; 
-  grid-template-columns:1fr 220px; 
-  gap:16px; 
-  max-height:60vh;
+:deep(.bind-dialog .el-dialog__body) { 
+  max-height: 85vh; 
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.bind-layout {
+  display:grid;
+  grid-template-columns:1fr 220px;
+  gap:16px;
+  height: 75vh;
+  min-height: 500px;
   overflow: hidden;
+  padding: 16px;
 }
 .device-selector, .selected-preview {
-  display:flex; flex-direction:column; gap:10px;
+  display:flex; flex-direction:column; gap:8px;
   border:1px solid var(--border-subtle); border-radius:var(--radius); padding:12px;
   overflow:hidden;
   background: var(--bg-base);
+  height: 100%;
 }
-.selector-title { 
+.selector-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.selector-title {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px; 
-  font-weight: 700; 
+  font-size: 12px;
+  font-weight: 700;
   color: var(--text-primary);
-  letter-spacing:0.06em; 
+  letter-spacing:0.06em;
   text-transform:uppercase;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border-subtle);
+  white-space: nowrap;
 }
 .selector-title .el-icon {
   color: var(--cyan);
 }
-.device-tree, .selected-list {
-  flex:1;
-  overflow-y:auto;
+.search-input {
+  flex-shrink: 0;
+  width: 200px;
+}
+:deep(.search-input .el-input__wrapper) {
+  height: 28px;
+}
+.scroll-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+.device-tree {
   display:flex;
   flex-direction:column;
   gap:6px;
 }
 
 .virtual-section {
-  margin-top: 12px;
   border-top: 1px solid var(--border-subtle);
-  padding-top: 12px;
+  padding-top: 8px;
+  margin-top: 8px;
+}
+.virtual-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.virtual-title {
+  white-space: nowrap;
+}
+.virtual-title .el-icon {
+  color: var(--purple);
 }
 .virtual-list {
-  flex:1;
-  overflow-y:auto;
   display:flex;
   flex-direction:column;
   gap:6px;
-  max-height: 200px;
+}
+.selected-list {
+  flex: 1;
+  overflow-y: auto;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  min-height: 0;
 }
 
 .dev-group { }
@@ -500,9 +552,6 @@ onMounted(fetchMappings)
 .dp-info { display:flex; align-items:center; gap:6px; flex:1; }
 
 /* 虚拟数据点特殊样式 */
-.virtual-section .selector-title .el-icon {
-  color: var(--purple);
-}
 .virtual-section .dp-item .mono {
   color: var(--purple) !important;
 }
