@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="mappings-view page-enter">
     <!-- 页面头部 -->
     <div class="page-header">
@@ -94,6 +94,7 @@
                   <span class="mono" style="color:var(--text-muted); font-size:11px">{{ dev.code }}</span>
                 </div>
                 <div class="dp-list">
+                  <!-- 普通数据点 -->
                   <div
                     v-for="dp in dev.dataPoints" :key="dp.id"
                     class="dp-item"
@@ -110,39 +111,28 @@
                       <el-tag v-if="isMapped(dp.id)" size="small" type="info" style="margin-left:6px; font-size:10px">已绑定</el-tag>
                     </div>
                   </div>
+                  <!-- 虚拟数据点（追加到设备下） -->
+                  <div
+                    v-for="vp in dev.virtualPoints || []" :key="'v-' + vp.id"
+                    class="dp-item"
+                    :class="{ already: isVirtualMapped(vp.id) }"
+                  >
+                    <el-checkbox
+                      :model-value="virtualSelectedIds.has(vp.id)"
+                      :disabled="isVirtualMapped(vp.id)"
+                      @change="(v) => toggleVirtualDp(vp.id, v)"
+                    />
+                    <div class="dp-info">
+                      <div class="vp-info">
+                        <span class="mono" style="color:var(--purple); font-size:12px">{{ vp.tag }}</span>
+                        <span class="vp-name" v-if="vp.name && vp.name.trim()">· {{ vp.name }}</span>
+                      </div>
+                      <el-tag v-if="isVirtualMapped(vp.id)" size="small" type="info" style="margin-left:6px; font-size:10px">已绑定</el-tag>
+                    </div>
+                  </div>
                 </div>
               </div>
               <div v-if="filteredDeviceTree.length === 0" class="empty-hint">无可用数据点</div>
-            </div>
-
-            <!-- 虚拟数据点区域 -->
-            <div class="virtual-section">
-              <div class="virtual-header">
-                <div class="selector-title virtual-title">
-                  <el-icon><Cpu /></el-icon> 选择虚拟数据点
-                </div>
-                <el-input v-model="virtualSearch" placeholder="搜索虚拟数据点..." prefix-icon="Search" size="small" clearable class="search-input" />
-              </div>
-              <div class="virtual-list">
-                <div
-                  v-for="vp in filteredVirtualDataPoints"
-                  :key="vp.id"
-                  class="dp-item"
-                  :class="{ already: isVirtualMapped(vp.id) }"
-                >
-                  <el-checkbox
-                    :model-value="virtualSelectedIds.has(vp.id)"
-                    :disabled="isVirtualMapped(vp.id)"
-                    @change="(v) => toggleVirtualDp(vp.id, v)"
-                  />
-                  <div class="dp-info">
-                    <span class="mono" style="color:var(--purple); font-size:12px">{{ getVirtualPointFullTag(vp) }}</span>
-                    <span v-if="vp.unit" style="color:var(--text-muted); font-size:11px">· {{ vp.unit }}</span>
-                    <el-tag v-if="isVirtualMapped(vp.id)" size="small" type="info" style="margin-left:6px; font-size:10px">已绑定</el-tag>
-                  </div>
-                </div>
-                <div v-if="virtualDataPoints.length === 0" class="empty-hint">暂无虚拟数据点</div>
-              </div>
             </div>
           </div>
         </div>
@@ -162,7 +152,7 @@
             </div>
             <!-- 虚拟数据点 -->
             <div v-for="id in [...virtualSelectedIds]" :key="'v-' + id" class="selected-item">
-              <span class="mono" style="font-size:12px; color:var(--purple)">{{ getVirtualPointFullTagById(id) }}</span>
+              <span class="mono" style="font-size:12px; color:var(--purple)">{{ getVirtualTagById(id) }}</span>
               <el-button size="small" text circle @click="virtualSelectedIds.delete(id)">
                 <el-icon size="12"><Close /></el-icon>
               </el-button>
@@ -186,7 +176,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox, ElMessage } from 'element-plus'
-import { Plus, Delete, ArrowLeft, Connection, InfoFilled, Monitor, Close, Cpu } from '@element-plus/icons-vue'
+import { Plus, Delete, ArrowLeft, Connection, InfoFilled, Monitor, Close } from '@element-plus/icons-vue'
 import EmptyState from '@/components/EmptyState.vue'
 import { getMappings, bindDataPoints, bindVirtualDataPoints, deleteMapping } from '@/api/channel'
 import { getDevices, getDataPoints } from '@/api/device'
@@ -206,7 +196,6 @@ const selectedMappings = ref(new Set<number>())
 const bindDialogVisible = ref(false)
 const binding = ref(false)
 const dpSearch = ref('')
-const virtualSearch = ref('')
 const deviceTree = ref<DeviceNode[]>([])
 const virtualDataPoints = ref<VirtualDataPoint[]>([])
 const selectedIds = ref(new Set<number>())
@@ -218,47 +207,80 @@ const virtualMappedIds = computed(() => new Set(mappings.value.filter(m => m.isV
 const isMapped = (id: number) => mappedIds.value.has(id)
 const isVirtualMapped = (id: number) => virtualMappedIds.value.has(id)
 
-const filteredDeviceTree = computed(() => {
-  if (!dpSearch.value) return deviceTree.value
+// 获取指定设备的所有虚拟数据点（已绑定的不显示在可选列表中）
+const getVirtualPointsByDevice = (deviceId: number) => {
+  const device = deviceTree.value.find(d => d.id === deviceId)
+  if (!device) return []
+  return (device.virtualPoints || []).filter(vp => !isVirtualMapped(vp.id))
+}
+
+// 获取指定设备下匹配的虚拟数据点（用于搜索过滤）
+const getFilteredVirtualPointsByDevice = (deviceId: number) => {
+  const virtualPoints = getVirtualPointsByDevice(deviceId)
+  if (!dpSearch.value) return virtualPoints
+
+  return virtualPoints.filter(
+    vp => vp.tag.toLowerCase().includes(dpSearch.value.toLowerCase()) ||
+          vp.name.toLowerCase().includes(dpSearch.value.toLowerCase())
+  )
+}
+
+const filteredDeviceTree = computed<DeviceNode[]>(() => {
+  if (!dpSearch.value) {
+    // 没有搜索时，返回所有设备，但需要过滤掉已绑定的虚拟点位
+    return deviceTree.value.map(device => ({
+      ...device,
+      virtualPoints: getVirtualPointsByDevice(device.id)
+    }))
+  }
 
   return deviceTree.value
-    .map((device) => ({
-      ...device,
-      dataPoints: device.dataPoints.filter(
+    .map((device) => {
+      const filteredNormal = device.dataPoints.filter(
         (dp) =>
           dp.tag.toLowerCase().includes(dpSearch.value.toLowerCase()) ||
           dp.name.toLowerCase().includes(dpSearch.value.toLowerCase())
       )
-    }))
-    .filter((device) => device.dataPoints.length > 0)
+      const filteredVirtual = getFilteredVirtualPointsByDevice(device.id)
+
+      return {
+        ...device,
+        dataPoints: filteredNormal,
+        virtualPoints: filteredVirtual
+      } as DeviceNode
+    })
+    .filter((device) => device.dataPoints.length > 0 || (device.virtualPoints?.length ?? 0) > 0)
 })
 
-const filteredVirtualDataPoints = computed(() => {
-  if (!virtualSearch.value) return virtualDataPoints.value.filter(vp => !isVirtualMapped(vp.id))
-  
-  return virtualDataPoints.value.filter(
-    (vp) =>
-      !isVirtualMapped(vp.id) &&
-      (vp.tag.toLowerCase().includes(virtualSearch.value.toLowerCase()) ||
-       vp.name.toLowerCase().includes(virtualSearch.value.toLowerCase()))
-  )
-})
-
-const isDeviceAllSelected = (device: DeviceNode) =>
-  device.dataPoints.every((dp) => isMapped(dp.id) || selectedIds.value.has(dp.id))
+const isDeviceAllSelected = (device: DeviceNode) => {
+  const virtualPoints = getFilteredVirtualPointsByDevice(device.id)
+  const normalAllSelected = device.dataPoints.every((dp) => isMapped(dp.id) || selectedIds.value.has(dp.id))
+  const virtualAllSelected = virtualPoints.every((vp) => virtualSelectedIds.value.has(vp.id))
+  return normalAllSelected && virtualAllSelected
+}
 
 const isDeviceIndeterminate = (device: DeviceNode) => {
-  const selectable = device.dataPoints.filter((dp) => !isMapped(dp.id))
-  const selectedCount = selectable.filter((dp) => selectedIds.value.has(dp.id)).length
-  return selectedCount > 0 && selectedCount < selectable.length
+  const virtualPoints = getFilteredVirtualPointsByDevice(device.id)
+  const normalSelectable = device.dataPoints.filter((dp) => !isMapped(dp.id))
+  const normalSelectedCount = normalSelectable.filter((dp) => selectedIds.value.has(dp.id)).length
+  const virtualSelectedCount = virtualPoints.filter((vp) => virtualSelectedIds.value.has(vp.id)).length
+  const totalSelectable = normalSelectable.length + virtualPoints.length
+  const totalSelected = normalSelectedCount + virtualSelectedCount
+  return totalSelected > 0 && totalSelected < totalSelectable
 }
 
 const toggleDevice = (device: DeviceNode) => {
-  const selectable = device.dataPoints.filter((dp) => !isMapped(dp.id))
+  const virtualPoints = getFilteredVirtualPointsByDevice(device.id)
+  const normalSelectable = device.dataPoints.filter((dp) => !isMapped(dp.id))
+
   if (isDeviceAllSelected(device)) {
-    selectable.forEach((dp) => selectedIds.value.delete(dp.id))
+    // 取消全选：同时取消普通数据点和虚拟数据点
+    normalSelectable.forEach((dp) => selectedIds.value.delete(dp.id))
+    virtualPoints.forEach((vp) => virtualSelectedIds.value.delete(vp.id))
   } else {
-    selectable.forEach((dp) => selectedIds.value.add(dp.id))
+    // 全选：同时选中普通数据点和虚拟数据点
+    normalSelectable.forEach((dp) => selectedIds.value.add(dp.id))
+    virtualPoints.forEach((vp) => virtualSelectedIds.value.add(vp.id))
   }
 }
 
@@ -285,19 +307,6 @@ const getVirtualTagById = (id: number) => {
   return vp ? vp.tag : String(id)
 }
 
-// 获取虚拟点位的完整 Tag（{deviceCode}.{tag}）
-const getVirtualPointFullTag = (vp: VirtualDataPoint) => {
-  const device = deviceTree.value.find(d => d.id === vp.deviceId)
-  return device ? `${device.code}.${vp.tag}` : vp.tag
-}
-
-const getVirtualPointFullTagById = (id: number) => {
-  const vp = virtualDataPoints.value.find((item) => item.id === id)
-  if (!vp) return String(id)
-  const device = deviceTree.value.find(d => d.id === vp.deviceId)
-  return device ? `${device.code}.${vp.tag}` : vp.tag
-}
-
 const fetchMappings = async () => {
   loading.value = true
   try {
@@ -312,7 +321,6 @@ const openBindDialog = async () => {
   selectedIds.value = new Set<number>()
   virtualSelectedIds.value = new Set<number>()
   dpSearch.value = ''
-  virtualSearch.value = ''
 
   // 加载设备和普通数据点
   const devRes = await getDevices()
@@ -322,22 +330,32 @@ const openBindDialog = async () => {
     code: string
   }>
 
+  // 加载虚拟数据点
+  const virtualRes = await getVirtualDataPoints()
+  const allVirtualPoints = ((virtualRes as any).data ?? [])
+    .filter((vp: VirtualDataPoint) => vp.isEnabled)
+  
+  console.log('加载的虚拟数据点:', allVirtualPoints)
+
   deviceTree.value = await Promise.all(
     devList.map(async (device) => {
       const dpRes = await getDataPoints(device.id)
       const dataPoints = ((dpRes as { data?: DataPointItem[] })?.data ?? []) as DataPointItem[]
+      // 获取该设备的虚拟数据点
+      const deviceVirtualPoints = allVirtualPoints.filter((vp: VirtualDataPoint) => vp.deviceId === device.id)
+      console.log(`设备 ${device.name} (${device.id}) 的虚拟数据点:`, deviceVirtualPoints)
       return {
         ...device,
-        dataPoints: dataPoints.filter((dp) => dp.isEnabled)
+        dataPoints: dataPoints.filter((dp) => dp.isEnabled),
+        virtualPoints: deviceVirtualPoints
       }
     })
   )
 
-  // 加载虚拟数据点
-  const virtualRes = await getVirtualDataPoints()
-  virtualDataPoints.value = ((virtualRes as any).data ?? [])
-    .filter((vp: VirtualDataPoint) => vp.isEnabled)
+  // 保存所有虚拟数据点到全局变量（用于过滤和查找）
+  virtualDataPoints.value = allVirtualPoints
 
+  console.log('设备树:', deviceTree.value)
   bindDialogVisible.value = true
 }
 
@@ -384,10 +402,10 @@ const batchUnbind = async () => {
       confirmButtonText: '批量解绑',
       cancelButtonText: '取消'
     })
-    
+
     const promises = [...selectedMappings.value].map(id => deleteMapping(id))
     await Promise.all(promises)
-    
+
     ElMessage.success(`成功解绑 ${selectedMappings.value.size} 个数据点`)
     selectedMappings.value.clear()
     fetchMappings()
@@ -439,8 +457,8 @@ onMounted(fetchMappings)
 
 
 /* 绑定弹窗布局 */
-:deep(.bind-dialog .el-dialog__body) { 
-  max-height: 85vh; 
+:deep(.bind-dialog .el-dialog__body) {
+  max-height: 85vh;
   padding: 0;
   display: flex;
   flex-direction: column;
@@ -503,30 +521,6 @@ onMounted(fetchMappings)
   flex-direction:column;
   gap:6px;
 }
-
-.virtual-section {
-  border-top: 1px solid var(--border-subtle);
-  padding-top: 8px;
-  margin-top: 8px;
-}
-.virtual-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-.virtual-title {
-  white-space: nowrap;
-}
-.virtual-title .el-icon {
-  color: var(--purple);
-}
-.virtual-list {
-  display:flex;
-  flex-direction:column;
-  gap:6px;
-}
 .selected-list {
   flex: 1;
   overflow-y: auto;
@@ -551,8 +545,20 @@ onMounted(fetchMappings)
 .dp-item.already { opacity:0.5; }
 .dp-info { display:flex; align-items:center; gap:6px; flex:1; }
 
-/* 虚拟数据点特殊样式 */
-.virtual-section .dp-item .mono {
+/* 虚拟数据点样式 */
+.vp-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+.vp-name {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* 虚拟数据点特殊样式 - 紫色标识 */
+.dp-item .dp-info .mono[style*="color:var(--purple)"] {
   color: var(--purple) !important;
 }
 
