@@ -107,7 +107,8 @@
                     />
                     <div class="dp-info">
                       <span class="mono" style="color:var(--cyan); font-size:12px">{{ dp.tag }}</span>
-                      <span v-if="dp.unit" style="color:var(--text-muted); font-size:11px">· {{ dp.unit }}</span>
+                      <span class="dp-name" v-if="dp.name && dp.name.trim()">· {{ dp.name }}</span>
+                      <span class="dp-unit" v-if="dp.unit && dp.unit.trim()">· {{ dp.unit }}</span>
                       <el-tag v-if="isMapped(dp.id)" size="small" type="info" style="margin-left:6px; font-size:10px">已绑定</el-tag>
                     </div>
                   </div>
@@ -123,10 +124,9 @@
                       @change="(v) => toggleVirtualDp(vp.id, v)"
                     />
                     <div class="dp-info">
-                      <div class="vp-info">
-                        <span class="mono" style="color:var(--purple); font-size:12px">{{ vp.tag }}</span>
-                        <span class="vp-name" v-if="vp.name && vp.name.trim()">· {{ vp.name }}</span>
-                      </div>
+                      <span class="mono" style="color:var(--purple); font-size:12px">{{ vp.tag }}</span>
+                      <span class="vp-name" v-if="vp.name && vp.name.trim()">· {{ vp.name }}</span>
+                      <span class="vp-unit" v-if="vp.unit && vp.unit.trim()">· {{ vp.unit }}</span>
                       <el-tag v-if="isVirtualMapped(vp.id)" size="small" type="info" style="margin-left:6px; font-size:10px">已绑定</el-tag>
                     </div>
                   </div>
@@ -145,14 +145,14 @@
           <div class="selected-list">
             <!-- 普通数据点 -->
             <div v-for="id in [...selectedIds]" :key="id" class="selected-item">
-              <span class="mono" style="font-size:12px; color:var(--text-secondary)">{{ getTagById(id) }}</span>
+              <span class="selected-text">{{ getDataPointDisplay(id) }}</span>
               <el-button size="small" text circle @click="selectedIds.delete(id)">
                 <el-icon size="12"><Close /></el-icon>
               </el-button>
             </div>
             <!-- 虚拟数据点 -->
             <div v-for="id in [...virtualSelectedIds]" :key="'v-' + id" class="selected-item">
-              <span class="mono" style="font-size:12px; color:var(--purple)">{{ getVirtualTagById(id) }}</span>
+              <span class="selected-text virtual">{{ getVirtualPointDisplay(id) }}</span>
               <el-button size="small" text circle @click="virtualSelectedIds.delete(id)">
                 <el-icon size="12"><Close /></el-icon>
               </el-button>
@@ -302,9 +302,28 @@ const getTagById = (id: number) => {
   return String(id)
 }
 
-const getVirtualTagById = (id: number) => {
+const getDataPointDisplay = (id: number) => {
+  for (const device of deviceTree.value) {
+    const dp = device.dataPoints.find((item) => item.id === id)
+    if (dp) {
+      const parts = [dp.tag]
+      if (dp.name && dp.name.trim()) parts.push(dp.name)
+      if (dp.unit && dp.unit.trim()) parts.push(dp.unit)
+      return parts.join(' · ')
+    }
+  }
+  return String(id)
+}
+
+const getVirtualPointDisplay = (id: number) => {
   const vp = virtualDataPoints.value.find((item) => item.id === id)
-  return vp ? vp.tag : String(id)
+  if (vp) {
+    const parts = [vp.tag]
+    if (vp.name && vp.name.trim()) parts.push(vp.name)
+    if (vp.unit && vp.unit.trim()) parts.push(vp.unit)
+    return parts.join(' · ')
+  }
+  return String(id)
 }
 
 const fetchMappings = async () => {
@@ -334,8 +353,6 @@ const openBindDialog = async () => {
   const virtualRes = await getVirtualDataPoints()
   const allVirtualPoints = ((virtualRes as any).data ?? [])
     .filter((vp: VirtualDataPoint) => vp.isEnabled)
-  
-  console.log('加载的虚拟数据点:', allVirtualPoints)
 
   deviceTree.value = await Promise.all(
     devList.map(async (device) => {
@@ -343,7 +360,6 @@ const openBindDialog = async () => {
       const dataPoints = ((dpRes as { data?: DataPointItem[] })?.data ?? []) as DataPointItem[]
       // 获取该设备的虚拟数据点
       const deviceVirtualPoints = allVirtualPoints.filter((vp: VirtualDataPoint) => vp.deviceId === device.id)
-      console.log(`设备 ${device.name} (${device.id}) 的虚拟数据点:`, deviceVirtualPoints)
       return {
         ...device,
         dataPoints: dataPoints.filter((dp) => dp.isEnabled),
@@ -355,7 +371,6 @@ const openBindDialog = async () => {
   // 保存所有虚拟数据点到全局变量（用于过滤和查找）
   virtualDataPoints.value = allVirtualPoints
 
-  console.log('设备树:', deviceTree.value)
   bindDialogVisible.value = true
 }
 
@@ -543,16 +558,10 @@ onMounted(fetchMappings)
 }
 .dp-item:hover { background:var(--bg-hover); }
 .dp-item.already { opacity:0.5; }
-.dp-info { display:flex; align-items:center; gap:6px; flex:1; }
+.dp-info { display:flex; align-items:center; gap:6px; flex:1; flex-wrap: wrap; }
 
-/* 虚拟数据点样式 */
-.vp-info {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: 1;
-}
-.vp-name {
+/* 数据点名称和单位样式 */
+.dp-name, .dp-unit, .vp-name, .vp-unit {
   color: var(--text-secondary);
   font-size: 12px;
 }
@@ -566,6 +575,14 @@ onMounted(fetchMappings)
   display:flex; align-items:center; justify-content:space-between;
   padding:5px 8px; border-radius:4px; background:var(--bg-card);
   border: 1px solid var(--border-subtle);
+}
+.selected-text {
+  font-size: 12px;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+.selected-text.virtual {
+  color: var(--purple);
 }
 .empty-hint { font-size:12px; color:var(--text-muted); text-align:center; padding:20px; }
 
