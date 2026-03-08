@@ -102,15 +102,20 @@ public class VirtualNodeEngine : IVirtualNodeEngine
                 }
             }
 
-            // 检查依赖数据是否完整
+            // 检查依赖数据是否完整，如果有依赖数据为空，跳过计算，直接将 Value 设为 null
             var missingDependencies = dependencies.Where(d => dependencyValues[d] == null).ToList();
             if (missingDependencies.Any() && dependencies.Any())
             {
-                _logger.LogWarning("虚拟数据点 {Tag} 缺少依赖数据：{MissingTags}",
-                    virtualDataPoint.Tag, string.Join(", ", missingDependencies));
+                return new VirtualNodeCalculationResult
+                {
+                    Value = null,
+                    Quality = DataQuality.Uncertain,
+                    VirtualDataPointId = virtualDataPoint.Id,
+                    VirtualDataPointTag = virtualDataPoint.Tag,
+                    DependencyValues = dependencyValues
+                };
             }
 
-            // 执行计算
             var result = ExecuteCalculation(virtualDataPoint, dependencyValues);
 
             // 设置虚拟数据点 ID 和 Tag
