@@ -172,6 +172,22 @@ const filteredDataPoints = computed(() => {
   return props.dataPoints
 })
 
+const resetForm = () => {
+  form.value = {
+    name: '',
+    ruleType: 2,
+    deviceId: null,
+    dataPointId: null,
+    priority: 100,
+    ruleConfig: '{}',
+    onFailure: 0,
+    defaultValue: null,
+    isEnabled: true,
+    description: ''
+  }
+  formRef.value?.clearValidate()
+}
+
 // 监听编辑规则变化，填充表单
 watch(
   () => props.editingRule,
@@ -195,22 +211,6 @@ watch(
   },
   { immediate: true }
 )
-
-const resetForm = () => {
-  form.value = {
-    name: '',
-    ruleType: 2,
-    deviceId: null,
-    dataPointId: null,
-    priority: 100,
-    ruleConfig: '{}',
-    onFailure: 0,
-    defaultValue: null,
-    isEnabled: true,
-    description: ''
-  }
-  formRef.value?.clearValidate()
-}
 
 const handleSubmit = async () => {
   await formRef.value?.validate()
