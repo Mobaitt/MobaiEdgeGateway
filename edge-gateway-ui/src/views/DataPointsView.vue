@@ -505,7 +505,8 @@ const handleSubmit = async (data: DataPointForm) => {
       ElMessage.success('数据点创建成功')
     }
     dialogVisible.value = false
-    fetchDataPoints()
+    await fetchDataPoints()
+    await loadVirtualDataPoints()
   } catch (error: any) {
     ElMessage.error(`操作失败：${error.message || '未知错误'}`)
   } finally {
@@ -555,7 +556,8 @@ const handleVirtualSubmit = async (data: VirtualNodeForm) => {
       ElMessage.success('虚拟节点创建成功')
     }
     virtualNodeDialogVisible.value = false
-    loadVirtualDataPoints()
+    await fetchDataPoints()
+    await loadVirtualDataPoints()
   } catch (error: any) {
     ElMessage.error(`操作失败：${error.message || '未知错误'}`)
   } finally {
@@ -574,7 +576,8 @@ const confirmDeleteVirtualNode = (row: DataPointWithVirtual) => {
     .then(async () => {
       await deleteVirtualDataPoint(row.id)
       ElMessage.success('删除成功')
-      loadVirtualDataPoints()
+      await fetchDataPoints()
+      await loadVirtualDataPoints()
     })
     .catch(() => {})
 }
@@ -597,6 +600,8 @@ const toggleVirtualNode = async (row: DataPointWithVirtual) => {
       isEnabled: vp.isEnabled
     })
     ElMessage.success(vp.isEnabled ? '虚拟节点已启用' : '虚拟节点已禁用')
+    await fetchDataPoints()
+    await loadVirtualDataPoints()
   } catch (error: any) {
     vp.isEnabled = !vp.isEnabled
     ElMessage.error(`操作失败：${error.message || '未知错误'}`)

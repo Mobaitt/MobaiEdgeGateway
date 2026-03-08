@@ -206,11 +206,7 @@ const tagSuffix = ref('')
 const rules = {
   name: [{ required: true, message: '请输入名称', trigger: 'blur' }],
   tag: [
-    { required: true, message: '请输入 Tag', trigger: 'blur' },
-    {
-      pattern: /^[A-Z0-9_]+\.[A-Z0-9_]+$/i,
-      message: 'Tag 格式不正确，应为：设备编码。数据点标识'
-    }
+    { required: true, message: '请输入 Tag', trigger: 'blur' }
   ],
   expression: [{ required: true, message: '请输入计算表达式', trigger: 'blur' }],
   calculationType: [{ required: true, message: '请选择计算类型', trigger: 'change' }],

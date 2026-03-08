@@ -4,6 +4,9 @@ using EdgeGateway.Domain.Enums;
 using EdgeGateway.Domain.Interfaces;
 using Microsoft.Extensions.Logging;
 using NCalc;
+using Microsoft.Extensions.DependencyInjection;
+using EdgeGateway.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace EdgeGateway.Infrastructure.VirtualNodes;
 
@@ -14,6 +17,7 @@ namespace EdgeGateway.Infrastructure.VirtualNodes;
 public class VirtualNodeEngine : IVirtualNodeEngine
 {
     private readonly ILogger<VirtualNodeEngine> _logger;
+    private readonly IServiceProvider _serviceProvider;
     private Func<string, object?>? _getDataSnapshot; // 获取快照数据的委托
 
     // 虚拟数据点缓存
@@ -24,9 +28,11 @@ public class VirtualNodeEngine : IVirtualNodeEngine
 
     public VirtualNodeEngine(
         ILogger<VirtualNodeEngine> logger,
+        IServiceProvider serviceProvider,
         Func<string, object?>? getDataSnapshot = null)
     {
         _logger = logger;
+        _serviceProvider = serviceProvider;
         _getDataSnapshot = getDataSnapshot;
     }
 
@@ -71,13 +77,44 @@ public class VirtualNodeEngine : IVirtualNodeEngine
     }
 
     /// <summary>
-    /// 刷新缓存
+    /// 刷新缓存并重新加载虚拟数据点
     /// </summary>
-    public Task RefreshCacheAsync()
+    public async Task RefreshCacheAsync()
     {
         _virtualPointCache.Clear();
         _dependencyCache.Clear();
-        return Task.CompletedTask;
+        
+        // 重新从数据库加载虚拟数据点
+        await ReloadVirtualPointsAsync();
+    }
+    
+    /// <summary>
+    /// 从数据库重新加载虚拟数据点
+    /// </summary>
+    private async Task ReloadVirtualPointsAsync()
+    {
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var context = scope.ServiceProvider.GetRequiredService<GatewayDbContext>();
+            var virtualPoints = await context.VirtualDataPoints
+                .Include(p => p.Device)
+                .Where(p => p.IsEnabled)
+                .ToListAsync();
+
+            foreach (var point in virtualPoints)
+            {
+                _virtualPointCache[point.Id] = point;
+                var dependencies = ParseDependencies(point.Expression);
+                _dependencyCache[point.Id] = dependencies;
+            }
+
+            _logger.LogInformation("虚拟数据点已重新加载：{Count} 个", virtualPoints.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "重新加载虚拟数据点失败");
+        }
     }
 
     private VirtualNodeCalculationResult Calculate(VirtualDataPoint virtualDataPoint)
