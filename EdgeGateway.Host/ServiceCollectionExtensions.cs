@@ -55,12 +55,14 @@ public static class ServiceCollectionExtensions
         // ========== 数据库 ==========
         services.AddDbContext<GatewayDbContext>(options =>
             options.UseSqlite($"Data Source={dbPath}")
-                   .EnableSensitiveDataLogging(false));
+                   .EnableSensitiveDataLogging()
+                   .LogTo(Console.WriteLine, Microsoft.Extensions.Logging.LogLevel.Information));
 
         // 注册 IDbContextFactory（供 RuleEngine 等使用）
         services.AddDbContextFactory<GatewayDbContext>(options =>
             options.UseSqlite($"Data Source={dbPath}")
-                   .EnableSensitiveDataLogging(false));
+                   .EnableSensitiveDataLogging()
+                   .LogTo(Console.WriteLine, Microsoft.Extensions.Logging.LogLevel.Information));
 
         // ========== 仓储层 ==========
         services.AddScoped<IDeviceRepository, DeviceRepository>();
