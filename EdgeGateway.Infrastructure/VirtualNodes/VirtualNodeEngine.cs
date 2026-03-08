@@ -14,20 +14,12 @@ namespace EdgeGateway.Infrastructure.VirtualNodes;
 /// <summary>
 /// 虚拟节点计算引擎实现 - 根据表达式计算虚拟数据点的值
 /// 虚拟节点依附于普通设备，可以像普通数据点一样被管理和发送
-///
-/// 优化特性：
-/// - 虚拟数据点缓存：避免频繁数据库查询
-/// - 依赖关系索引：快速查找依赖此数据点的虚拟节点
-/// - 计算结果缓存：500ms 内相同输入不重复计算
-/// - 信号量锁：防止同一虚拟点并发计算
 /// </summary>
 public class VirtualNodeEngine : IVirtualNodeEngine
 {
     private readonly IDbContextFactory<GatewayDbContext> _dbContextFactory;
     private readonly ILogger<VirtualNodeEngine> _logger;
-    private readonly IRuleEngine? _ruleEngine;
     private Func<string, object?>? _getDataSnapshot; // 获取快照数据的委托
-    private readonly GatewayOptions _options;
 
     // 虚拟数据点缓存
     private readonly ConcurrentDictionary<int, VirtualDataPoint> _virtualPointCache = new();
@@ -35,48 +27,17 @@ public class VirtualNodeEngine : IVirtualNodeEngine
     // 设备 ID -> 该设备下的虚拟数据点 ID 列表
     private readonly ConcurrentDictionary<int, List<int>> _deviceVirtualPointIndex = new();
 
-    // 依赖关系索引：真实数据点 Tag -> 依赖它的虚拟数据点 ID 列表
-    private readonly ConcurrentDictionary<string, List<int>> _dependencyIndex = new();
-
-    // 计算锁（防止同一虚拟点并发计算）
-    private readonly ConcurrentDictionary<int, SemaphoreSlim> _calculationLocks = new();
-
-    // 计算结果缓存：VirtualDataPointId -> (缓存值，过期时间)
-    // 缓存时间从配置读取，避免短时间内重复计算
-    private readonly ConcurrentDictionary<int, (object? Value, DateTime ExpireTime)> _calculationCache = new();
-    private readonly TimeSpan _cacheExpiration;
-    
     // 依赖关系缓存：VirtualDataPointId -> 依赖的 Tag 列表
     private readonly ConcurrentDictionary<int, List<string>> _dependencyCache = new();
-    
-    // 最大并发计算数
-    private readonly int _maxConcurrentCalculations;
 
     public VirtualNodeEngine(
         IDbContextFactory<GatewayDbContext> dbContextFactory,
         ILogger<VirtualNodeEngine> logger,
-        IRuleEngine? ruleEngine = null,
-        Func<string, object?>? getDataSnapshot = null,
-        IOptions<GatewayOptions> options = null)
+        Func<string, object?>? getDataSnapshot = null)
     {
         _dbContextFactory = dbContextFactory;
         _logger = logger;
-        _ruleEngine = ruleEngine;
         _getDataSnapshot = getDataSnapshot;
-        
-        if (options != null)
-        {
-            _options = options.Value;
-            // 从配置读取虚拟节点参数
-            _cacheExpiration = TimeSpan.FromMilliseconds(_options.VirtualNodes.CalculationCacheMs);
-            _maxConcurrentCalculations = _options.VirtualNodes.MaxConcurrentCalculations;
-        }
-        else
-        {
-            // 默认值（向后兼容）
-            _cacheExpiration = TimeSpan.FromMilliseconds(500);
-            _maxConcurrentCalculations = 20;
-        }
     }
     
     /// <summary>
@@ -118,22 +79,9 @@ public class VirtualNodeEngine : IVirtualNodeEngine
                     return existing;
                 });
 
-            // 构建依赖索引和依赖关系缓存
+            // 构建依赖关系缓存
             var dependencies = ParseDependencies(point.Expression);
             _dependencyCache[point.Id] = dependencies;
-
-            foreach (var depTag in dependencies)
-            {
-                _dependencyIndex.AddOrUpdate(
-                    depTag,
-                    new List<int> { point.Id },
-                    (_, existing) =>
-                    {
-                        if (!existing.Contains(point.Id))
-                            existing.Add(point.Id);
-                        return existing;
-                    });
-            }
         }
 
         _logger.LogInformation("虚拟节点缓存已加载：{_pointCount} 个虚拟数据点，{_deviceCount} 个设备有虚拟节点",
@@ -147,8 +95,6 @@ public class VirtualNodeEngine : IVirtualNodeEngine
     {
         _virtualPointCache.Clear();
         _deviceVirtualPointIndex.Clear();
-        _dependencyIndex.Clear();
-        _calculationCache.Clear();
         _dependencyCache.Clear();
         await LoadCacheAsync();
     }
@@ -157,126 +103,51 @@ public class VirtualNodeEngine : IVirtualNodeEngine
     {
         try
         {
-            // 检查计算结果缓存（500ms 内相同输入不重复计算）
-            if (_calculationCache.TryGetValue(virtualDataPoint.Id, out var cached) &&
-                DateTime.UtcNow < cached.ExpireTime)
+            // 从缓存获取依赖关系（避免重复解析表达式）
+            var dependencies = _dependencyCache.GetOrAdd(virtualDataPoint.Id, _ => ParseDependencies(virtualDataPoint.Expression));
+            var dependencyValues = new Dictionary<string, object?>();
+
+            foreach (var depTag in dependencies)
             {
-                _logger.LogDebug("虚拟数据点 {Tag} 使用缓存结果", virtualDataPoint.Tag);
-                return VirtualNodeCalculationResult.Ok(cached.Value, new Dictionary<string, object?>());
+                // 从快照中获取最新值（通过委托）
+                if (_getDataSnapshot != null)
+                {
+                    var value = _getDataSnapshot(depTag);
+                    dependencyValues[depTag] = value;
+                }
+                else
+                {
+                    dependencyValues[depTag] = null;
+                }
             }
 
-            // 获取锁
-            var semaphore = _calculationLocks.GetOrAdd(virtualDataPoint.Id, _ => new SemaphoreSlim(1, 1));
-            await semaphore.WaitAsync(cancellationToken);
-
-            try
+            // 检查依赖数据是否完整
+            var missingDependencies = dependencies.Where(d => dependencyValues[d] == null).ToList();
+            if (missingDependencies.Any() && dependencies.Any())
             {
-                // 再次检查缓存（防止等待锁期间缓存已更新）
-                if (_calculationCache.TryGetValue(virtualDataPoint.Id, out cached) &&
-                    DateTime.UtcNow < cached.ExpireTime)
-                {
-                    _logger.LogDebug("虚拟数据点 {Tag} 使用缓存结果（锁后检查）", virtualDataPoint.Tag);
-                    return VirtualNodeCalculationResult.Ok(cached.Value, new Dictionary<string, object?>());
-                }
-
-                // 从缓存获取依赖关系（避免重复解析表达式）
-                var dependencies = _dependencyCache.GetOrAdd(virtualDataPoint.Id, _ => ParseDependencies(virtualDataPoint.Expression));
-                var dependencyValues = new Dictionary<string, object?>();
-
-                foreach (var depTag in dependencies)
-                {
-                    object? value = null;
-                    bool valueFound = false;
-
-                    // 1. 优先从快照中获取最新值（通过委托）
-                    if (_getDataSnapshot != null)
-                    {
-                        value = _getDataSnapshot(depTag);
-                        if (value != null)
-                        {
-                            dependencyValues[depTag] = value;
-                            valueFound = true;
-                            continue;
-                        }
-                    }
-
-                    // 2. 快照中没有，检查是否是其他虚拟数据点（从缓存获取最新值）
-                    if (!valueFound)
-                    {
-                        // 遍历缓存查找匹配的 Tag
-                        foreach (var vp in _virtualPointCache.Values)
-                        {
-                            if (vp.Tag == depTag)
-                            {
-                                // 优先使用快照中的值（如果有的话）
-                                // 如果快照中没有，才使用 LastValue（数据库中的旧值）
-                                _logger.LogDebug("虚拟数据点 {VirtualTag} 依赖的虚拟数据点 {DepTag} 在快照中未找到，使用 LastValue",
-                                    virtualDataPoint.Tag, depTag);
-                                dependencyValues[depTag] = vp.LastValue;
-                                valueFound = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    // 3. 如果还是没找到，从数据库查找数据点定义（但值为 null）
-                    if (!valueFound)
-                    {
-                        await using var context = await _dbContextFactory.CreateDbContextAsync();
-                        var dataPoint = await context.DataPoints
-                            .FirstOrDefaultAsync(dp => dp.Tag == depTag, cancellationToken);
-
-                        if (dataPoint != null)
-                        {
-                            // 数据库中有定义，但快照中没有值
-                            _logger.LogWarning("虚拟数据点 {VirtualTag} 依赖数据 {DepTag} 在快照中为 null 或超时",
-                                virtualDataPoint.Tag, depTag);
-                            dependencyValues[depTag] = null;
-                        }
-                        else
-                        {
-                            // 完全找不到依赖
-                            _logger.LogWarning("虚拟数据点 {VirtualTag} 找不到依赖数据 {DepTag}",
-                                virtualDataPoint.Tag, depTag);
-                            dependencyValues[depTag] = null;
-                        }
-                    }
-                }
-
-                // 检查依赖数据是否完整
-                var missingDependencies = dependencies.Where(d => !dependencyValues.ContainsKey(d) || dependencyValues[d] == null).ToList();
-                if (missingDependencies.Any() && dependencies.Any())
-                {
-                    _logger.LogWarning("虚拟数据点 {Tag} 缺少依赖数据：{MissingTags}",
-                        virtualDataPoint.Tag, string.Join(", ", missingDependencies));
-                }
-
-                // 执行计算
-                var result = ExecuteCalculation(virtualDataPoint, dependencyValues);
-
-                // 更新虚拟数据点的最后计算结果
-                await using var updateContext = await _dbContextFactory.CreateDbContextAsync();
-                var pointToUpdate = await updateContext.VirtualDataPoints.FindAsync(virtualDataPoint.Id);
-                if (pointToUpdate != null)
-                {
-                    pointToUpdate.LastValue = result.Value;
-                    pointToUpdate.LastCalculationTime = DateTime.UtcNow;
-                    await updateContext.SaveChangesAsync(cancellationToken);
-                }
-
-                // 设置虚拟数据点 ID 和 Tag
-                result.VirtualDataPointId = virtualDataPoint.Id;
-                result.VirtualDataPointTag = virtualDataPoint.Tag;
-
-                // 更新计算结果缓存（500ms 有效期）
-                _calculationCache[virtualDataPoint.Id] = (result.Value, DateTime.UtcNow + _cacheExpiration);
-
-                return result;
+                _logger.LogWarning("虚拟数据点 {Tag} 缺少依赖数据：{MissingTags}",
+                    virtualDataPoint.Tag, string.Join(", ", missingDependencies));
             }
-            finally
+
+            // 执行计算
+            var result = ExecuteCalculation(virtualDataPoint, dependencyValues);
+
+            // 更新虚拟数据点的最后计算结果到数据库
+            await using var updateContext = await _dbContextFactory.CreateDbContextAsync();
+            var pointToUpdate = await updateContext.VirtualDataPoints.FindAsync(virtualDataPoint.Id);
+            if (pointToUpdate != null)
             {
-                semaphore.Release();
+                pointToUpdate.LastValue = result.Value;
+                pointToUpdate.LastCalculationTime = DateTime.UtcNow;
+                await updateContext.SaveChangesAsync(cancellationToken);
             }
+
+            // 设置虚拟数据点 ID 和 Tag
+            result.VirtualDataPointId = virtualDataPoint.Id;
+            result.VirtualDataPointTag = virtualDataPoint.Tag;
+            result.DeviceId = virtualDataPoint.DeviceId;
+
+            return result;
         }
         catch (OperationCanceledException)
         {
@@ -301,34 +172,14 @@ public class VirtualNodeEngine : IVirtualNodeEngine
 
         var results = new List<VirtualNodeCalculationResult>();
 
-        // 并行计算无依赖关系的虚拟节点
-        // 使用 SemaphoreSlim 限制并发数，从配置读取，避免过度消耗资源
-        var maxConcurrency = Math.Min(virtualPointIds.Count, _maxConcurrentCalculations);
-        var semaphore = new SemaphoreSlim(maxConcurrency);
-        var tasks = virtualPointIds.Select(async pointId =>
+        foreach (var pointId in virtualPointIds)
         {
-            await semaphore.WaitAsync(cancellationToken);
-            try
+            if (_virtualPointCache.TryGetValue(pointId, out var point))
             {
-                if (_virtualPointCache.TryGetValue(pointId, out var point))
-                {
-                    var result = await CalculateAsync(point, cancellationToken);
-                    lock (results)
-                    {
-                        results.Add(result);
-                    }
-                }
+                var result = await CalculateAsync(point, cancellationToken);
+                results.Add(result);
             }
-            finally
-            {
-                semaphore.Release();
-            }
-        });
-
-        await Task.WhenAll(tasks);
-
-        _logger.LogInformation("设备 ID={DeviceId} 虚拟节点计算完成：{SuccessCount}/{TotalCount} 成功",
-            deviceId, results.Count(r => r.Success), results.Count);
+        }
 
         return results;
     }
@@ -340,67 +191,10 @@ public class VirtualNodeEngine : IVirtualNodeEngine
         var virtualPoints = _virtualPointCache.Values.ToList();
         var results = new List<VirtualNodeCalculationResult>();
 
-        // 并行计算所有虚拟节点（限制并发数，从配置读取）
-        var maxConcurrency = Math.Min(virtualPoints.Count, _maxConcurrentCalculations);
-        var semaphore = new SemaphoreSlim(maxConcurrency);
-        var tasks = virtualPoints.Select(async point =>
+        foreach (var point in virtualPoints)
         {
-            await semaphore.WaitAsync(cancellationToken);
-            try
-            {
-                var result = await CalculateAsync(point, cancellationToken);
-                lock (results)
-                {
-                    results.Add(result);
-                }
-            }
-            finally
-            {
-                semaphore.Release();
-            }
-        });
-
-        await Task.WhenAll(tasks);
-
-        _logger.LogInformation("虚拟节点计算完成：{SuccessCount}/{TotalCount} 成功",
-            results.Count(r => r.Success), results.Count);
-
-        return results;
-    }
-
-    public async Task<List<VirtualNodeCalculationResult>> OnDependencyDataUpdatedAsync(string dataPointTag, object? value, CancellationToken cancellationToken = default)
-    {
-        await LoadCacheAsync();
-
-        // 查找依赖此数据点的所有虚拟数据点
-        if (!_dependencyIndex.TryGetValue(dataPointTag, out var dependentVirtualPointIds))
-        {
-            return new List<VirtualNodeCalculationResult>();
-        }
-
-        var results = new List<VirtualNodeCalculationResult>();
-
-        foreach (var virtualPointId in dependentVirtualPointIds)
-        {
-            if (_virtualPointCache.TryGetValue(virtualPointId, out var virtualPoint))
-            {
-                try
-                {
-                    var result = await CalculateAsync(virtualPoint, cancellationToken);
-                    results.Add(result);
-
-                    // 递归触发下游虚拟节点
-                    if (result.Success)
-                    {
-                        var downstreamResults = await OnDependencyDataUpdatedAsync(virtualPoint.Tag, result.Value, cancellationToken);
-                        results.AddRange(downstreamResults);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "虚拟数据点 {Tag} 因依赖更新触发计算失败", virtualPoint.Tag);
-                }
-            }
+            var result = await CalculateAsync(point, cancellationToken);
+            results.Add(result);
         }
 
         return results;

@@ -35,10 +35,9 @@ public interface ICollectionStrategy
     /// 批量读取数据点的当前值
     /// </summary>
     /// <param name="dataPoints">需要采集的数据点列表</param>
+    /// <param name="callback">采集到每个数据点时的回调函数（用于实时更新快照，带过期判断）</param>
     /// <param name="cancellationToken">取消令牌</param>
-    /// <param name="callback"></param>
-    /// <returns>采集结果列表，每个数据点对应一条 CollectedData</returns>
-    Task<IEnumerable<CollectedData>> ReadAsync(
+    Task ReadAsync(
         IEnumerable<DataPoint> dataPoints,
         Action<CollectedData> callback,
         CancellationToken cancellationToken = default);

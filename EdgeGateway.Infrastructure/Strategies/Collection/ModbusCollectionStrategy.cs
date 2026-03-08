@@ -73,7 +73,7 @@ public class ModbusCollectionStrategy : ICollectionStrategy
     }
 
     /// <inheritdoc/>
-    public async Task<IEnumerable<CollectedData>> ReadAsync(
+    public async Task ReadAsync(
         IEnumerable<DataPoint> dataPoints,
         Action<CollectedData> callback,
         CancellationToken cancellationToken = default)
@@ -81,14 +81,13 @@ public class ModbusCollectionStrategy : ICollectionStrategy
         if (!_isConnected || _master == null)
             throw new InvalidOperationException("Modbus 设备未连接");
 
-        var results = new List<CollectedData>();
         var dataList = dataPoints.ToList();
-        
+
         // 获取设备信息（从第一个数据点获取设备信息）
         var firstPoint = dataList.FirstOrDefault();
         if (firstPoint == null)
         {
-            return results;
+            return;
         }
 
         // 使用设备编码作为标识
@@ -105,8 +104,7 @@ public class ModbusCollectionStrategy : ICollectionStrategy
         {
             try
             {
-                var groupResults = await ReadGroupAsync(group, deviceCode, cancellationToken);
-                results.AddRange(groupResults);
+                await ReadGroupAsync(group, deviceCode, callback, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -116,23 +114,22 @@ public class ModbusCollectionStrategy : ICollectionStrategy
                 // 为该组所有数据点返回错误结果
                 foreach (var dp in group)
                 {
-                    results.Add(CreateCollectedData(dp, deviceCode, null));
+                    var errorData = CreateCollectedData(dp, deviceCode, null);
+                    callback(errorData);
                 }
             }
         }
-
-        return results;
     }
 
     /// <summary>
     /// 读取一组数据点（同一从站、同一功能码）
     /// </summary>
-    private async Task<List<CollectedData>> ReadGroupAsync(
+    private async Task ReadGroupAsync(
         IGrouping<dynamic, DataPoint> group,
         string deviceCode,
+        Action<CollectedData> callback,
         CancellationToken cancellationToken)
     {
-        var results = new List<CollectedData>();
         var slaveId = group.Key.SlaveId;
         var functionCode = group.Key.FunctionCode;
 
@@ -154,7 +151,8 @@ public class ModbusCollectionStrategy : ICollectionStrategy
                         for (int i = 0; i < range.Points.Count; i++)
                         {
                             var dp = range.Points[i];
-                            results.Add(CreateCollectedData(dp, deviceCode, coils[i] ? 1 : 0));
+                            var data = CreateCollectedData(dp, deviceCode, coils[i] ? 1 : 0);
+                            callback(data);
                         }
                         continue;
 
@@ -162,7 +160,8 @@ public class ModbusCollectionStrategy : ICollectionStrategy
                         _logger.LogWarning("NModbus4 不支持功能码 2 (离散输入)，跳过读取");
                         foreach (var dp in group)
                         {
-                            results.Add(CreateCollectedData(dp, deviceCode, null));
+                            var data = CreateCollectedData(dp, deviceCode, null);
+                            callback(data);
                         }
                         continue;
 
@@ -186,7 +185,8 @@ public class ModbusCollectionStrategy : ICollectionStrategy
                 {
                     var dp = range.Points[i];
                     var value = ParseRegisterValue(dp, registers, registerIndex);
-                    results.Add(CreateCollectedData(dp, deviceCode, value));
+                    var data = CreateCollectedData(dp, deviceCode, value);
+                    callback(data);
 
                     // 累加寄存器索引
                     registerIndex += dp.RegisterLength;
@@ -199,12 +199,11 @@ public class ModbusCollectionStrategy : ICollectionStrategy
 
                 foreach (var dp in range.Points)
                 {
-                    results.Add(CreateCollectedData(dp, deviceCode, null));
+                    var data = CreateCollectedData(dp, deviceCode, null);
+                    callback(data);
                 }
             }
         }
-
-        return results;
     }
 
     /// <summary>

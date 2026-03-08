@@ -2,9 +2,7 @@ using System.Collections.Concurrent;
 using EdgeGateway.Domain.Entities;
 using EdgeGateway.Domain.Interfaces;
 using EdgeGateway.Domain.Options;
-using EdgeGateway.Infrastructure.Data;
 using EdgeGateway.Infrastructure.VirtualNodes;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -38,7 +36,6 @@ public class DataCollectionService
     private readonly DataSendService _sendService;
     private readonly IRuleEngine _ruleEngine;
     private readonly IVirtualNodeEngine _virtualNodeEngine;
-    private readonly IDbContextFactory<GatewayDbContext> _dbContextFactory;
     private readonly ILogger<DataCollectionService> _logger;
     private readonly GatewayOptions _options;
 
@@ -51,20 +48,15 @@ public class DataCollectionService
 
     // Tag 索引：Tag → DataPointId，支持按 Tag 快速查询
     private readonly ConcurrentDictionary<string, int> _tagIndex = new();
-
-    // 虚拟数据点缓存：Tag → VirtualDataPoint，避免频繁数据库查询
-    // 注意：虚拟数据点缓存是全局的，因为 Tag 是全局唯一的
-    private readonly ConcurrentDictionary<string, VirtualDataPoint> _virtualDataPointCache = new();
-
-    // 设备 ID → 虚拟数据点 ID 列表，用于快速查找设备下的虚拟数据点
-    private readonly ConcurrentDictionary<int, HashSet<int>> _deviceVirtualPointIds = new();
+    
 
 
     private readonly int _aggregateWindowMs;
     private readonly TimeSpan _dataExpiration;
     private CancellationTokenSource? _aggregatorCts;
     private Task? _aggregatorTask;
-
+    private CancellationTokenSource? _virtualNodeCts;
+    private Task? _virtualNodeTask;
 
     public DataCollectionService(
         IServiceProvider serviceProvider,
@@ -72,7 +64,6 @@ public class DataCollectionService
         DataSendService sendService,
         IRuleEngine ruleEngine,
         IVirtualNodeEngine virtualNodeEngine,
-        IDbContextFactory<GatewayDbContext> dbContextFactory,
         ILogger<DataCollectionService> logger,
         IOptions<GatewayOptions> options)
     {
@@ -81,7 +72,6 @@ public class DataCollectionService
         _sendService = sendService;
         _ruleEngine = ruleEngine;
         _virtualNodeEngine = virtualNodeEngine;
-        _dbContextFactory = dbContextFactory;
         _logger = logger;
         _options = options.Value;
 
@@ -125,96 +115,92 @@ public class DataCollectionService
     /// <summary>
     /// 启动数据聚合器（后台任务，按窗口间隔批量推送全量数据）
     /// </summary>
-    public async Task StartAggregatorAsync(CancellationToken cancellationToken)
+    public Task StartAggregatorAsync(CancellationToken cancellationToken)
     {
-        // 预先加载所有通道绑定的数据点，确保即使未采集过也会出现在快照中
-        await InitializeSnapshotFromMappingsAsync();
+        try
+        {
+            _aggregatorCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            _aggregatorTask = Task.Run(async () =>
+            {
+                try
+                {
+                    while (!_aggregatorCts.Token.IsCancellationRequested)
+                    {
+                        await Task.Delay(_aggregateWindowMs, _aggregatorCts.Token);
+                        await FlushSnapshotAsync(_aggregatorCts.Token);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    _logger.LogDebug("数据聚合器已停止");
+                }
+            }, _aggregatorCts.Token);
 
-        _aggregatorCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        _aggregatorTask = Task.Run(async () =>
+            // 启动虚拟节点定时计算任务（每秒执行一次）
+            StartVirtualNodeCalculator(cancellationToken);
+
+            _logger.LogInformation("数据聚合器已启动，窗口间隔：{WindowMs}ms", _aggregateWindowMs);
+            return Task.CompletedTask;
+        }
+        catch (Exception exception)
+        {
+            return Task.FromException(exception);
+        }
+    }
+
+    /// <summary>
+    /// 启动虚拟节点定时计算任务（每秒从快照获取数据进行计算）
+    /// </summary>
+    private void StartVirtualNodeCalculator(CancellationToken cancellationToken)
+    {
+        _virtualNodeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _virtualNodeTask = Task.Run(async () =>
         {
             try
             {
-                while (!_aggregatorCts.Token.IsCancellationRequested)
+                while (!_virtualNodeCts.Token.IsCancellationRequested)
                 {
-                    await Task.Delay(_aggregateWindowMs, _aggregatorCts.Token);
-                    await FlushSnapshotAsync(_aggregatorCts.Token);
+                    await Task.Delay(1000, _virtualNodeCts.Token);
+
+                    try
+                    {
+                        // 计算所有虚拟节点（从快照获取依赖数据）
+                        var results = await _virtualNodeEngine.CalculateAllAsync(_virtualNodeCts.Token);
+
+                        // 将计算结果通过 SetDataSnapshot 更新回快照
+                        foreach (var result in results.Where(r => r.Success))
+                        {
+                            if (!string.IsNullOrEmpty(result.VirtualDataPointTag))
+                            {
+                                var virtualData = new CollectedData
+                                {
+                                    DataPointId = -result.VirtualDataPointId,
+                                    Tag = result.VirtualDataPointTag,
+                                    DeviceId = result.DeviceId, // 临时使用虚拟点 ID
+                                    DeviceName = "VirtualNode",
+                                    Value = result.Value,
+                                    Quality = result.Quality,
+                                    Timestamp = result.Timestamp
+                                };
+                                SetDataSnapshot(virtualData);
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "虚拟节点定时计算失败");
+                    }
                 }
             }
             catch (OperationCanceledException)
             {
-                _logger.LogDebug("数据聚合器已停止");
+                _logger.LogDebug("虚拟节点计算器已停止");
             }
-        }, _aggregatorCts.Token);
+        }, _virtualNodeCts.Token);
 
-        _logger.LogInformation("数据聚合器已启动，窗口间隔：{WindowMs}ms", _aggregateWindowMs);
+        _logger.LogInformation("虚拟节点定时计算器已启动，间隔：1000ms");
     }
-
-    /// <summary>
-    /// 从数据库加载所有通道绑定的数据点，初始化快照（即使未采集过也会出现在快照中）
-    /// 使用 ConcurrentDictionary，无需锁
-    /// </summary>
-    private async Task InitializeSnapshotFromMappingsAsync()
-    {
-        using var scope = _serviceProvider.CreateScope();
-        var channelRepo = scope.ServiceProvider.GetRequiredService<IChannelRepository>();
-
-        var channels = await channelRepo.GetEnabledWithMappingsAsync();
-        foreach (var channel in channels)
-        {
-            // 处理普通数据点映射
-            foreach (var mapping in channel.DataPointMappings.Where(m => m.IsEnabled && m.DataPointId.HasValue))
-            {
-                var dataPointId = mapping.DataPointId!.Value;
-                if (!_dataSnapshot.ContainsKey(dataPointId))
-                {
-                    // 创建初始占位数据
-                    _dataSnapshot[dataPointId] = new TimestampedData
-                    {
-                        Data = new CollectedData
-                        {
-                            DataPointId = dataPointId,
-                            Tag = mapping.DataPoint?.Tag ?? "Unknown",
-                            DeviceId = mapping.DataPoint?.DeviceId ?? 0,
-                            DeviceName = mapping.DataPoint?.Device?.Name ?? "Unknown",
-                            Value = null,
-                            Quality = DataQuality.Uncertain,
-                            Timestamp = DateTime.UtcNow
-                        },
-                        LastUpdateTime = DateTime.MinValue // 使用 MinValue，这样会被视为过期
-                    };
-                }
-            }
-
-            // 处理虚拟数据点映射
-            foreach (var mapping in channel.VirtualDataPointMappings.Where(m =>
-                         m.IsEnabled && m.VirtualDataPointId.HasValue))
-            {
-                var virtualDataPointId = mapping.VirtualDataPointId!.Value;
-                // 虚拟数据点使用负 ID 存储，以区分于普通数据点
-                var snapshotKey = -virtualDataPointId;
-                if (!_dataSnapshot.ContainsKey(snapshotKey))
-                {
-                    _dataSnapshot[snapshotKey] = new TimestampedData
-                    {
-                        Data = new CollectedData
-                        {
-                            DataPointId = snapshotKey,
-                            Tag = mapping.VirtualDataPoint?.Tag ?? "Unknown",
-                            DeviceId = mapping.VirtualDataPoint?.DeviceId ?? 0,
-                            DeviceName = mapping.VirtualDataPoint?.Device?.Name ?? "Unknown",
-                            Value = null,
-                            Quality = DataQuality.Uncertain,
-                            Timestamp = DateTime.UtcNow
-                        },
-                        LastUpdateTime = DateTime.MinValue
-                    };
-                }
-            }
-        }
-
-        _logger.LogInformation("快照初始化完成，共 {Count} 个数据点", _dataSnapshot.Count);
-    }
+    
 
 
     /// <summary>
@@ -235,49 +221,9 @@ public class DataCollectionService
 
             foreach (var kvp in _dataSnapshot)
             {
-                // 使用 IsExpired 方法统一判断过期
-                // if (kvp.Value.IsExpired(_dataExpiration))
-                // {
-                //     // 超过 30 秒没有成功数据，创建 null 占位数据
-                //     dataToSend.Add(CreateTimeoutData(kvp.Value.Data));
-                //     changedCount++;
-                // }
-                // else if (_enableChangeDetection)
-                // {
-                //     // 变化检测：只发送值发生变化的数据点
-                //     var currentValue = kvp.Value.Data.Value;
-                //     
-                //     // 如果当前值为 null，使用上次发送的值（保持数据连续性）
-                //     if (currentValue == null && _lastSentValues.TryGetValue(kvp.Key, out var lastValue))
-                //     {
-                //         currentValue = lastValue.Value;
-                //         kvp.Value.Data.Value = currentValue;
-                //     }
-                //     
-                //     // 判断是否发生变化（包括 null 值变化）
-                //     var hasChanged = !_lastSentValues.TryGetValue(kvp.Key, out var lastSent) 
-                //                      || !Equals(lastSent.Value, currentValue);
-                //
-                //     if (hasChanged)
-                //     {
-                //         dataToSend.Add(kvp.Value.Data);
-                //         changedCount++;
-                //         
-                //         // 更新上次发送的值（包括 null 值）
-                //         _lastSentValues[kvp.Key] = (currentValue, DateTime.UtcNow);
-                //     }
-                // }
-                // else
-                // {
-                //     // 不启用变化检测，发送所有数据
-                //     dataToSend.Add(kvp.Value.Data);
-                // }
                 dataToSend.Add(kvp.Value.Data);
             }
-
-            // 批量推送（如果没有变化的数据，跳过推送）
-            // if (changedCount > 0)
-            // {
+            
             await _sendService.DispatchAsync(dataToSend, cancellationToken);
             _logger.LogDebug("数据聚合推送：{Changed}/{Total} 个数据点有变化", changedCount, _dataSnapshot.Count);
             // }
@@ -289,50 +235,7 @@ public class DataCollectionService
     }
 
 
-    /// <summary>
-    /// 更新数据点到全量快照（线程安全）
-    /// 质量为 Good 且 Value 不为 null 时，更新数据和 LastUpdateTime
-    /// 质量为 Good 但 Value 为 null 时，保持上次成功值，不更新 LastUpdateTime（这样超过 30 秒会过期）
-    /// 使用 ConcurrentDictionary，无需锁
-    /// </summary>
-    public Task UpdateSnapshotAsync(IEnumerable<CollectedData> data, CancellationToken cancellationToken)
-    {
-        foreach (var item in data)
-        {
-            // 只处理质量为 Good 的数据
-            if (item.Quality != DataQuality.Good)
-            {
-                // 采集失败时，保持快照中的上次成功值，不更新
-                continue;
-            }
 
-            // 维护 Tag 索引
-            _tagIndex[item.Tag] = item.DataPointId;
-
-            // 更新或添加数据点的最新值
-            if (_dataSnapshot.TryGetValue(item.DataPointId, out var existing))
-            {
-                // 只有 Value 不为 null 时，才更新数据和 LastUpdateTime
-                if (item.Value != null)
-                {
-                    existing.Data = item;
-                    existing.LastUpdateTime = DateTime.UtcNow;
-                }
-                // 如果 Value 为 null，保持 existing.Data 和 LastUpdateTime 不变
-                // 这样超过 30 秒后会自动过期
-            }
-            else
-            {
-                _dataSnapshot[item.DataPointId] = new TimestampedData
-                {
-                    Data = item,
-                    LastUpdateTime = item.Value != null ? DateTime.UtcNow : DateTime.MinValue
-                };
-            }
-        }
-
-        return Task.CompletedTask;
-    }
 
     /// <summary>
     /// 获取指定设备的所有数据点快照数据
@@ -403,17 +306,8 @@ public class DataCollectionService
                     try
                     {
                         // 执行一轮数据采集
-                        var collectedData =
-                            (await strategy.ReadAsync(enabledPoints, SetDataSnapshot, cts.Token)).ToList();
-
-                        // 执行规则引擎处理
-                        var processedData = await ExecuteRuleEngineAsync(collectedData, cts.Token);
-
-                        // 更新到全量快照（由聚合器按窗口间隔批量推送）
-                        await UpdateSnapshotAsync(processedData, cts.Token);
-
-                        // 触发虚拟节点计算
-                        await ExecuteVirtualNodesAsync(processedData, cts.Token);
+                        // 采集策略会通过 SetDataSnapshot 回调实时更新快照（带过期判断和规则引擎）
+                        await strategy.ReadAsync(enabledPoints, SetDataSnapshot, cts.Token);
                     }
                     catch (Exception ex) when (ex is not OperationCanceledException)
                     {
@@ -512,12 +406,34 @@ public class DataCollectionService
                 }
             }
 
-            // 刷新剩余快照数据
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
-            await FlushSnapshotAsync(cts.Token);
-
-            _logger.LogInformation("数据聚合器已停止，快照已刷新");
+            _logger.LogInformation("数据聚合器已停止");
         }
+
+        // 停止虚拟节点计算器
+        if (_virtualNodeCts != null)
+        {
+            await _virtualNodeCts.CancelAsync();
+            _virtualNodeCts.Dispose();
+
+            if (_virtualNodeTask != null)
+            {
+                try
+                {
+                    await _virtualNodeTask;
+                }
+                catch (OperationCanceledException)
+                {
+                }
+            }
+
+            _logger.LogInformation("虚拟节点计算器已停止");
+        }
+
+        // 刷新剩余快照数据
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        await FlushSnapshotAsync(cts.Token);
+
+        _logger.LogInformation("快照已刷新");
     }
 
     /// <summary>
@@ -557,132 +473,6 @@ public class DataCollectionService
 
 
     /// <summary>
-    /// 执行规则引擎处理采集数据
-    /// </summary>
-    private async Task<List<CollectedData>> ExecuteRuleEngineAsync(List<CollectedData> collectedData,
-        CancellationToken cancellationToken)
-    {
-        var processedData = new List<CollectedData>();
-
-        foreach (var data in collectedData)
-        {
-            try
-            {
-                var result = await _ruleEngine.ExecuteRulesAsync(data, cancellationToken);
-
-                if (!result.ShouldReject)
-                {
-                    // 创建处理后的数据
-                    processedData.Add(new CollectedData
-                    {
-                        Tag = data.Tag,
-                        DataPointId = data.DataPointId,
-                        DeviceId = data.DeviceId,
-                        DeviceName = data.DeviceName,
-                        Value = result.Value,
-                        Unit = data.Unit,
-                        Quality = result.Quality,
-                        Timestamp = data.Timestamp
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "规则执行失败，数据点：{Tag}", data.Tag);
-                // 规则执行失败时保留原数据
-                processedData.Add(data);
-            }
-        }
-
-        return processedData;
-    }
-
-    /// <summary>
-    /// 执行虚拟节点计算
-    /// </summary>
-    private async Task ExecuteVirtualNodesAsync(List<CollectedData> processedData, CancellationToken cancellationToken)
-    {
-        foreach (var data in processedData)
-        {
-            try
-            {
-                // 通过 Tag 触发依赖此数据点的虚拟节点计算
-                var virtualResults = await _virtualNodeEngine.OnDependencyDataUpdatedAsync(
-                    data.Tag, data.Value, cancellationToken);
-
-                // 将虚拟节点计算结果也更新到快照
-                await UpdateVirtualNodeResultsToSnapshotAsync(virtualResults, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "虚拟节点计算失败，数据点：{Tag}", data.Tag);
-            }
-        }
-    }
-
-    /// <summary>
-    /// 将虚拟节点计算结果更新到快照和实时数据服务
-    /// 使用虚拟数据点缓存，避免频繁数据库查询
-    /// </summary>
-    private async Task UpdateVirtualNodeResultsToSnapshotAsync(
-        List<VirtualNodeCalculationResult> virtualResults,
-        CancellationToken cancellationToken)
-    {
-        foreach (var virtualResult in virtualResults.Where(r => r.Success))
-        {
-            // 使用虚拟数据点的 Tag 查找虚拟数据点
-            if (!string.IsNullOrEmpty(virtualResult.VirtualDataPointTag))
-            {
-                VirtualDataPoint? vp = null;
-
-                // 先从缓存获取，缓存未命中时查询数据库
-                if (!_virtualDataPointCache.TryGetValue(virtualResult.VirtualDataPointTag, out vp))
-                {
-                    vp = await FindVirtualDataPointByTagAsync(virtualResult.VirtualDataPointTag);
-                    if (vp != null)
-                    {
-                        _virtualDataPointCache.TryAdd(virtualResult.VirtualDataPointTag, vp);
-
-                        // 更新设备虚拟数据点索引
-                        _deviceVirtualPointIds.AddOrUpdate(
-                            vp.DeviceId,
-                            new HashSet<int> { -vp.Id },
-                            (_, existing) =>
-                            {
-                                existing.Add(-vp.Id);
-                                return existing;
-                            });
-                    }
-                }
-
-                if (vp != null)
-                {
-                    var snapshotKey = -vp.Id;
-
-                    // 维护 Tag 索引
-                    _tagIndex[vp.Tag] = snapshotKey;
-
-                    // 更新快照（ConcurrentDictionary 直接赋值即可，无需锁）
-                    _dataSnapshot[snapshotKey] = new TimestampedData
-                    {
-                        Data = new CollectedData
-                        {
-                            DataPointId = snapshotKey,
-                            Tag = vp.Tag,
-                            DeviceId = vp.DeviceId,
-                            DeviceName = vp.Device?.Name ?? "Unknown",
-                            Value = virtualResult.Value,
-                            Quality = virtualResult.Quality,
-                            Timestamp = virtualResult.Timestamp
-                        },
-                        LastUpdateTime = DateTime.UtcNow
-                    };
-                }
-            }
-        }
-    }
-
-    /// <summary>
     /// 清理指定设备的快照数据和 Tag 索引
     /// 批量操作，减少锁持有时间
     /// 使用 ConcurrentDictionary，无需锁
@@ -716,25 +506,45 @@ public class DataCollectionService
     }
 
     /// <summary>
-    /// 根据 Tag 查找虚拟数据点
-    /// </summary>
-    private async Task<VirtualDataPoint?> FindVirtualDataPointByTagAsync(string tag)
-    {
-        await using var context = await _dbContextFactory.CreateDbContextAsync();
-        return await context.VirtualDataPoints
-            .Include(vp => vp.Device)
-            .FirstOrDefaultAsync(vp => vp.Tag == tag);
-    }
-
-
-    /// <summary>
-    /// 设置数据快照，带过期时间判断
+    /// 设置数据快照，带过期时间判断和规则引擎处理
     /// 如果数据已过期（超过配置的时间未更新），则设置为 null
     /// 如果数据未过期，则使用上一次的数据
+    /// 采集到每个数据点时立即触发规则引擎
     /// </summary>
     /// <param name="collectedData">要设置的数据</param>
     private void SetDataSnapshot(CollectedData collectedData)
     {
+        // 执行规则引擎（虚拟节点数据跳过规则引擎）
+        if (collectedData.DataPointId >= 0)
+        {
+            try
+            {
+                var ruleResult = _ruleEngine.ExecuteRulesAsync(collectedData, CancellationToken.None);
+
+                if (ruleResult.Result.ShouldReject)
+                {
+                    _logger.LogDebug("数据点 {Tag} 被规则拒绝：{Error}", collectedData.Tag, ruleResult.Result.ErrorMessage);
+                    return;
+                }
+
+                // 使用规则处理后的值
+                if (ruleResult.Result.Value != null)
+                {
+                    collectedData.Value = ruleResult.Result.Value;
+                }
+
+                collectedData.Quality = ruleResult.Result.Quality;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "规则执行失败，数据点：{Tag}", collectedData.Tag);
+                // 规则执行失败时保留原数据
+            }
+        }
+
+        // 维护 Tag 索引
+        _tagIndex[collectedData.Tag] = collectedData.DataPointId;
+
         // 更新或添加数据点的最新值
         if (_dataSnapshot.TryGetValue(collectedData.DataPointId, out var existing))
         {

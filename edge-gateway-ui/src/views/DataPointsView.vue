@@ -422,6 +422,7 @@ const stopRealtimePolling = () => {
 }
 
 const getRealtimeData = (row: DataPointWithVirtual): RealtimeDataItem | null => {
+  debugger
   return realtimeData.value[row.tag] || null
 }
 
