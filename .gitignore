@@ -61,3 +61,5 @@ temp/
 /EdgeGateway.WebApi/gateway.db-wal
 /EdgeGateway.WebApi/gateway.db-shm
 /EdgeGateway.WebApi/output
+
+*/wwwroot/*

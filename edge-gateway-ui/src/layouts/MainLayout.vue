@@ -60,6 +60,11 @@
           </el-breadcrumb>
         </div>
         <div class="topbar-right">
+          <!-- 演示模式提示 -->
+          <div v-if="demoModeEnabled" class="demo-mode-badge" title="演示模式：只读">
+            <el-icon><Lock /></el-icon>
+            <span>演示模式</span>
+          </div>
           <div class="sys-time mono">{{ currentTime }}</div>
           <div class="version-tag">v1.0.0</div>
         </div>
@@ -82,11 +87,13 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getGatewayStatus } from '@/api/gateway'
 import type { GatewayStatus } from '@/types'
+import { getDemoModeStatus } from '@/api/system'
 
 const route = useRoute()
 const router = useRouter()
 const collapsed = ref(false)
 const gatewayOnline = ref(false)
+const demoModeEnabled = ref(false)
 const currentTime = ref('')
 const deviceCount = ref(0)
 const channelCount = ref(0)
@@ -142,10 +149,20 @@ const fetchStatus = async () => {
   }
 }
 
+const fetchDemoModeStatus = async () => {
+  try {
+    const res = await getDemoModeStatus()
+    demoModeEnabled.value = (res as { data?: { enabled?: boolean } })?.data?.enabled ?? false
+  } catch {
+    demoModeEnabled.value = false
+  }
+}
+
 onMounted(() => {
   updateTime()
   timer = setInterval(updateTime, 1000)
   fetchStatus()
+  fetchDemoModeStatus()
   statusTimer = setInterval(fetchStatus, 10000)
 })
 
@@ -276,6 +293,21 @@ onUnmounted(() => {
   background: var(--bg-panel);
 }
 .topbar-right { display: flex; align-items: center; gap: 16px; }
+
+/* 演示模式徽章 */
+.demo-mode-badge {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 10px;
+  background: rgba(255, 193, 7, 0.15);
+  border: 1px solid rgba(255, 193, 7, 0.3);
+  border-radius: 12px;
+  color: #ffc107;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  cursor: default;
+}
+
 .sys-time { font-size: 13px; color: var(--text-muted); letter-spacing: 0.04em; }
 .version-tag {
   font-size: 11px; color: var(--cyan); font-family: var(--font-mono);

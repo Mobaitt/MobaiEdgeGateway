@@ -29,6 +29,11 @@ public class GatewayOptions
     /// 数据库配置
     /// </summary>
     public DatabaseOptions Database { get; set; } = new();
+
+    /// <summary>
+    /// 演示模式配置
+    /// </summary>
+    public DemoModeOptions DemoMode { get; set; } = new();
 }
 
 /// <summary>
@@ -163,4 +168,23 @@ public class DatabaseOptions
     /// 说明：生产环境建议关闭，避免泄露敏感信息
     /// </summary>
     public bool EnableSensitiveDataLogging { get; set; } = false;
+}
+
+/// <summary>
+/// 演示模式配置选项
+/// </summary>
+public class DemoModeOptions
+{
+    /// <summary>
+    /// 是否启用演示模式
+    /// 默认值：false
+    /// 说明：启用后，所有修改操作（增删改）将被禁止，只能查询
+    /// </summary>
+    public bool Enabled { get; set; } = false;
+
+    /// <summary>
+    /// 演示模式提示消息
+    /// 默认值：演示模式下不允许修改数据
+    /// </summary>
+    public string Message { get; set; } = "演示模式下不允许修改数据，仅支持查询操作";
 }

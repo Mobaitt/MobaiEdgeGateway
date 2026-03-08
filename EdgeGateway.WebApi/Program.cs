@@ -15,6 +15,9 @@ var builder = WebApplication.CreateBuilder(args);
 var gatewayOptions = builder.Configuration.GetSection("GatewayOptions").Get<GatewayOptions>() ?? new GatewayOptions();
 builder.Services.Configure<GatewayOptions>(builder.Configuration.GetSection("GatewayOptions"));
 
+// 注册演示模式配置（从根目录读取）
+builder.Services.Configure<DemoModeOptions>(builder.Configuration.GetSection("DemoMode"));
+
 // 从配置获取数据库连接字符串
 var dbPath = "gateway.db";
 if (!string.IsNullOrEmpty(builder.Configuration["Database:ConnectionString"]))
@@ -37,7 +40,7 @@ builder.Services.AddEdgeGateway(dbPath: dbPath);
 builder.Services.AddControllers()
     .AddJsonOptions(opt =>
     {
-        // 返回JSON使用驼峰命名
+        // 返回 JSON 使用驼峰命名
         opt.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
         // 枚举序列化为字符串（方便前端展示）
         opt.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
@@ -55,7 +58,7 @@ builder.Services.AddSwaggerGen(opt =>
         Contact     = new OpenApiContact { Name = "EdgeGateway", Email = "admin@edge.local" }
     });
 
-    // 读取XML注释（需要在csproj中启用 GenerateDocumentationFile）
+    // 读取 XML 注释（需要在 csproj 中启用 GenerateDocumentationFile）
     var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
     var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
     if (File.Exists(xmlPath))
@@ -80,22 +83,31 @@ await app.Services.InitializeDatabaseAsync();
 // ========== 全局异常中间件（最先注册）==========
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
-// ========== Swagger UI（开发/生产都开放，可按需限制）==========
-app.UseSwagger();
-app.UseSwaggerUI(opt =>
-{
-    opt.SwaggerEndpoint("/swagger/v1/swagger.json", "EdgeGateway API v1");
-    opt.RoutePrefix  = string.Empty; // 访问根路径直接打开Swagger
-    opt.DocumentTitle = "边缘采集网关 API 文档";
-});
+// ========== 演示模式中间件（在 CORS 之前，拦截修改请求）==========
+app.UseMiddleware<DemoModeMiddleware>();
 
+// ========== CORS ==========
 app.UseCors("AllowAll");
+
+// ========== 启用静态文件服务（wwwroot）- 必须在 Swagger 和 Routing 之前 ==========
+// 明确指定 wwwroot 目录
+app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "wwwroot")) });
+app.UseStaticFiles(new StaticFileOptions { FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "wwwroot")) });
 
 // ========== 启用 ASP.NET Core WebSocket 支持（必须在自定义 WebSocket 中间件之前） ==========
 app.UseWebSockets();
 
 // ========== WebSocket 服务端中间件（必须在 UseRouting 之前） ==========
 app.UseWebSocketServer();
+
+// ========== Swagger UI（在静态文件之后，Routing 之前）==========
+app.UseSwagger();
+app.UseSwaggerUI(opt =>
+{
+    opt.SwaggerEndpoint("/swagger/v1/swagger.json", "EdgeGateway API v1");
+    opt.RoutePrefix = "swagger"; // Swagger 在 /swagger 路径
+    opt.DocumentTitle = "边缘采集网关 API 文档";
+});
 
 app.UseRouting();
 
@@ -104,7 +116,7 @@ app.UseRouting();
 app.Use(async (context, next) =>
 {
     var path = context.Request.Path.Value;
-    
+
     // 检查是否是 HTTP 服务端模式的请求
     if (!string.IsNullOrEmpty(path) && path.StartsWith("/api/http-data", StringComparison.OrdinalIgnoreCase))
     {
@@ -112,22 +124,30 @@ app.Use(async (context, next) =>
         await httpListenerService.HandleRequestAsync(context);
         return;
     }
-    
+
     await next();
 });
 
 app.MapControllers();
 
-// 根路径重定向到Swagger
-app.MapGet("/api", () => Results.Redirect("/")).ExcludeFromDescription();
+// ========== SPA 回退路由（必须在 MapControllers 之后，处理 Vue Router 前端路由）==========
+// 所有非 API 请求且不是静态文件的，都返回 index.html
+// 排除：/api/*、/swagger/*、/ws
+app.MapFallbackToFile("index.html", new StaticFileOptions
+{
+    FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "wwwroot"))
+});
+
+// 根路径重定向到 Swagger（可选）
+app.MapGet("/api", () => Results.Redirect("/swagger")).ExcludeFromDescription();
 
 app.Run();
 
 // =============================================
-// 后台宿主服务（复用Host项目的实现）
+// 后台宿主服务（复用 Host 项目的实现）
 // =============================================
 /// <summary>
-/// 网关后台宿主服务，在Web Host生命周期内并行运行采集任务
+/// 网关后台宿主服务，在 Web Host 生命周期内并行运行采集任务
 /// </summary>
 public class GatewayHostedService : BackgroundService
 {
@@ -147,7 +167,7 @@ public class GatewayHostedService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("网关采集服务启动（Web模式）");
+        _logger.LogInformation("网关采集服务启动（Web 模式）");
         await _sendService.InitializeChannelsAsync(stoppingToken);
         await _collectionService.StartAllAsync(stoppingToken);
         await Task.Delay(Timeout.Infinite, stoppingToken);
