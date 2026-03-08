@@ -1,4 +1,6 @@
 ﻿using EdgeGateway.Domain.Entities;
+using EdgeGateway.Domain.Enums;
+using EdgeGateway.Domain.Interfaces;
 
 namespace EdgeGateway.Domain.Interfaces;
 
@@ -7,11 +9,6 @@ namespace EdgeGateway.Domain.Interfaces;
 /// </summary>
 public class VirtualNodeCalculationResult
 {
-    /// <summary>
-    /// 设备ID
-    /// </summary>
-    public int DeviceId { get; set; }
-
     /// <summary>
     /// 是否计算成功
     /// </summary>
@@ -85,16 +82,37 @@ public class VirtualNodeCalculationResult
 public interface IVirtualNodeEngine
 {
     /// <summary>
+    /// 设置虚拟数据点列表
+    /// </summary>
+    void SetVirtualPoints(IEnumerable<VirtualDataPoint> virtualPoints);
+
+    /// <summary>
     /// 刷新缓存
     /// </summary>
     Task RefreshCacheAsync();
 
     /// <summary>
+    /// 计算指定设备下的所有启用的虚拟数据点
+    /// </summary>
+    /// <param name="deviceId">设备 ID</param>
+    /// <returns>计算结果列表</returns>
+    List<VirtualNodeCalculationResult> CalculateDevice(int deviceId);
+
+    /// <summary>
     /// 计算所有启用的虚拟数据点（从快照获取依赖数据）
     /// </summary>
-    /// <param name="cancellationToken">取消令牌</param>
     /// <returns>计算结果列表</returns>
-    Task<List<VirtualNodeCalculationResult>> CalculateAllAsync(CancellationToken cancellationToken = default);
+    List<VirtualNodeCalculationResult> CalculateAll();
+
+    /// <summary>
+    /// 设置获取快照数据的委托
+    /// </summary>
+    void SetDataSnapshotGetter(Func<string, object?> getDataSnapshot);
+
+    /// <summary>
+    /// 获取虚拟数据点的设备 ID
+    /// </summary>
+    int GetDeviceId(int virtualDataPointId);
 
     /// <summary>
     /// 获取虚拟数据点的依赖 Tags

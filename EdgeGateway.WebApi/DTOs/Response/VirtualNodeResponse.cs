@@ -44,12 +44,6 @@ public class VirtualDataPointResponse
     /// <summary>依赖的 Tags</summary>
     public List<string> DependencyTags { get; set; } = new();
 
-    /// <summary>上次计算时间</summary>
-    public DateTime? LastCalculationTime { get; set; }
-
-    /// <summary>上次计算结果</summary>
-    public object? LastValue { get; set; }
-
     /// <summary>创建时间</summary>
     public DateTime CreatedAt { get; set; }
 
@@ -82,8 +76,6 @@ public class VirtualDataPointResponse
             Unit = point.Unit,
             IsEnabled = point.IsEnabled,
             DependencyTags = dependencyTags,
-            LastCalculationTime = point.LastCalculationTime,
-            LastValue = point.LastValue,
             CreatedAt = point.CreatedAt
         };
     }

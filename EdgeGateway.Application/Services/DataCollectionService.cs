@@ -2,7 +2,9 @@ using System.Collections.Concurrent;
 using EdgeGateway.Domain.Entities;
 using EdgeGateway.Domain.Interfaces;
 using EdgeGateway.Domain.Options;
+using EdgeGateway.Infrastructure.Data;
 using EdgeGateway.Infrastructure.VirtualNodes;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -115,36 +117,59 @@ public class DataCollectionService
     /// <summary>
     /// 启动数据聚合器（后台任务，按窗口间隔批量推送全量数据）
     /// </summary>
-    public Task StartAggregatorAsync(CancellationToken cancellationToken)
+    public async Task StartAggregatorAsync(CancellationToken cancellationToken)
+    {
+        _aggregatorCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _aggregatorTask = Task.Run(async () =>
+        {
+            try
+            {
+                while (!_aggregatorCts.Token.IsCancellationRequested)
+                {
+                    await Task.Delay(_aggregateWindowMs, _aggregatorCts.Token);
+                    await FlushSnapshotAsync(_aggregatorCts.Token);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogDebug("数据聚合器已停止");
+            }
+        }, _aggregatorCts.Token);
+
+        // 加载虚拟数据点并设置到引擎
+        await LoadAndSetVirtualPointsAsync();
+
+        // 启动虚拟节点定时计算任务（每秒执行一次）
+        StartVirtualNodeCalculator(cancellationToken);
+
+        _logger.LogInformation("数据聚合器已启动，窗口间隔：{WindowMs}ms", _aggregateWindowMs);
+    }
+
+    /// <summary>
+    /// 从数据库加载虚拟数据点并设置到引擎
+    /// </summary>
+    private async Task LoadAndSetVirtualPointsAsync()
     {
         try
         {
-            _aggregatorCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            _aggregatorTask = Task.Run(async () =>
+            using var scope = _serviceProvider.CreateScope();
+            var context = scope.ServiceProvider.GetRequiredService<GatewayDbContext>();
+
+            var virtualPoints = await context.VirtualDataPoints
+                .Include(p => p.Device)
+                .Where(p => p.IsEnabled)
+                .ToListAsync();
+
+            if (_virtualNodeEngine is VirtualNodeEngine engine)
             {
-                try
-                {
-                    while (!_aggregatorCts.Token.IsCancellationRequested)
-                    {
-                        await Task.Delay(_aggregateWindowMs, _aggregatorCts.Token);
-                        await FlushSnapshotAsync(_aggregatorCts.Token);
-                    }
-                }
-                catch (OperationCanceledException)
-                {
-                    _logger.LogDebug("数据聚合器已停止");
-                }
-            }, _aggregatorCts.Token);
+                engine.SetVirtualPoints(virtualPoints);
+            }
 
-            // 启动虚拟节点定时计算任务（每秒执行一次）
-            StartVirtualNodeCalculator(cancellationToken);
-
-            _logger.LogInformation("数据聚合器已启动，窗口间隔：{WindowMs}ms", _aggregateWindowMs);
-            return Task.CompletedTask;
+            _logger.LogInformation("虚拟数据点已加载：{Count} 个", virtualPoints.Count);
         }
-        catch (Exception exception)
+        catch (Exception ex)
         {
-            return Task.FromException(exception);
+            _logger.LogError(ex, "加载虚拟数据点失败");
         }
     }
 
@@ -154,33 +179,36 @@ public class DataCollectionService
     private void StartVirtualNodeCalculator(CancellationToken cancellationToken)
     {
         _virtualNodeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        _virtualNodeTask = Task.Run(async () =>
+        _virtualNodeTask = Task.Run(() =>
         {
             try
             {
                 while (!_virtualNodeCts.Token.IsCancellationRequested)
                 {
-                    await Task.Delay(1000, _virtualNodeCts.Token);
+                    Task.Delay(1000, _virtualNodeCts.Token).Wait();
 
                     try
                     {
                         // 计算所有虚拟节点（从快照获取依赖数据）
-                        var results = await _virtualNodeEngine.CalculateAllAsync(_virtualNodeCts.Token);
+                        var results = _virtualNodeEngine.CalculateAll();
 
                         // 将计算结果通过 SetDataSnapshot 更新回快照
                         foreach (var result in results.Where(r => r.Success))
                         {
                             if (!string.IsNullOrEmpty(result.VirtualDataPointTag))
                             {
+                                // 从虚拟节点引擎获取设备 ID
+                                var deviceId = _virtualNodeEngine.GetDeviceId(result.VirtualDataPointId);
+
                                 var virtualData = new CollectedData
                                 {
                                     DataPointId = -result.VirtualDataPointId,
                                     Tag = result.VirtualDataPointTag,
-                                    DeviceId = result.DeviceId, // 临时使用虚拟点 ID
+                                    DeviceId = deviceId,
                                     DeviceName = "VirtualNode",
                                     Value = result.Value,
                                     Quality = result.Quality,
-                                    Timestamp = result.Timestamp
+                                    Timestamp = DateTime.UtcNow
                                 };
                                 SetDataSnapshot(virtualData);
                             }

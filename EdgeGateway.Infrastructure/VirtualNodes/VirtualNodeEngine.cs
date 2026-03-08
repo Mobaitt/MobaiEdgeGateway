@@ -2,11 +2,7 @@
 using EdgeGateway.Domain.Entities;
 using EdgeGateway.Domain.Enums;
 using EdgeGateway.Domain.Interfaces;
-using EdgeGateway.Domain.Options;
-using EdgeGateway.Infrastructure.Data;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using NCalc;
 
 namespace EdgeGateway.Infrastructure.VirtualNodes;
@@ -17,29 +13,23 @@ namespace EdgeGateway.Infrastructure.VirtualNodes;
 /// </summary>
 public class VirtualNodeEngine : IVirtualNodeEngine
 {
-    private readonly IDbContextFactory<GatewayDbContext> _dbContextFactory;
     private readonly ILogger<VirtualNodeEngine> _logger;
     private Func<string, object?>? _getDataSnapshot; // 获取快照数据的委托
 
     // 虚拟数据点缓存
     private readonly ConcurrentDictionary<int, VirtualDataPoint> _virtualPointCache = new();
 
-    // 设备 ID -> 该设备下的虚拟数据点 ID 列表
-    private readonly ConcurrentDictionary<int, List<int>> _deviceVirtualPointIndex = new();
-
     // 依赖关系缓存：VirtualDataPointId -> 依赖的 Tag 列表
     private readonly ConcurrentDictionary<int, List<string>> _dependencyCache = new();
 
     public VirtualNodeEngine(
-        IDbContextFactory<GatewayDbContext> dbContextFactory,
         ILogger<VirtualNodeEngine> logger,
         Func<string, object?>? getDataSnapshot = null)
     {
-        _dbContextFactory = dbContextFactory;
         _logger = logger;
         _getDataSnapshot = getDataSnapshot;
     }
-    
+
     /// <summary>
     /// 设置获取快照数据的委托（由 DataCollectionService 设置）
     /// </summary>
@@ -49,57 +39,48 @@ public class VirtualNodeEngine : IVirtualNodeEngine
     }
 
     /// <summary>
-    /// 加载缓存
+    /// 获取虚拟数据点的设备 ID
     /// </summary>
-    private async Task LoadCacheAsync()
+    public int GetDeviceId(int virtualDataPointId)
     {
-        if (_virtualPointCache.Any())
-            return;
+        if (_virtualPointCache.TryGetValue(virtualDataPointId, out var point))
+        {
+            return point.DeviceId;
+        }
+        return 0;
+    }
 
-        await using var context = await _dbContextFactory.CreateDbContextAsync();
-
-        // 加载虚拟数据点
-        var virtualPoints = await context.VirtualDataPoints
-            .Include(p => p.Device)
-            .Where(p => p.IsEnabled)
-            .ToListAsync();
+    /// <summary>
+    /// 设置虚拟数据点列表（由外部加载后设置）
+    /// </summary>
+    public void SetVirtualPoints(IEnumerable<VirtualDataPoint> virtualPoints)
+    {
+        _virtualPointCache.Clear();
+        _dependencyCache.Clear();
 
         foreach (var point in virtualPoints)
         {
             _virtualPointCache[point.Id] = point;
-
-            // 构建设备索引
-            _deviceVirtualPointIndex.AddOrUpdate(
-                point.DeviceId,
-                new List<int> { point.Id },
-                (_, existing) =>
-                {
-                    if (!existing.Contains(point.Id))
-                        existing.Add(point.Id);
-                    return existing;
-                });
 
             // 构建依赖关系缓存
             var dependencies = ParseDependencies(point.Expression);
             _dependencyCache[point.Id] = dependencies;
         }
 
-        _logger.LogInformation("虚拟节点缓存已加载：{_pointCount} 个虚拟数据点，{_deviceCount} 个设备有虚拟节点",
-            _virtualPointCache.Count, _deviceVirtualPointIndex.Count);
+        _logger.LogInformation("虚拟数据点已设置：{Count} 个", virtualPoints.Count());
     }
 
     /// <summary>
     /// 刷新缓存
     /// </summary>
-    public async Task RefreshCacheAsync()
+    public Task RefreshCacheAsync()
     {
         _virtualPointCache.Clear();
-        _deviceVirtualPointIndex.Clear();
         _dependencyCache.Clear();
-        await LoadCacheAsync();
+        return Task.CompletedTask;
     }
 
-    private async Task<VirtualNodeCalculationResult> CalculateAsync(VirtualDataPoint virtualDataPoint, CancellationToken cancellationToken = default)
+    private VirtualNodeCalculationResult Calculate(VirtualDataPoint virtualDataPoint)
     {
         try
         {
@@ -132,26 +113,11 @@ public class VirtualNodeEngine : IVirtualNodeEngine
             // 执行计算
             var result = ExecuteCalculation(virtualDataPoint, dependencyValues);
 
-            // 更新虚拟数据点的最后计算结果到数据库
-            await using var updateContext = await _dbContextFactory.CreateDbContextAsync();
-            var pointToUpdate = await updateContext.VirtualDataPoints.FindAsync(virtualDataPoint.Id);
-            if (pointToUpdate != null)
-            {
-                pointToUpdate.LastValue = result.Value;
-                pointToUpdate.LastCalculationTime = DateTime.UtcNow;
-                await updateContext.SaveChangesAsync(cancellationToken);
-            }
-
             // 设置虚拟数据点 ID 和 Tag
             result.VirtualDataPointId = virtualDataPoint.Id;
             result.VirtualDataPointTag = virtualDataPoint.Tag;
-            result.DeviceId = virtualDataPoint.DeviceId;
 
             return result;
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
         }
         catch (Exception ex)
         {
@@ -160,23 +126,21 @@ public class VirtualNodeEngine : IVirtualNodeEngine
         }
     }
 
-    public async Task<List<VirtualNodeCalculationResult>> CalculateDeviceAsync(int deviceId, CancellationToken cancellationToken = default)
+    public List<VirtualNodeCalculationResult> CalculateDevice(int deviceId)
     {
-        await LoadCacheAsync();
-
-        if (!_deviceVirtualPointIndex.TryGetValue(deviceId, out var virtualPointIds))
+        if (!_virtualPointCache.Any())
         {
-            _logger.LogWarning("设备 ID={DeviceId} 没有虚拟数据点", deviceId);
+            _logger.LogWarning("虚拟数据点缓存为空");
             return new List<VirtualNodeCalculationResult>();
         }
 
         var results = new List<VirtualNodeCalculationResult>();
 
-        foreach (var pointId in virtualPointIds)
+        foreach (var point in _virtualPointCache.Values)
         {
-            if (_virtualPointCache.TryGetValue(pointId, out var point))
+            if (point.DeviceId == deviceId)
             {
-                var result = await CalculateAsync(point, cancellationToken);
+                var result = Calculate(point);
                 results.Add(result);
             }
         }
@@ -184,16 +148,19 @@ public class VirtualNodeEngine : IVirtualNodeEngine
         return results;
     }
 
-    public async Task<List<VirtualNodeCalculationResult>> CalculateAllAsync(CancellationToken cancellationToken = default)
+    public List<VirtualNodeCalculationResult> CalculateAll()
     {
-        await LoadCacheAsync();
+        if (!_virtualPointCache.Any())
+        {
+            _logger.LogWarning("虚拟数据点缓存为空");
+            return new List<VirtualNodeCalculationResult>();
+        }
 
-        var virtualPoints = _virtualPointCache.Values.ToList();
         var results = new List<VirtualNodeCalculationResult>();
 
-        foreach (var point in virtualPoints)
+        foreach (var point in _virtualPointCache.Values)
         {
-            var result = await CalculateAsync(point, cancellationToken);
+            var result = Calculate(point);
             results.Add(result);
         }
 
@@ -230,7 +197,7 @@ public class VirtualNodeEngine : IVirtualNodeEngine
                 dependencies.Add(tag);
             }
         }
-        
+
         return dependencies.Distinct().ToList();
     }
 
@@ -253,7 +220,7 @@ public class VirtualNodeEngine : IVirtualNodeEngine
                 _ => CalculateCustomExpression(virtualPoint.Expression, dependencyValues)
             };
 
-            // 四舍五入到指定小数位
+            // 四舍五入到 4 位小数
             if (result is double doubleResult)
             {
                 result = Math.Round(doubleResult, 4);
@@ -299,7 +266,6 @@ public class VirtualNodeEngine : IVirtualNodeEngine
 
     private object? CalculateWeightedAverage(Dictionary<string, object?> values, string expression)
     {
-        // 简化处理：假设表达式格式为 "tag1*weight1 + tag2*weight2 + ..."
         return CalculateCustomExpression(expression, values);
     }
 
@@ -310,10 +276,10 @@ public class VirtualNodeEngine : IVirtualNodeEngine
 
         // 处理表达式：将带点号的 Tag 名用方括号包裹，使 NCalc 能正确识别
         var processedExpression = expression;
-        
+
         // 按长度降序排序，避免短 Tag 名替换长 Tag 名的问题
         var sortedTags = values.Keys.OrderByDescending(t => t.Length).ToList();
-        
+
         foreach (var tag in sortedTags)
         {
             // 将表达式中的 Tag 名替换为方括号格式 [Tag.Name]

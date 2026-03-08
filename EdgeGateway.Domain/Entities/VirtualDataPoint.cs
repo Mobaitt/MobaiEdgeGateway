@@ -42,20 +42,6 @@ public class VirtualDataPoint
     /// <summary>表达式中依赖的数据点 Tags（JSON 数组格式，用于快速查找依赖）</summary>
     public string DependencyTags { get; set; } = "[]";
 
-    /// <summary>上次计算时间</summary>
-    public DateTime? LastCalculationTime { get; set; }
-
-    /// <summary>上次计算结果（JSON 格式存储）</summary>
-    public string? LastValueJson { get; set; }
-
-    /// <summary>上次计算结果（对象形式，不映射到数据库）</summary>
-    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
-    public object? LastValue
-    {
-        get => LastValueJson != null ? System.Text.Json.JsonSerializer.Deserialize<object>(LastValueJson) : null;
-        set => LastValueJson = value != null ? System.Text.Json.JsonSerializer.Serialize(value) : null;
-    }
-
     /// <summary>创建时间</summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
