@@ -77,33 +77,3 @@ public class UpdateRuleRequest
     /// <summary>默认值</summary>
     public object? DefaultValue { get; set; }
 }
-
-/// <summary>
-/// 测试规则请求 DTO
-/// </summary>
-public class TestRuleRequest
-{
-    /// <summary>规则配置</summary>
-    public DataPointRule Rule { get; set; } = null!;
-
-    /// <summary>测试数据</summary>
-    public TestRuleData TestData { get; set; } = null!;
-}
-
-/// <summary>
-/// 测试规则数据
-/// </summary>
-public class TestRuleData
-{
-    /// <summary>数据点 ID</summary>
-    public int DataPointId { get; set; }
-
-    /// <summary>设备 ID</summary>
-    public int DeviceId { get; set; }
-
-    /// <summary>Tag</summary>
-    public string Tag { get; set; } = string.Empty;
-
-    /// <summary>测试值</summary>
-    public object? Value { get; set; }
-}

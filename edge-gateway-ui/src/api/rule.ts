@@ -150,17 +150,3 @@ export function toggleRule(id: number, isEnabled: boolean) {
     data: isEnabled
   })
 }
-
-/**
- * 测试规则
- */
-export function testRule(rule: CreateRuleRequest, testData: TestRuleData) {
-  return request<RuleExecutionResult>({
-    url: '/rules/test',
-    method: 'post',
-    data: {
-      rule,
-      testData
-    }
-  })
-}

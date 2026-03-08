@@ -61,7 +61,6 @@
             <el-button size="small" text @click="openEditDialog(row)">
               <el-icon><Edit /></el-icon> 编辑
             </el-button>
-            <el-button size="small" text @click="openTestDialog(row)">测试</el-button>
             <el-switch
               v-model="row.isEnabled"
               size="small"
@@ -88,15 +87,6 @@
       @show-help="showConfigHelp"
     />
 
-    <!-- 测试对话框 -->
-    <RuleTestDialog
-      v-model="testDialogVisible"
-      :rule="currentRule"
-      :testing="testing"
-      @test="runTest"
-      @close="handleTestDialogClose"
-    />
-
     <!-- 配置帮助对话框 -->
     <RuleHelpDialog
       v-model="helpDialogVisible"
@@ -111,26 +101,21 @@ import {ElMessage, ElMessageBox} from 'element-plus'
 import {Delete, Edit, Plus} from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import RuleDialog from '@/dialogs/rule/RuleDialog.vue'
-import RuleTestDialog from '@/dialogs/rule/RuleTestDialog.vue'
 import RuleHelpDialog from '@/dialogs/rule/RuleHelpDialog.vue'
 import type {CreateRuleRequest, Rule, RuleType, UpdateRuleRequest} from '@/types/rule'
 import type {DataPoint, Device} from '@/types/device'
-import {createRule, deleteRule as deleteRuleApi, getRules, testRule, toggleRule, updateRule} from '@/api/rule'
+import {createRule, deleteRule as deleteRuleApi, getRules, toggleRule, updateRule} from '@/api/rule'
 import {getAllDataPoints, getDevices} from '@/api/device'
 
 const loading = ref(false)
 const submitting = ref(false)
-const testing = ref(false)
 const rules = ref<Rule[]>([])
 const devices = ref<Device[]>([])
 const dataPoints = ref<DataPoint[]>([])
 const filterType = ref<RuleType | null>(null)
 const dialogVisible = ref(false)
-const testDialogVisible = ref(false)
 const helpDialogVisible = ref(false)
 const editingRule = ref<Rule | null>(null)
-const currentRule = ref<Rule | null>(null)
-const testResult = ref('')
 
 const form = reactive<CreateRuleRequest>({
   name: '',
@@ -195,12 +180,6 @@ const openEditDialog = (rule: Rule) => {
   dialogVisible.value = true
 }
 
-const openTestDialog = (rule: Rule) => {
-  currentRule.value = rule
-  testResult.value = ''
-  testDialogVisible.value = true
-}
-
 const handleSubmit = async (data: CreateRuleRequest) => {
   submitting.value = true
   try {
@@ -248,43 +227,12 @@ const deleteRule = async (id: number) => {
   }
 }
 
-const runTest = async (value: string) => {
-  if (!currentRule.value) return
-
-  testing.value = true
-  try {
-    const result = await testRule(
-      {
-        ...form,
-        ruleType: currentRule.value.ruleType,
-        ruleConfig: currentRule.value.ruleConfig
-      },
-      {
-        dataPointId: currentRule.value.dataPointIds?.[0] || 0,
-        deviceId: currentRule.value.deviceId || 0,
-        tag: 'test',
-        value: parseFloat(value) || value
-      }
-    )
-    testResult.value = JSON.stringify(result, null, 2)
-  } catch (error) {
-    testResult.value = '测试失败：' + error
-  } finally {
-    testing.value = false
-  }
-}
-
 const showConfigHelp = () => {
   helpDialogVisible.value = true
 }
 
 const handleDialogClose = () => {
   editingRule.value = null
-}
-
-const handleTestDialogClose = () => {
-  currentRule.value = null
-  testResult.value = ''
 }
 
 const handleHelpDialogClose = () => {}

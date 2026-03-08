@@ -204,12 +204,4 @@ public class RuleManagementService
 
         _logger.LogInformation("规则 [{RuleName}] 已{Status}", rule.Name, isEnabled ? "启用" : "禁用");
     }
-
-    /// <summary>
-    /// 测试规则执行（不保存）
-    /// </summary>
-    public async Task<RuleExecutionResult> TestRuleAsync(DataPointRule rule, CollectedData testData)
-    {
-        return await _ruleEngine.ExecuteRulesAsync(testData);
-    }
 }

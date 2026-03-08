@@ -18,6 +18,9 @@
       <el-tab-pane label="限制规则 (Limit)">
         <pre>{{ limitConfigExample }}</pre>
       </el-tab-pane>
+      <el-tab-pane label="计算规则 (Calculation)">
+        <pre>{{ calculationConfigExample }}</pre>
+      </el-tab-pane>
     </el-tabs>
   </el-dialog>
 </template>
@@ -71,6 +74,42 @@ const transformConfigExample = `{
 const limitConfigExample = `{
   "MinValue": 0,            // 最小值限制
   "MaxValue": 100           // 最大值限制
+}`
+
+const calculationConfigExample = `{
+  "CalculationType": 0,     // 0=Custom 自定义计算
+  "Expression": "a + b * c" // 自定义表达式
+}
+
+// 求和计算
+{
+  "CalculationType": 1,     // 1=Sum
+  "SourceDataPointTags": ["tag1", "tag2", "tag3"]
+}
+
+// 平均值计算
+{
+  "CalculationType": 2,     // 2=Average
+  "SourceDataPointTags": ["temp1", "temp2", "temp3"]
+}
+
+// 最大值计算
+{
+  "CalculationType": 3,     // 3=Max
+  "SourceDataPointTags": ["sensor1", "sensor2", "sensor3"]
+}
+
+// 最小值计算
+{
+  "CalculationType": 4,     // 4=Min
+  "SourceDataPointTags": ["pressure1", "pressure2"]
+}
+
+// 加权平均计算
+{
+  "CalculationType": 7,     // 7=WeightedAverage
+  "SourceDataPointTags": ["value1", "value2", "value3"],
+  "Weights": [0.3, 0.5, 0.2]  // 权重列表，总和应为 1
 }`
 
 const handleCancel = () => {

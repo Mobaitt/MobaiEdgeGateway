@@ -224,45 +224,4 @@ public class RulesController : ControllerBase
             return StatusCode(500, ApiResponse.Fail($"规则切换失败：{ex.Message}"));
         }
     }
-
-    /// <summary>
-    /// 测试规则
-    /// </summary>
-    [HttpPost("test")]
-    [ProducesResponseType(typeof(ApiResponse<RuleExecutionResultResponse>), 200)]
-    public async Task<IActionResult> TestRule([FromBody] TestRuleRequest request)
-    {
-        try
-        {
-            var testData = new EdgeGateway.Domain.Interfaces.CollectedData
-            {
-                DataPointId = request.TestData.DataPointId,
-                DeviceId = request.TestData.DeviceId,
-                Tag = request.TestData.Tag,
-                DeviceName = "TestDevice",
-                Value = request.TestData.Value,
-                Quality = EdgeGateway.Domain.Interfaces.DataQuality.Good,
-                Timestamp = DateTime.UtcNow
-            };
-
-            var result = await _ruleService.TestRuleAsync(request.Rule, testData);
-
-            var response = new RuleExecutionResultResponse
-            {
-                Success = result.Success,
-                Value = result.Value,
-                Quality = result.Quality,
-                ErrorMessage = result.ErrorMessage,
-                TriggeredRules = result.TriggeredRules,
-                ShouldReject = result.ShouldReject
-            };
-
-            return Ok(ApiResponse<RuleExecutionResultResponse>.Ok(response, result.Success ? "测试成功" : "测试失败"));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "规则测试失败");
-            return StatusCode(500, ApiResponse<RuleExecutionResultResponse>.Fail($"规则测试失败：{ex.Message}"));
-        }
-    }
 }
