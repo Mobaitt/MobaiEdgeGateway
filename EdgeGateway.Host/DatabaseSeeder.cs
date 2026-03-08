@@ -58,7 +58,7 @@ public class DatabaseSeeder
                     Name = $"Modbus 设备{i:D3}",
                     Code = $"MODBUS_DEVICE_{i:D3}",
                     Description = $"Modbus 测试设备{i:D3} (端口:{port})",
-                    Protocol = CollectionProtocol.Modbus,
+                    Protocol = CollectionProtocol.Simulator,
                     Address = "127.0.0.1",
                     Port = port,
                     PollingIntervalMs = 1000,
