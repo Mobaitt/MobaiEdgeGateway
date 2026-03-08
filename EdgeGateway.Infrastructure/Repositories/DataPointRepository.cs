@@ -24,6 +24,48 @@ public class DataPointRepository : IDataPointRepository
             .Where(dp => dp.DeviceId == deviceId)
             .ToListAsync();
 
+    /// <summary>分页查询设备数据点</summary>
+    public async Task<(List<DataPoint> Items, int Total)> GetPagedByDeviceIdAsync(int deviceId, int page, int pageSize, string? search = null, int? dataType = null, bool? isEnabled = null)
+    {
+        var query = _db.DataPoints
+            .Where(dp => dp.DeviceId == deviceId)
+            .AsQueryable();
+
+        // 搜索过滤
+        if (!string.IsNullOrEmpty(search))
+        {
+            query = query.Where(dp =>
+                dp.Tag.Contains(search) ||
+                dp.Name.Contains(search) ||
+                dp.Address.Contains(search) ||
+                dp.Description!.Contains(search));
+        }
+
+        // 数据类型过滤
+        if (dataType.HasValue)
+        {
+            query = query.Where(dp => (int)dp.DataType == dataType.Value);
+        }
+
+        // 启用状态过滤
+        if (isEnabled.HasValue)
+        {
+            query = query.Where(dp => dp.IsEnabled == isEnabled.Value);
+        }
+
+        // 获取总数
+        var total = await query.CountAsync();
+
+        // 分页查询
+        var items = await query
+            .OrderByDescending(dp => dp.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return (items, total);
+    }
+
     /// <inheritdoc/>
     public async Task<DataPoint> AddAsync(DataPoint dataPoint)
     {

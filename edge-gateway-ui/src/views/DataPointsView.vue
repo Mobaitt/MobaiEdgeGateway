@@ -1,5 +1,5 @@
 <template>
-  <div class="datapoints-view page-enter">
+  <div class="datapoints-view page-content page-enter">
     <!-- 页面头部 -->
     <div class="page-header">
       <div class="header-left">
@@ -33,51 +33,53 @@
       </div>
     </div>
 
-    <!-- 工具栏 -->
-    <div class="toolbar">
-      <div class="toolbar-left">
-        <el-input
-          v-model="searchText" placeholder="搜索 Tag / 名称 / 地址..."
-          prefix-icon="Search" clearable style="width: 280px"
-          @input="filterDataPoints"
-        />
-        <el-select v-model="filterDataType" placeholder="数据类型" clearable style="width: 140px" @change="filterDataPoints">
-          <el-option
-            v-for="o in DataValueTypeOptions"
-            :key="o.value" :label="o.label" :value="o.value"
+    <!-- 主内容区域 -->
+    <div class="main-content">
+      <!-- 工具栏 -->
+      <div class="toolbar">
+        <div class="toolbar-left">
+          <el-input
+            v-model="searchText" placeholder="搜索 Tag / 名称 / 地址..."
+            prefix-icon="Search" clearable style="width: 280px"
+            @change="handleFilterChange"
           />
-        </el-select>
-        <el-select v-model="filterQuality" placeholder="数据质量" clearable style="width: 140px" @change="filterDataPoints">
-          <el-option label="Good" value="Good" />
-          <el-option label="Bad" value="Bad" />
-          <el-option label="Uncertain" value="Uncertain" />
-        </el-select>
-        <el-select v-model="filterType" placeholder="数据类型" clearable style="width: 120px" @change="filterDataPoints">
-          <el-option label="全部" value="" />
-          <el-option label="普通数据点" value="normal" />
-          <el-option label="虚拟数据点" value="virtual" />
-        </el-select>
+          <el-select v-model="filterDataType" placeholder="数据类型" clearable style="width: 140px" @change="handleFilterChange">
+            <el-option
+              v-for="o in DataValueTypeOptions"
+              :key="o.value" :label="o.label" :value="o.value"
+            />
+          </el-select>
+          <el-select v-model="filterQuality" placeholder="数据质量" clearable style="width: 140px" @change="handleFilterChange">
+            <el-option label="Good" value="Good" />
+            <el-option label="Bad" value="Bad" />
+            <el-option label="Uncertain" value="Uncertain" />
+          </el-select>
+          <el-select v-model="filterType" placeholder="数据类型" clearable style="width: 120px" @change="handleFilterChange">
+            <el-option label="全部" value="" />
+            <el-option label="普通数据点" value="normal" />
+            <el-option label="虚拟数据点" value="virtual" />
+          </el-select>
+        </div>
+        <div class="toolbar-right">
+          <el-button :icon="Refresh" circle @click="refreshData" :loading="refreshing" title="刷新数据" />
+          <el-dropdown split-button type="primary" @click="openCreate">
+            <el-icon><Plus /></el-icon>
+            新增数据点
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item @click="openCreate">普通数据点</el-dropdown-item>
+                <el-dropdown-item @click="openVirtualNodeCreate">
+                  <el-icon><Cpu /></el-icon> 虚拟节点
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
       </div>
-      <div class="toolbar-right">
-        <el-button :icon="Refresh" circle @click="refreshData" :loading="refreshing" title="刷新数据" />
-        <el-dropdown split-button type="primary" @click="openCreate">
-          <el-icon><Plus /></el-icon>
-          新增数据点
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item @click="openCreate">普通数据点</el-dropdown-item>
-              <el-dropdown-item @click="openVirtualNodeCreate">
-                <el-icon><Cpu /></el-icon> 虚拟节点
-              </el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
-      </div>
-    </div>
 
-    <!-- 表格 -->
-    <div class="table-wrap">
-      <el-table :data="filteredDataPoints" v-loading="loading" row-key="id" :default-sort="{ prop: 'createdAt', order: 'descending' }">
+      <!-- 表格 -->
+      <div class="table-wrap">
+        <el-table :data="dataPoints" v-loading="loading" row-key="id" :default-sort="{ prop: 'createdAt', order: 'descending' }">
         <el-table-column type="index" label="#" width="50" align="center" />
 
         <el-table-column prop="tag" label="Tag" min-width="200" sortable>
@@ -155,6 +157,20 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <!-- 分页 -->
+      <div class="pagination-bar">
+        <el-pagination
+          v-model:current-page="pagination.page"
+          v-model:page-size="pagination.pageSize"
+          :page-sizes="[20, 50, 100, 200]"
+          :total="pagination.total"
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="fetchDataPoints"
+          @current-change="fetchDataPoints"
+        />
+      </div>
+      </div>
     </div>
 
     <!-- 新增/编辑数据点弹窗 -->
@@ -191,7 +207,7 @@ import {ArrowLeft, Cpu, Delete, Edit, Plus, Refresh} from '@element-plus/icons-v
 import {
   createDataPoint,
   deleteDataPoint,
-  getDataPoints,
+  getDataPointsPaged,
   getDevice,
   getDeviceRealtimeData,
   toggleDataPoint as apiToggleDataPoint,
@@ -248,6 +264,13 @@ const ModbusByteOrderOptions = ref<any[]>([])
 // 筛选器
 const filterType = ref<string>('')
 
+// 分页配置
+const pagination = ref<{ page: number; pageSize: number; total: number }>({
+  page: 1,
+  pageSize: 50,
+  total: 0
+})
+
 // 加载数据类型选项
 const loadDataValueTypes = async () => {
   try {
@@ -281,46 +304,10 @@ const searchText = ref('')
 const filterDataType = ref<number | null>(null)
 const filterQuality = ref<string | null>(null)
 
-// 过滤后的数据点
-const filteredDataPoints = computed(() => {
-  return dataPoints.value.filter((item) => {
-    const isVirtual = !!item.isVirtual
-    let matchType = true
-    if (filterType.value === 'normal') {
-      matchType = !isVirtual
-    } else if (filterType.value === 'virtual') {
-      matchType = isVirtual
-    }
-
-    const searchTextLower = searchText.value.toLowerCase()
-    const matchText = !searchText.value ||
-      item.tag.toLowerCase().includes(searchTextLower) ||
-      item.name.toLowerCase().includes(searchTextLower) ||
-      ('address' in item && item.address.toLowerCase().includes(searchTextLower)) ||
-      ('expression' in item && (item.expression || '').toLowerCase().includes(searchTextLower))
-
-    const itemDataType = typeof item.dataType === 'string' ? parseInt(item.dataType) : item.dataType
-    const matchDataType = !filterDataType.value || itemDataType === filterDataType.value
-
-    const realtimeDataItem = getRealtimeData(item)
-    const quality = realtimeDataItem?.quality
-    const matchQuality = !filterQuality.value || quality === filterQuality.value
-
-    return matchText && matchDataType && matchQuality && matchType
-  })
-})
-
-const getDataTypeLabel = (dataType: string | number) => {
-  if (typeof dataType === 'number') {
-    const option = DataValueTypeOptions.value.find(o => o.value === dataType)
-    return option?.label || String(dataType)
-  }
-  return dataType
-}
-
 const refreshData = async () => {
   refreshing.value = true
   try {
+    pagination.value.page = 1
     await fetchDataPoints()
     await loadVirtualDataPoints()
     await fetchRealtimeData()
@@ -332,12 +319,23 @@ const refreshData = async () => {
   }
 }
 
-const filterDataPoints = () => {}
+const handleFilterChange = () => {
+  pagination.value.page = 1
+  fetchDataPoints()
+}
 
 // 实时数据
 const realtimeData = ref<Record<string, RealtimeDataItem>>({})
 const lastUpdateTime = ref<Date | null>(null)
 let realtimeTimer: number | null = null
+
+const getDataTypeLabel = (dataType: string | number) => {
+  if (typeof dataType === 'number') {
+    const option = DataValueTypeOptions.value.find(o => o.value === dataType)
+    return option?.label || String(dataType)
+  }
+  return dataType
+}
 
 // 数据点弹窗状态
 const dialogVisible = ref(false)
@@ -366,11 +364,22 @@ const fetchDevice = async () => {
 const fetchDataPoints = async () => {
   loading.value = true
   try {
-    const res = await getDataPoints(deviceId.value)
-    dataPoints.value = ((res as { data?: DataPointItem[] })?.data ?? []).map(item => ({
-      ...item,
-      isVirtual: false
-    })) as DataPointWithVirtual[]
+    const res = await getDataPointsPaged(deviceId.value, {
+      page: pagination.value.page,
+      pageSize: pagination.value.pageSize,
+      search: searchText.value || undefined,
+      dataType: filterDataType.value || undefined,
+      isEnabled: filterType.value === '' ? undefined : (filterType.value === 'normal' ? true : undefined)
+    })
+    
+    const responseData = (res as { data?: { items: DataPointItem[]; total: number } })?.data
+    if (responseData) {
+      dataPoints.value = responseData.items.map(item => ({
+        ...item,
+        isVirtual: false
+      })) as DataPointWithVirtual[]
+      pagination.value.total = responseData.total
+    }
   } finally {
     loading.value = false
   }
@@ -384,8 +393,11 @@ const loadVirtualDataPoints = async () => {
       isVirtual: true
     })) as DataPointWithVirtual[]
 
+    // 虚拟点追加到列表末尾
     const normalPoints = dataPoints.value.filter(item => !item.isVirtual)
     dataPoints.value = [...normalPoints, ...virtualPoints]
+    // 更新总数（包含虚拟点）
+    pagination.value.total = normalPoints.length + virtualPoints.length
   } catch (error) {
     console.error('加载虚拟数据点失败:', error)
   }
@@ -617,11 +629,23 @@ onUnmounted(() => {
 </script>
 
 <style scoped lang="scss">
+.page-enter {
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+.page-content {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .page-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 20px;
+  flex-shrink: 0;
 }
 
 .header-left {
@@ -664,6 +688,7 @@ onUnmounted(() => {
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
+  flex-shrink: 0;
 }
 
 .stat-item {
@@ -683,11 +708,212 @@ onUnmounted(() => {
   color: var(--text-muted);
 }
 
+/* 主内容区域 - 占据剩余空间 */
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* 工具栏样式 */
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  flex-shrink: 0;
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 表格容器 - 占据剩余空间 */
 .table-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   overflow: hidden;
+  min-height: 0;
+}
+
+/* Element Plus 表格样式优化 */
+:deep(.el-table) {
+  flex: 1;
+  overflow: auto;
+}
+
+:deep(.el-table__body-wrapper) {
+  overflow: auto;
+}
+
+:deep(.el-table__header-wrapper) {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg-card);
+}
+
+/* 分页栏 */
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-base);
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+/* Element Plus 分页样式优化 */
+:deep(.el-pagination) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+}
+
+:deep(.el-pagination__total) {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+:deep(.el-pagination__sizes) {
+  margin-right: 8px;
+}
+
+:deep(.el-select .el-input) {
+  width: 100px;
+}
+
+:deep(.el-pager) {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+:deep(.el-pager li) {
+  min-width: 32px;
+  height: 32px;
+  line-height: 32px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  margin: 0;
+  
+  &:hover {
+    background: var(--bg-hover);
+    border-color: var(--cyan);
+    color: var(--cyan);
+    transform: translateY(-1px);
+  }
+  
+  &.is-active {
+    background: linear-gradient(135deg, var(--cyan) 0%, rgba(56, 220, 196, 0.8) 100%);
+    border-color: var(--cyan);
+    color: #fff;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(56, 220, 196, 0.3);
+  }
+}
+
+:deep(.el-pagination__jump) {
+  margin-left: 12px;
+  color: var(--text-muted);
+  font-size: 13px;
+  
+  .el-input {
+    width: 50px;
+    margin: 0 4px;
+    
+    .el-input__wrapper {
+      height: 32px;
+      padding: 0 8px;
+      border-radius: 6px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      transition: all 0.2s ease;
+      
+      &:hover {
+        border-color: var(--cyan);
+      }
+      
+      &.is-focus {
+        border-color: var(--cyan);
+        box-shadow: 0 0 0 2px rgba(56, 220, 196, 0.2);
+      }
+    }
+    
+    .el-input__inner {
+      font-size: 13px;
+      text-align: center;
+      font-weight: 500;
+    }
+  }
+}
+
+:deep(.btn-prev),
+:deep(.btn-next) {
+  min-width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: var(--bg-hover);
+    border-color: var(--cyan);
+    color: var(--cyan);
+    transform: translateY(-1px);
+  }
+  
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    
+    &:hover {
+      background: var(--bg-card);
+      border-color: var(--border-subtle);
+      color: var(--text-secondary);
+      transform: none;
+    }
+  }
+}
+
+:deep(.el-select-dropdown__item) {
+  font-size: 13px;
+}
+
+:deep(.el-select-dropdown__item.is-selected) {
+  color: var(--cyan);
+  font-weight: 600;
 }
 
 .tag-text {

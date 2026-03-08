@@ -20,6 +20,16 @@ export const bindDataPoints = (channelId, dataPointIds) =>
 export const bindVirtualDataPoints = (channelId, virtualDataPointIds) =>
   request.post(`/channels/${channelId}/bind-virtual-datapoints`, { dataPointIds: virtualDataPointIds })
 
+/** 获取通道的数据点映射列表（分页） */
+export const getMappingsPaged = (channelId, params?: {
+  page?: number
+  pageSize?: number
+  search?: string
+  isEnabled?: boolean
+  isVirtual?: boolean
+}) =>
+  request.get(`/channels/${channelId}/mappings/paged`, { params })
+
 /** 获取通道的数据点映射列表 */
 export const getMappings = (channelId) =>
   request.get(`/channels/${channelId}/mappings`)

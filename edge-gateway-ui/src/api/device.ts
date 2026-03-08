@@ -18,6 +18,16 @@ export const deleteDevice = (id) => request.delete(`/devices/${id}`)
 /** 启用/禁用设备 */
 export const toggleDevice = (id) => request.patch(`/devices/${id}/toggle`)
 
+/** 获取设备下的数据点（分页） */
+export const getDataPointsPaged = (deviceId, params?: {
+  page?: number
+  pageSize?: number
+  search?: string
+  dataType?: number
+  isEnabled?: boolean
+}) =>
+  request.get(`/devices/${deviceId}/datapoints/paged`, { params })
+
 /** 获取设备下的数据点 */
 export const getDataPoints = (deviceId) =>
   request.get(`/devices/${deviceId}/datapoints`)

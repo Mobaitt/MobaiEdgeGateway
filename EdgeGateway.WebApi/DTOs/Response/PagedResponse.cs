@@ -20,4 +20,22 @@ public class PagedResponse<T>
 
     /// <summary>总页数（自动计算）</summary>
     public int TotalPages => (int)Math.Ceiling((double)Total / PageSize);
+
+    /// <summary>是否有上一页</summary>
+    public bool HasPrevious => Page > 1;
+
+    /// <summary>是否有下一页</summary>
+    public bool HasNext => Page < TotalPages;
+
+    /// <summary>创建分页响应</summary>
+    public static PagedResponse<T> Create(List<T> items, int total, int page, int pageSize)
+    {
+        return new PagedResponse<T>
+        {
+            Items = items,
+            Total = total,
+            Page = page,
+            PageSize = pageSize
+        };
+    }
 }

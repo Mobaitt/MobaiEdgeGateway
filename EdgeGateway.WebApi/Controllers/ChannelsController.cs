@@ -120,6 +120,36 @@ public class ChannelsController : ControllerBase
         return Ok(ApiResponse.Ok("映射关系添加成功"));
     }
 
+    /// <summary>获取通道的所有数据点映射关系（支持分页）</summary>
+    /// <param name="channelId">通道 ID</param>
+    /// <param name="page">页码（从 1 开始）</param>
+    /// <param name="pageSize">每页大小</param>
+    /// <param name="search">搜索关键词</param>
+    /// <param name="isEnabled">启用状态过滤</param>
+    /// <param name="isVirtual">是否虚拟数据点过滤</param>
+    [HttpGet("{channelId:int}/mappings/paged")]
+    [ProducesResponseType(typeof(ApiResponse<PagedResponse<MappingResponse>>), 200)]
+    public async Task<IActionResult> GetMappingsPaged(int channelId, [FromQuery] int page = 1, [FromQuery] int pageSize = 50, [FromQuery] string? search = null, [FromQuery] bool? isEnabled = null, [FromQuery] bool? isVirtual = null)
+    {
+        var (items, total) = await _deviceService.GetPagedChannelMappingsAsync(channelId, page, pageSize, search, isEnabled, isVirtual);
+        var result = items.Select(m => new MappingResponse
+        {
+            Id                 = m.Id,
+            ChannelId          = m.ChannelId,
+            ChannelName        = m.Channel?.Name ?? string.Empty,
+            DataPointId        = m.DataPointId,
+            VirtualDataPointId = m.VirtualDataPointId,
+            DataPointTag       = m.DataPointTag ?? m.DataPoint?.Tag ?? m.VirtualDataPoint?.Tag ?? string.Empty,
+            DataPointName      = m.DataPointName ?? m.DataPoint?.Name ?? m.VirtualDataPoint?.Name ?? string.Empty,
+            IsEnabled          = m.IsEnabled,
+            CreatedAt          = m.CreatedAt,
+            IsVirtual          = m.VirtualDataPointId.HasValue
+        }).ToList();
+        var pagedResult = PagedResponse<MappingResponse>.Create(result, total, page, pageSize);
+
+        return Ok(ApiResponse<PagedResponse<MappingResponse>>.Ok(pagedResult, $"共 {total} 条映射"));
+    }
+
     /// <summary>获取通道的所有数据点映射关系</summary>
     [HttpGet("{channelId:int}/mappings")]
     [ProducesResponseType(typeof(ApiResponse<List<MappingResponse>>), 200)]

@@ -3,6 +3,42 @@ using System.ComponentModel.DataAnnotations;
 
 namespace EdgeGateway.WebApi.DTOs.Request;
 
+/// <summary>分页查询请求基类</summary>
+public class PagedRequest
+{
+    /// <summary>页码（从 1 开始）</summary>
+    public int Page { get; set; } = 1;
+
+    /// <summary>每页大小</summary>
+    public int PageSize { get; set; } = 20;
+}
+
+/// <summary>分页查询数据点请求</summary>
+public class QueryDataPointsRequest : PagedRequest
+{
+    /// <summary>搜索关键词（Tag/名称/地址）</summary>
+    public string? Search { get; set; }
+
+    /// <summary>数据类型过滤</summary>
+    public DataValueType? DataType { get; set; }
+
+    /// <summary>是否启用过滤</summary>
+    public bool? IsEnabled { get; set; }
+}
+
+/// <summary>分页查询通道映射请求</summary>
+public class QueryChannelMappingsRequest : PagedRequest
+{
+    /// <summary>搜索关键词（Tag/名称）</summary>
+    public string? Search { get; set; }
+
+    /// <summary>是否启用过滤</summary>
+    public bool? IsEnabled { get; set; }
+
+    /// <summary>是否虚拟数据点过滤</summary>
+    public bool? IsVirtual { get; set; }
+}
+
 /// <summary>创建数据点请求</summary>
 public class CreateDataPointRequest
 {

@@ -168,6 +168,28 @@ public class DevicesController : ControllerBase
         return Ok(ApiResponse<List<DataPointResponse>>.Ok(allDataPoints, $"共 {allDataPoints.Count} 个数据点"));
     }
 
+    /// <summary>获取设备下的所有数据点（支持分页）</summary>
+    /// <param name="deviceId">设备 ID</param>
+    /// <param name="page">页码（从 1 开始）</param>
+    /// <param name="pageSize">每页大小</param>
+    /// <param name="search">搜索关键词</param>
+    /// <param name="dataType">数据类型过滤</param>
+    /// <param name="isEnabled">启用状态过滤</param>
+    [HttpGet("{deviceId:int}/datapoints/paged")]
+    [ProducesResponseType(typeof(ApiResponse<PagedResponse<DataPointResponse>>), 200)]
+    public async Task<IActionResult> GetDataPointsPaged(int deviceId, [FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] string? search = null, [FromQuery] int? dataType = null, [FromQuery] bool? isEnabled = null)
+    {
+        var device = await _deviceService.GetDeviceAsync(deviceId);
+        if (device == null)
+            return NotFound(ApiResponse.Fail($"设备 ID={deviceId} 不存在"));
+
+        var (items, total) = await _deviceService.GetPagedDataPointsAsync(deviceId, page, pageSize, search, dataType, isEnabled);
+        var result = items.Select(dp => MapDataPointToResponse(dp, device.Name)).ToList();
+        var pagedResult = PagedResponse<DataPointResponse>.Create(result, total, page, pageSize);
+
+        return Ok(ApiResponse<PagedResponse<DataPointResponse>>.Ok(pagedResult, $"共 {total} 个数据点"));
+    }
+
     /// <summary>获取设备下的所有数据点</summary>
     [HttpGet("{deviceId:int}/datapoints")]
     [ProducesResponseType(typeof(ApiResponse<List<DataPointResponse>>), 200)]
