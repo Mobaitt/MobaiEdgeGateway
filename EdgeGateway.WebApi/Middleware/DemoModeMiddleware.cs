@@ -31,7 +31,7 @@ public class DemoModeMiddleware
     public async Task InvokeAsync(HttpContext context)
     {
         // 记录当前演示模式状态
-        _logger.LogInformation("演示模式中间件：Enabled={Enabled}, Message={Message}", _options.Enabled, _options.Message);
+        // _logger.LogInformation("演示模式中间件：Enabled={Enabled}, Message={Message}", _options.Enabled, _options.Message);
 
         // 如果未启用演示模式，直接跳过
         if (!_options.Enabled)
