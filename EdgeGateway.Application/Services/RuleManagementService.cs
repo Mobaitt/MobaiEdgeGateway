@@ -58,7 +58,7 @@ public class RuleManagementService
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
         return await context.DataPointRules
-            .Where(r => r.DataPointId == dataPointId)
+            .Where(r => r.DataPointIdsJson != null && r.DataPointIds.Contains(dataPointId))
             .OrderBy(r => r.Priority)
             .ToListAsync();
     }
@@ -82,7 +82,7 @@ public class RuleManagementService
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
         return await context.DataPointRules
-            .Where(r => r.DataPointId == null && r.DeviceId == null)
+            .Where(r => r.DataPointIds.Count == 0 && r.DeviceId == null)
             .OrderBy(r => r.Priority)
             .ToListAsync();
     }
@@ -110,6 +110,9 @@ public class RuleManagementService
         context.DataPointRules.Add(rule);
         await context.SaveChangesAsync();
 
+        // 刷新规则引擎缓存
+        await _ruleEngine.RefreshRulesCacheAsync();
+
         _logger.LogInformation("规则 [{RuleName}] 创建成功，ID={RuleId}", rule.Name, rule.Id);
         return rule;
     }
@@ -135,6 +138,10 @@ public class RuleManagementService
             throw new ArgumentException($"RuleConfig JSON 格式无效：{ex.Message}", ex);
         }
 
+        // 记录更新前的数据点 ID 和设备 ID（用于清除缓存）
+        var oldDataPointIds = existing.DataPointIds;
+        var oldDeviceId = existing.DeviceId;
+
         existing.Name = rule.Name;
         existing.Description = rule.Description;
         existing.RuleType = rule.RuleType;
@@ -142,10 +149,15 @@ public class RuleManagementService
         existing.Priority = rule.Priority;
         existing.RuleConfig = rule.RuleConfig;
         existing.OnFailure = rule.OnFailure;
-        existing.DefaultValue = rule.DefaultValue;
+        existing.DefaultValueJson = rule.DefaultValueJson;
+        existing.DataPointIds = rule.DataPointIds;
+        existing.DeviceId = rule.DeviceId;
         existing.UpdatedAt = DateTime.UtcNow;
 
         await context.SaveChangesAsync();
+
+        // 刷新规则引擎缓存
+        await _ruleEngine.RefreshRulesCacheAsync();
 
         _logger.LogInformation("规则 [{RuleName}] 更新成功，ID={RuleId}", rule.Name, rule.Id);
         return existing;
@@ -165,6 +177,9 @@ public class RuleManagementService
         context.DataPointRules.Remove(rule);
         await context.SaveChangesAsync();
 
+        // 刷新规则引擎缓存
+        await _ruleEngine.RefreshRulesCacheAsync();
+
         _logger.LogInformation("规则 [{RuleName}] 删除成功，ID={RuleId}", rule.Name, rule.Id);
     }
 
@@ -183,6 +198,10 @@ public class RuleManagementService
         rule.UpdatedAt = DateTime.UtcNow;
 
         await context.SaveChangesAsync();
+
+        // 刷新规则引擎缓存
+        await _ruleEngine.RefreshRulesCacheAsync();
+
         _logger.LogInformation("规则 [{RuleName}] 已{Status}", rule.Name, isEnabled ? "启用" : "禁用");
     }
 

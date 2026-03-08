@@ -32,7 +32,20 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="dataPointName" label="数据点" min-width="120" />
+        <el-table-column prop="dataPointNames" label="数据点" min-width="150">
+          <template #default="{ row }">
+            <div v-if="row.dataPointIds && row.dataPointIds.length > 0" style="display: flex; flex-wrap: wrap; gap: 4px;">
+              <el-tag
+                v-for="(name, index) in row.dataPointNames"
+                :key="row.dataPointIds[index]"
+                size="small"
+              >
+                {{ name }}
+              </el-tag>
+            </div>
+            <span v-else style="color: var(--text-muted);">全局规则</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="deviceName" label="设备" min-width="120" />
         <el-table-column prop="priority" label="优先级" width="80" />
         <el-table-column prop="isEnabled" label="状态" width="80">
@@ -123,7 +136,7 @@ const form = reactive<CreateRuleRequest>({
   name: '',
   ruleType: 2,
   deviceId: null,
-  dataPointId: null,
+  dataPointIds: [],
   priority: 100,
   ruleConfig: '{}',
   onFailure: 0,
@@ -247,7 +260,7 @@ const runTest = async (value: string) => {
         ruleConfig: currentRule.value.ruleConfig
       },
       {
-        dataPointId: currentRule.value.dataPointId || 0,
+        dataPointId: currentRule.value.dataPointIds?.[0] || 0,
         deviceId: currentRule.value.deviceId || 0,
         tag: 'test',
         value: parseFloat(value) || value

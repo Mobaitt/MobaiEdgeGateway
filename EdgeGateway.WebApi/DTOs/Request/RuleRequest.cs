@@ -8,8 +8,8 @@ namespace EdgeGateway.WebApi.DTOs.Request;
 /// </summary>
 public class CreateRuleRequest
 {
-    /// <summary>所属数据点 ID（为 null 时表示全局规则）</summary>
-    public int? DataPointId { get; set; }
+    /// <summary>所属数据点 ID 列表（支持多数据点，为空或空列表时表示全局规则）</summary>
+    public List<int>? DataPointIds { get; set; }
 
     /// <summary>所属设备 ID</summary>
     public int? DeviceId { get; set; }
@@ -52,6 +52,12 @@ public class UpdateRuleRequest
 
     /// <summary>规则描述</summary>
     public string? Description { get; set; }
+
+    /// <summary>所属数据点 ID 列表（支持多数据点，为空或空列表时表示不绑定特定数据点）</summary>
+    public List<int>? DataPointIds { get; set; }
+
+    /// <summary>所属设备 ID</summary>
+    public int? DeviceId { get; set; }
 
     /// <summary>规则类型</summary>
     public RuleType RuleType { get; set; }

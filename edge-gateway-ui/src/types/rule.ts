@@ -69,8 +69,8 @@ export enum DataQuality {
  */
 export interface Rule {
   id: number
-  dataPointId: number | null
-  dataPointName: string | null
+  dataPointIds: number[]
+  dataPointNames: string[]
   deviceId: number | null
   deviceName: string | null
   name: string
@@ -108,7 +108,7 @@ export interface RuleConfig {
  * 创建规则请求
  */
 export interface CreateRuleRequest {
-  dataPointId?: number
+  dataPointIds?: number[]
   deviceId?: number
   name: string
   description?: string
@@ -125,6 +125,8 @@ export interface CreateRuleRequest {
  */
 export interface UpdateRuleRequest {
   id: number
+  dataPointIds?: number[]
+  deviceId?: number
   name: string
   description?: string
   ruleType: RuleType

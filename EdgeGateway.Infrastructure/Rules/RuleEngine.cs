@@ -83,27 +83,35 @@ public class RuleEngine : IRuleEngine
                 .ToListAsync();
 
             // 分类缓存
-            _globalRulesCache = allRules.Where(r => r.DataPointId == null && r.DeviceId == null).ToList();
+            // 全局规则：没有绑定设备和数据点的规则
+            _globalRulesCache = allRules.Where(r => r.DataPointIds.Count == 0 && r.DeviceId == null).ToList();
 
+            // 数据点规则：绑定了数据点的规则（只针对特定数据点生效）
             _dataPointRulesCache.Clear();
-            foreach (var rule in allRules.Where(r => r.DataPointId.HasValue))
+            foreach (var rule in allRules.Where(r => r.DataPointIds.Count > 0))
             {
-                if (rule.DataPointId.HasValue)
+                // 一个规则可能绑定多个数据点，需要为每个数据点添加规则
+                foreach (var dataPointId in rule.DataPointIds)
                 {
                     _dataPointRulesCache.AddOrUpdate(
-                        rule.DataPointId.Value,
+                        dataPointId,
                         new List<DataPointRule> { rule },
                         (_, existing) =>
                         {
-                            existing.Add(rule);
-                            existing.Sort((a, b) => a.Priority.CompareTo(b.Priority));
+                            // 避免重复添加
+                            if (!existing.Any(r => r.Id == rule.Id))
+                            {
+                                existing.Add(rule);
+                                existing.Sort((a, b) => a.Priority.CompareTo(b.Priority));
+                            }
                             return existing;
                         });
                 }
             }
 
+            // 设备规则：只绑定设备但没有绑定数据点的规则（针对设备下所有数据点生效）
             _deviceRulesCache.Clear();
-            foreach (var rule in allRules.Where(r => r.DeviceId.HasValue))
+            foreach (var rule in allRules.Where(r => r.DeviceId.HasValue && r.DataPointIds.Count == 0))
             {
                 if (rule.DeviceId.HasValue)
                 {
@@ -213,9 +221,9 @@ public class RuleEngine : IRuleEngine
 
                     if (rule.OnFailure == FailureAction.DefaultValue)
                     {
-                        currentValue = rule.DefaultValue;
+                        currentValue = GetDefaultValue(rule);
                         _logger.LogDebug("规则 [{RuleName}] 执行失败，使用默认值：{DefaultValue}",
-                            rule.Name, rule.DefaultValue);
+                            rule.Name, GetDefaultValue(rule));
                     }
                     else if (rule.OnFailure == FailureAction.Pass)
                     {
@@ -302,7 +310,7 @@ public class RuleEngine : IRuleEngine
                     return RuleExecutionResult.Fail(
                         $"值 {doubleValue} 小于最小值 {config.MinValue}",
                         shouldReject: rule.OnFailure == FailureAction.Reject,
-                        defaultValue: rule.OnFailure == FailureAction.DefaultValue ? rule.DefaultValue : currentValue);
+                        defaultValue: rule.OnFailure == FailureAction.DefaultValue ? GetDefaultValue(rule) : currentValue);
                 }
 
                 if (config.MaxValue.HasValue && doubleValue > config.MaxValue.Value)
@@ -310,7 +318,7 @@ public class RuleEngine : IRuleEngine
                     return RuleExecutionResult.Fail(
                         $"值 {doubleValue} 大于最大值 {config.MaxValue}",
                         shouldReject: rule.OnFailure == FailureAction.Reject,
-                        defaultValue: rule.OnFailure == FailureAction.DefaultValue ? rule.DefaultValue : currentValue);
+                        defaultValue: rule.OnFailure == FailureAction.DefaultValue ? GetDefaultValue(rule) : currentValue);
                 }
             }
         }
@@ -393,6 +401,16 @@ public class RuleEngine : IRuleEngine
 
     #region 辅助方法
 
+    /// <summary>
+    /// 从 DefaultValueJson 反序列化获取默认值
+    /// </summary>
+    private static object? GetDefaultValue(DataPointRule rule)
+    {
+        return rule.DefaultValueJson != null 
+            ? System.Text.Json.JsonSerializer.Deserialize<object>(rule.DefaultValueJson) 
+            : null;
+    }
+
     private RuleExecutionResult ValidateRange(ValidationRuleConfig config, double value, DataPointRule rule)
     {
         if (config.MinValue.HasValue && value < config.MinValue.Value)
@@ -400,7 +418,7 @@ public class RuleEngine : IRuleEngine
             return RuleExecutionResult.Fail(
                 $"值 {value} 小于最小值 {config.MinValue}",
                 shouldReject: rule.OnFailure == FailureAction.Reject,
-                defaultValue: rule.OnFailure == FailureAction.DefaultValue ? rule.DefaultValue : value);
+                defaultValue: rule.OnFailure == FailureAction.DefaultValue ? GetDefaultValue(rule) : value);
         }
 
         if (config.MaxValue.HasValue && value > config.MaxValue.Value)
@@ -408,7 +426,7 @@ public class RuleEngine : IRuleEngine
             return RuleExecutionResult.Fail(
                 $"值 {value} 大于最大值 {config.MaxValue}",
                 shouldReject: rule.OnFailure == FailureAction.Reject,
-                defaultValue: rule.OnFailure == FailureAction.DefaultValue ? rule.DefaultValue : value);
+                defaultValue: rule.OnFailure == FailureAction.DefaultValue ? GetDefaultValue(rule) : value);
         }
 
         return RuleExecutionResult.Ok(value);
@@ -437,7 +455,7 @@ public class RuleEngine : IRuleEngine
                         return RuleExecutionResult.Fail(
                             $"变化率 {rateOfChange:F4}/s 超过最大变化率 {config.MaxRateOfChange}/s",
                             shouldReject: rule.OnFailure == FailureAction.Reject,
-                            defaultValue: rule.OnFailure == FailureAction.DefaultValue ? rule.DefaultValue : currentValue);
+                            defaultValue: rule.OnFailure == FailureAction.DefaultValue ? GetDefaultValue(rule) : currentValue);
                     }
                 }
             }
@@ -482,7 +500,7 @@ public class RuleEngine : IRuleEngine
                 return RuleExecutionResult.Fail(
                     $"值 {value} 未通过合理性校验",
                     shouldReject: rule.OnFailure == FailureAction.Reject,
-                    defaultValue: rule.OnFailure == FailureAction.DefaultValue ? rule.DefaultValue : value);
+                    defaultValue: rule.OnFailure == FailureAction.DefaultValue ? GetDefaultValue(rule) : value);
             }
         }
         catch (Exception ex)
@@ -504,7 +522,7 @@ public class RuleEngine : IRuleEngine
             return RuleExecutionResult.Fail(
                 $"值 {value} 与固定值 {config.FixedValue} 的偏差超过容差 {tolerance}",
                 shouldReject: rule.OnFailure == FailureAction.Reject,
-                defaultValue: rule.OnFailure == FailureAction.DefaultValue ? rule.DefaultValue : value);
+                defaultValue: rule.OnFailure == FailureAction.DefaultValue ? GetDefaultValue(rule) : value);
         }
 
         return RuleExecutionResult.Ok(value);

@@ -114,12 +114,13 @@ public class GatewayDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
             entity.Property(e => e.RuleConfig).IsRequired();
+            entity.Property(e => e.DataPointIdsJson).HasColumnName("DataPointIdsJson").HasMaxLength(500);
 
-            // 外键关系
-            entity.HasOne(r => r.DataPoint)
-                  .WithMany()
-                  .HasForeignKey(r => r.DataPointId)
-                  .OnDelete(DeleteBehavior.Cascade);
+            // 外键关系 - 注意：DataPointIdsJson 存储多个 ID，不再使用外键约束
+            // entity.HasOne(r => r.DataPoint)
+            //       .WithMany()
+            //       .HasForeignKey(r => r.DataPointId)
+            //       .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasOne(r => r.Device)
                   .WithMany()

@@ -11,8 +11,13 @@ public class DataPointRule
     /// <summary>主键</summary>
     public int Id { get; set; }
 
-    /// <summary>所属数据点 ID（外键，为 null 时表示全局规则）</summary>
-    public int? DataPointId { get; set; }
+    /// <summary>所属数据点 ID 列表（外键，为 null 或空时表示不绑定特定数据点）</summary>
+    /// <remarks>
+    /// 支持多数据点关联，存储为 JSON 数组格式，如 "[1,2,3]"
+    /// 如果只绑定一个数据点，存储为 "[1]"
+    /// 如果不绑定数据点（全局规则或仅绑定设备），存储为 "[]" 或 null
+    /// </remarks>
+    public string? DataPointIdsJson { get; set; }
 
     /// <summary>所属设备 ID（为 null 时表示不绑定设备）</summary>
     public int? DeviceId { get; set; }
@@ -41,12 +46,25 @@ public class DataPointRule
     /// <summary>失败时的默认值（JSON 格式存储）</summary>
     public string? DefaultValueJson { get; set; }
 
-    /// <summary>失败时的默认值（对象形式，不映射到数据库）</summary>
+    /// <summary>绑定的数据点 ID 列表（不映射到数据库，由 DataPointIdsJson 序列化/反序列化）</summary>
     [System.ComponentModel.DataAnnotations.Schema.NotMapped]
-    public object? DefaultValue
+    public List<int> DataPointIds
     {
-        get => DefaultValueJson != null ? JsonSerializer.Deserialize<object>(DefaultValueJson) : null;
-        set => DefaultValueJson = value != null ? JsonSerializer.Serialize(value) : null;
+        get
+        {
+            if (string.IsNullOrEmpty(DataPointIdsJson))
+                return new List<int>();
+            
+            try
+            {
+                return JsonSerializer.Deserialize<List<int>>(DataPointIdsJson) ?? new List<int>();
+            }
+            catch
+            {
+                return new List<int>();
+            }
+        }
+        set => DataPointIdsJson = value != null && value.Count > 0 ? JsonSerializer.Serialize(value) : null;
     }
 
     /// <summary>创建时间</summary>
@@ -55,7 +73,7 @@ public class DataPointRule
     /// <summary>最后更新时间</summary>
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
-    /// <summary>所属数据点（导航属性）</summary>
+    /// <summary>所属数据点（导航属性，仅用于第一个数据点的关联）</summary>
     public DataPoint? DataPoint { get; set; }
 
     /// <summary>所属设备（导航属性）</summary>

@@ -12,11 +12,11 @@ public class RuleResponse
     /// <summary>规则 ID</summary>
     public int Id { get; set; }
 
-    /// <summary>所属数据点 ID</summary>
-    public int? DataPointId { get; set; }
+    /// <summary>所属数据点 ID 列表</summary>
+    public List<int> DataPointIds { get; set; } = new();
 
-    /// <summary>数据点名称</summary>
-    public string? DataPointName { get; set; }
+    /// <summary>数据点名称列表（格式："设备名。数据点名"）</summary>
+    public List<string> DataPointNames { get; set; } = new();
 
     /// <summary>所属设备 ID</summary>
     public int? DeviceId { get; set; }
@@ -59,8 +59,10 @@ public class RuleResponse
         return new RuleResponse
         {
             Id = rule.Id,
-            DataPointId = rule.DataPointId,
-            DataPointName = rule.DataPoint?.Name,
+            DataPointIds = rule.DataPointIds,
+            DataPointNames = rule.DataPointIds.Select(id => 
+                rule.Device?.Name != null ? $"{rule.Device.Name}.数据点{id}" : $"数据点{id}"
+            ).ToList(),
             DeviceId = rule.DeviceId,
             DeviceName = rule.Device?.Name,
             Name = rule.Name,
@@ -70,7 +72,7 @@ public class RuleResponse
             Priority = rule.Priority,
             RuleConfig = rule.RuleConfig,
             OnFailure = rule.OnFailure,
-            DefaultValue = rule.DefaultValue,
+            DefaultValue = rule.DefaultValueJson != null ? System.Text.Json.JsonSerializer.Deserialize<object>(rule.DefaultValueJson) : null,
             CreatedAt = rule.CreatedAt,
             UpdatedAt = rule.UpdatedAt
         };

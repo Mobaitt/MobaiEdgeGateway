@@ -152,9 +152,70 @@ public static class ServiceCollectionExtensions
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<GatewayDbContext>();
         await db.Database.EnsureCreatedAsync();
-        
+
+        // 执行数据库迁移：将 DataPointId 列迁移到 DataPointIdsJson
+        await MigrateDataPointIdColumnAsync(db);
+
         // 初始化测试数据
         var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
         await seeder.InitializeTestDataAsync();
+    }
+
+    /// <summary>
+    /// 迁移数据点 ID 列：从 DataPointId (int?) 到 DataPointIdsJson (string)
+    /// </summary>
+    private static async Task MigrateDataPointIdColumnAsync(GatewayDbContext db)
+    {
+        try
+        {
+            // 检查是否需要迁移：如果表有 DataPointId 列但没有 DataPointIdsJson 列
+            var hasDataPointIdColumn = false;
+            var hasDataPointIdsJsonColumn = false;
+
+            try
+            {
+                // SQLite 中检查列是否存在
+                var tableInfo = await db.Database.SqlQueryRaw<ColumnInfo>(
+                    "PRAGMA table_info(DataPointRules)").ToListAsync();
+                
+                hasDataPointIdColumn = tableInfo.Any(c => c.Name == "DataPointId");
+                hasDataPointIdsJsonColumn = tableInfo.Any(c => c.Name == "DataPointIdsJson");
+            }
+            catch
+            {
+                // 如果查询失败，假设需要迁移
+                hasDataPointIdColumn = true;
+                hasDataPointIdsJsonColumn = false;
+            }
+
+            if (hasDataPointIdColumn && !hasDataPointIdsJsonColumn)
+            {
+                // 添加新列
+                await db.Database.ExecuteSqlRawAsync(
+                    "ALTER TABLE DataPointRules ADD COLUMN DataPointIdsJson TEXT MAX(500)");
+
+                // 迁移现有数据：将 DataPointId 转换为 JSON 数组
+                await db.Database.ExecuteSqlRawAsync(
+                    @"UPDATE DataPointRules 
+                      SET DataPointIdsJson = '[' || DataPointId || ']'
+                      WHERE DataPointId IS NOT NULL");
+
+                Console.WriteLine("数据库迁移完成：DataPointId -> DataPointIdsJson");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"数据库迁移失败：{ex.Message}");
+        }
+    }
+
+    private class ColumnInfo
+    {
+        public int Cid { get; set; }
+        public string Name { get; set; } = "";
+        public string Type { get; set; } = "";
+        public bool Notnull { get; set; }
+        public string? DfltValue { get; set; }
+        public int Pk { get; set; }
     }
 }

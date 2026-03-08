@@ -44,19 +44,27 @@
         </el-select>
       </el-form-item>
 
-      <el-form-item label="数据点" prop="dataPointId">
+      <el-form-item label="数据点" prop="dataPointIds">
         <el-select
-          v-model="form.dataPointId"
-          placeholder="可选，留空表示全局规则"
+          v-model="form.dataPointIds"
+          placeholder="可选，留空表示全局规则，支持多选"
           clearable
+          multiple
+          filterable
           style="width: 100%"
         >
-          <el-option
-            v-for="point in filteredDataPoints"
-            :key="point.id"
-            :label="point.name"
-            :value="point.id"
-          />
+          <el-option-group
+            v-for="group in groupedDataPoints"
+            :key="group.deviceId"
+            :label="group.deviceName"
+          >
+            <el-option
+              v-for="point in group.points"
+              :key="point.id"
+              :label="point.name"
+              :value="point.id"
+            />
+          </el-option-group>
         </el-select>
       </el-form-item>
 
@@ -146,7 +154,7 @@ const form = ref<RuleForm>({
   name: '',
   ruleType: 2,
   deviceId: null,
-  dataPointId: null,
+  dataPointIds: [],
   priority: 100,
   ruleConfig: '{}',
   onFailure: 0,
@@ -165,11 +173,23 @@ const rules = {
 
 const isEdit = computed(() => !!props.editingRule)
 
-const filteredDataPoints = computed(() => {
-  if (form.value.deviceId) {
-    return props.dataPoints.filter(p => p.deviceId === form.value.deviceId)
-  }
-  return props.dataPoints
+// 按设备分组的数据点，用于下拉框显示
+const groupedDataPoints = computed(() => {
+  const groups = new Map<number, { deviceId: number; deviceName: string; points: DataPoint[] }>()
+  
+  props.dataPoints.forEach(point => {
+    if (!groups.has(point.deviceId)) {
+      const device = props.devices.find(d => d.id === point.deviceId)
+      groups.set(point.deviceId, {
+        deviceId: point.deviceId,
+        deviceName: device?.name || '未绑定设备',
+        points: []
+      })
+    }
+    groups.get(point.deviceId)!.points.push(point)
+  })
+  
+  return Array.from(groups.values())
 })
 
 const resetForm = () => {
@@ -177,7 +197,7 @@ const resetForm = () => {
     name: '',
     ruleType: 2,
     deviceId: null,
-    dataPointId: null,
+    dataPointIds: [],
     priority: 100,
     ruleConfig: '{}',
     onFailure: 0,
@@ -197,7 +217,7 @@ watch(
         name: rule.name,
         ruleType: rule.ruleType,
         deviceId: rule.deviceId,
-        dataPointId: rule.dataPointId,
+        dataPointIds: rule.dataPointIds || [],
         priority: rule.priority,
         ruleConfig: rule.ruleConfig,
         onFailure: rule.onFailure,

@@ -100,7 +100,7 @@ public class RulesController : ControllerBase
         {
             var rule = new DataPointRule
             {
-                DataPointId = request.DataPointId,
+                DataPointIds = request.DataPointIds ?? new List<int>(),
                 DeviceId = request.DeviceId,
                 Name = request.Name,
                 Description = request.Description,
@@ -109,7 +109,7 @@ public class RulesController : ControllerBase
                 Priority = request.Priority,
                 RuleConfig = request.RuleConfig,
                 OnFailure = request.OnFailure,
-                DefaultValue = request.DefaultValue
+                DefaultValueJson = request.DefaultValue != null ? System.Text.Json.JsonSerializer.Serialize(request.DefaultValue) : null
             };
 
             var createdRule = await _ruleService.CreateRuleAsync(rule);
@@ -146,6 +146,8 @@ public class RulesController : ControllerBase
             var rule = new DataPointRule
             {
                 Id = request.Id,
+                DataPointIds = request.DataPointIds ?? new List<int>(),
+                DeviceId = request.DeviceId,
                 Name = request.Name,
                 Description = request.Description,
                 RuleType = request.RuleType,
@@ -153,7 +155,7 @@ public class RulesController : ControllerBase
                 Priority = request.Priority,
                 RuleConfig = request.RuleConfig,
                 OnFailure = request.OnFailure,
-                DefaultValue = request.DefaultValue,
+                DefaultValueJson = request.DefaultValue != null ? System.Text.Json.JsonSerializer.Serialize(request.DefaultValue) : null,
                 UpdatedAt = DateTime.UtcNow
             };
 
