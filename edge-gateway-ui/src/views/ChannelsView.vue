@@ -73,17 +73,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Link, Connection } from '@element-plus/icons-vue'
+import {onMounted, ref} from 'vue'
+import {useRouter} from 'vue-router'
+import {ElMessage, ElMessageBox} from 'element-plus'
+import {Connection, Link, Plus} from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import AddCard from '@/components/AddCard.vue'
 import ChannelDialog from '@/dialogs/channel/ChannelDialog.vue'
-import { useConfirmDelete } from '@/composables/useConfirmDelete'
-import { getChannels, createChannel, updateChannel, deleteChannel, toggleChannel } from '@/api/channel'
-import { getSendProtocols } from '@/api/enums'
-import type { ChannelItem } from '@/types'
+import {useConfirmDelete} from '@/composables/useConfirmDelete'
+import {createChannel, deleteChannel, getChannels, toggleChannel, updateChannel} from '@/api/channel'
+import {getSendProtocols} from '@/api/enums'
+import type {ChannelItem} from '@/types'
 
 const router = useRouter()
 const { confirm: confirmDeleteFn } = useConfirmDelete()

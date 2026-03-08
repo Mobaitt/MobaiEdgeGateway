@@ -150,14 +150,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { Refresh, Monitor, Share, DataLine, Connection, Cpu, TrendCharts } from '@element-plus/icons-vue'
+import {computed, onMounted, ref} from 'vue'
+import {DataLine, Monitor, Refresh, Share} from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
-import { getGatewayStatus } from '@/api/gateway'
-import { getDevices } from '@/api/device'
-import { getChannels } from '@/api/channel'
-import { SendProtocol, CollectionProtocol, DataValueType } from '@/api/constants'
-import type { GatewayStatus } from '@/types'
+import {getGatewayStatus} from '@/api/gateway'
+import {getDevices} from '@/api/device'
+import {getChannels} from '@/api/channel'
+import {CollectionProtocol, DataValueType, SendProtocol} from '@/api/constants'
+import type {GatewayStatus} from '@/types'
 
 const loading = ref(false)
 const status = ref<GatewayStatus>({})

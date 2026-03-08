@@ -184,18 +184,29 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { ElMessageBox, ElMessage } from 'element-plus'
-import { Plus, Delete, ArrowLeft, Document, Setting, Connection, InfoFilled, Edit, Refresh, Search, MagicStick, Cpu } from '@element-plus/icons-vue'
-import { getDataPoints, createDataPoint, updateDataPoint, toggleDataPoint as apiToggleDataPoint, deleteDataPoint, getDeviceRealtimeData, getDevice } from '@/api/device'
-import { getVirtualDataPointsByDevice, createVirtualDataPoint, updateVirtualDataPoint, deleteVirtualDataPoint } from '@/api/virtualNode'
-import { getDataValueTypes, getModbusByteOrders } from '@/api/enums'
-import { formatDateTime } from '@/api/constants'
-import { CollectionProtocol } from '@/api/constants'
-import { nameToCode } from '@/utils/codeGenerate'
-import type { DataPointItem, RealtimeDataItem } from '@/types'
-import type { VirtualDataPoint } from '@/types/virtualNode'
+import {computed, onMounted, onUnmounted, ref} from 'vue'
+import {useRoute, useRouter} from 'vue-router'
+import {ElMessage, ElMessageBox} from 'element-plus'
+import {ArrowLeft, Cpu, Delete, Edit, Plus, Refresh} from '@element-plus/icons-vue'
+import {
+  createDataPoint,
+  deleteDataPoint,
+  getDataPoints,
+  getDevice,
+  getDeviceRealtimeData,
+  toggleDataPoint as apiToggleDataPoint,
+  updateDataPoint
+} from '@/api/device'
+import {
+  createVirtualDataPoint,
+  deleteVirtualDataPoint,
+  getVirtualDataPointsByDevice,
+  updateVirtualDataPoint
+} from '@/api/virtualNode'
+import {getDataValueTypes, getModbusByteOrders} from '@/api/enums'
+import {formatDateTime} from '@/api/constants'
+import type {DataPointItem, RealtimeDataItem} from '@/types'
+import type {VirtualDataPoint} from '@/types/virtualNode'
 import DataPointDialog from '@/dialogs/dataPoint/DataPointDialog.vue'
 import VirtualNodeDialog from '@/dialogs/dataPoint/VirtualNodeDialog.vue'
 

@@ -103,25 +103,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { Plus, Edit, Delete, DataLine, Location, Timer, InfoFilled, Refresh } from '@element-plus/icons-vue'
+import {computed, onMounted, onUnmounted, ref} from 'vue'
+import {useRouter} from 'vue-router'
+import {ElMessage} from 'element-plus'
+import {DataLine, Delete, Edit, Location, Plus, Refresh, Timer} from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import AddCard from '@/components/AddCard.vue'
 import DeviceDialog from '@/dialogs/device/DeviceDialog.vue'
-import { useConfirmDelete } from '@/composables/useConfirmDelete'
-import {
-  getDevices,
-  createDevice,
-  updateDevice,
-  deleteDevice,
-  toggleDevice as apiToggle
-} from '@/api/device'
-import { getCollectionProtocols } from '@/api/enums'
-import { formatInterval } from '@/api/constants'
-import { CollectionProtocol } from '@/api/constants'
-import type { DeviceItem } from '@/types'
+import {useConfirmDelete} from '@/composables/useConfirmDelete'
+import {createDevice, deleteDevice, getDevices, toggleDevice as apiToggle, updateDevice} from '@/api/device'
+import {getCollectionProtocols} from '@/api/enums'
+import {formatInterval} from '@/api/constants'
+import type {DeviceItem} from '@/types'
 
 const router = useRouter()
 const { confirm: confirmDeleteFn } = useConfirmDelete()

@@ -93,17 +93,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Edit, Delete } from '@element-plus/icons-vue'
+import {onMounted, reactive, ref} from 'vue'
+import {ElMessage, ElMessageBox} from 'element-plus'
+import {Delete, Edit, Plus} from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import RuleDialog from '@/dialogs/rule/RuleDialog.vue'
 import RuleTestDialog from '@/dialogs/rule/RuleTestDialog.vue'
 import RuleHelpDialog from '@/dialogs/rule/RuleHelpDialog.vue'
-import type { Rule, CreateRuleRequest, RuleType, UpdateRuleRequest } from '@/types/rule'
-import type { Device, DataPoint } from '@/types/device'
-import { getRules, createRule, updateRule, deleteRule as deleteRuleApi, toggleRule, testRule } from '@/api/rule'
-import { getDevices, getAllDataPoints } from '@/api/device'
+import type {CreateRuleRequest, Rule, RuleType, UpdateRuleRequest} from '@/types/rule'
+import type {DataPoint, Device} from '@/types/device'
+import {createRule, deleteRule as deleteRuleApi, getRules, testRule, toggleRule, updateRule} from '@/api/rule'
+import {getAllDataPoints, getDevices} from '@/api/device'
 
 const loading = ref(false)
 const submitting = ref(false)

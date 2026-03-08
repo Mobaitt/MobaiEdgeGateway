@@ -83,18 +83,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { ElMessageBox, ElMessage } from 'element-plus'
-import { Plus, Delete, ArrowLeft, Connection, InfoFilled, Monitor, Close } from '@element-plus/icons-vue'
+import {computed, onMounted, ref} from 'vue'
+import {useRoute, useRouter} from 'vue-router'
+import {ElMessage, ElMessageBox} from 'element-plus'
+import {ArrowLeft, Delete, InfoFilled, Plus} from '@element-plus/icons-vue'
 import EmptyState from '@/components/EmptyState.vue'
 import BindDataPointDialog from '@/dialogs/mapping/BindDataPointDialog.vue'
-import { getMappings, bindDataPoints, bindVirtualDataPoints, deleteMapping } from '@/api/channel'
-import { getDevices, getDataPoints } from '@/api/device'
-import { getVirtualDataPoints } from '@/api/virtualNode'
-import { formatDateTime } from '@/api/constants'
-import type { MappingItem, DataPointItem, DeviceNode } from '@/types'
-import type { VirtualDataPoint } from '@/types/virtualNode'
+import {bindDataPoints, bindVirtualDataPoints, deleteMapping, getMappings} from '@/api/channel'
+import {getDataPoints, getDevices} from '@/api/device'
+import {getVirtualDataPoints} from '@/api/virtualNode'
+import {formatDateTime} from '@/api/constants'
+import type {DataPointItem, DeviceNode, MappingItem} from '@/types'
+import type {VirtualDataPoint} from '@/types/virtualNode'
 
 interface DeviceTreeItem extends DeviceNode {
   virtualPoints?: VirtualDataPoint[]
