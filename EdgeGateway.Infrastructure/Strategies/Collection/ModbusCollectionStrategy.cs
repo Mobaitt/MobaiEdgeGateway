@@ -75,6 +75,7 @@ public class ModbusCollectionStrategy : ICollectionStrategy
     /// <inheritdoc/>
     public async Task<IEnumerable<CollectedData>> ReadAsync(
         IEnumerable<DataPoint> dataPoints,
+        Action<CollectedData> callback,
         CancellationToken cancellationToken = default)
     {
         if (!_isConnected || _master == null)

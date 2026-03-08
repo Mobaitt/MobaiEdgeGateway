@@ -58,30 +58,13 @@ public class DataCollectionService
 
     // 设备 ID → 虚拟数据点 ID 列表，用于快速查找设备下的虚拟数据点
     private readonly ConcurrentDictionary<int, HashSet<int>> _deviceVirtualPointIds = new();
-    
+
 
     private readonly int _aggregateWindowMs;
     private readonly TimeSpan _dataExpiration;
     private CancellationTokenSource? _aggregatorCts;
     private Task? _aggregatorTask;
 
-    /// <summary>
-    /// 带时间戳的数据包装（支持缓存过期机制）
-    /// </summary>
-    private class TimestampedData
-    {
-        public CollectedData Data { get; set; } = null!;
-        public DateTime LastUpdateTime { get; set; } = DateTime.UtcNow;
-
-        /// <summary>
-        /// 检查数据是否已过期（超过 30 秒没有更新）
-        /// </summary>
-        public bool IsExpired(TimeSpan expiration)
-        {
-            return LastUpdateTime == DateTime.MinValue ||
-                   (DateTime.UtcNow - LastUpdateTime) > expiration;
-        }
-    }
 
     public DataCollectionService(
         IServiceProvider serviceProvider,
@@ -233,29 +216,6 @@ public class DataCollectionService
         _logger.LogInformation("快照初始化完成，共 {Count} 个数据点", _dataSnapshot.Count);
     }
 
-    /// <summary>
-    /// 初始化虚拟节点计算（服务启动时调用，确保虚拟节点有初始值）
-    /// </summary>
-    private async Task InitializeVirtualNodesAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            _logger.LogInformation("开始初始化虚拟节点计算...");
-
-            // 计算所有虚拟节点
-            var results = await _virtualNodeEngine.CalculateAllAsync(cancellationToken);
-
-            // 将计算结果更新到快照和实时数据服务
-            await UpdateVirtualNodeResultsToSnapshotAsync(results, cancellationToken);
-
-            _logger.LogInformation("虚拟节点初始化完成：{SuccessCount}/{TotalCount} 成功",
-                results.Count(r => r.Success), results.Count);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "虚拟节点初始化计算失败");
-        }
-    }
 
     /// <summary>
     /// 将全量快照数据批量推送给发送服务（超过 30 秒未更新的数据置为 null）
@@ -328,22 +288,6 @@ public class DataCollectionService
         }
     }
 
-    /// <summary>
-    /// 为超时数据创建占位数据（Value=null, Quality=Uncertain）
-    /// </summary>
-    private static CollectedData CreateTimeoutData(CollectedData original)
-    {
-        return new CollectedData
-        {
-            DataPointId = original.DataPointId,
-            Tag = original.Tag,
-            DeviceId = original.DeviceId,
-            DeviceName = original.DeviceName,
-            Value = null,
-            Quality = DataQuality.Uncertain,
-            Timestamp = DateTime.UtcNow
-        };
-    }
 
     /// <summary>
     /// 更新数据点到全量快照（线程安全）
@@ -396,58 +340,6 @@ public class DataCollectionService
     public List<CollectedData> GetDeviceSnapshotData(int deviceId) =>
         _dataSnapshot.Values.Where(x => x.Data.DeviceId == deviceId).Select(x => x.Data).ToList();
 
-    /// <summary>
-    /// 获取指定虚拟数据点的快照数据
-    /// 虚拟数据点使用负 ID 存储在快照中
-    /// </summary>
-    public CollectedData? GetVirtualDataPointSnapshot(int virtualDataPointId)
-    {
-        if (_dataSnapshot.TryGetValue(-virtualDataPointId, out var snapshotData) &&
-            !snapshotData.IsExpired(_dataExpiration))
-        {
-            return snapshotData.Data;
-        }
-        return null;
-    }
-
-    /// <summary>
-    /// 获取指定设备的所有虚拟数据点快照数据
-    /// </summary>
-    public List<VirtualNodeCalculationResult> GetDeviceVirtualDataPointSnapshots(int deviceId) =>
-        GetVirtualDataPointSnapshotsCore(deviceId);
-
-    /// <summary>
-    /// 获取所有虚拟数据点的快照数据
-    /// </summary>
-    public List<VirtualNodeCalculationResult> GetAllVirtualDataPointSnapshots() =>
-        GetVirtualDataPointSnapshotsCore(null);
-
-    /// <summary>
-    /// 核心方法：获取虚拟数据点快照
-    /// </summary>
-    private List<VirtualNodeCalculationResult> GetVirtualDataPointSnapshotsCore(int? deviceId)
-    {
-        var results = new List<VirtualNodeCalculationResult>();
-
-        foreach (var kvp in _dataSnapshot)
-        {
-            // 虚拟数据点使用负 ID
-            if (kvp.Key > 0) continue;
-            if (deviceId.HasValue && kvp.Value.Data.DeviceId != deviceId.Value) continue;
-
-            results.Add(new VirtualNodeCalculationResult
-            {
-                Success = kvp.Value.Data.Value != null,
-                Value = kvp.Value.Data.Value,
-                Quality = kvp.Value.Data.Quality,
-                Timestamp = kvp.Value.Data.Timestamp,
-                VirtualDataPointId = -kvp.Key,
-                VirtualDataPointTag = kvp.Value.Data.Tag
-            });
-        }
-
-        return results;
-    }
 
     /// <summary>
     /// 启动所有启用设备的采集任务
@@ -511,7 +403,8 @@ public class DataCollectionService
                     try
                     {
                         // 执行一轮数据采集
-                        var collectedData = (await strategy.ReadAsync(enabledPoints, cts.Token)).ToList();
+                        var collectedData =
+                            (await strategy.ReadAsync(enabledPoints, SetDataSnapshot, cts.Token)).ToList();
 
                         // 执行规则引擎处理
                         var processedData = await ExecuteRuleEngineAsync(collectedData, cts.Token);
@@ -662,29 +555,6 @@ public class DataCollectionService
         // await InitializeDeviceVirtualNodesAsync(deviceId, CancellationToken.None);
     }
 
-    /// <summary>
-    /// 初始化指定设备的虚拟节点计算（设备启动时调用）
-    /// </summary>
-    private async Task InitializeDeviceVirtualNodesAsync(int deviceId, CancellationToken cancellationToken)
-    {
-        try
-        {
-            _logger.LogInformation("开始初始化设备 ID={DeviceId} 的虚拟节点计算...", deviceId);
-
-            // 计算该设备的所有虚拟节点
-            var results = await _virtualNodeEngine.CalculateDeviceAsync(deviceId, cancellationToken);
-
-            // 将计算结果更新到快照和实时数据服务
-            await UpdateVirtualNodeResultsToSnapshotAsync(results, cancellationToken);
-
-            _logger.LogInformation("设备 ID={DeviceId} 虚拟节点初始化完成：{SuccessCount}/{TotalCount} 成功",
-                deviceId, results.Count(r => r.Success), results.Count);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "设备 ID={DeviceId} 虚拟节点初始化计算失败", deviceId);
-        }
-    }
 
     /// <summary>
     /// 执行规则引擎处理采集数据
@@ -854,5 +724,56 @@ public class DataCollectionService
         return await context.VirtualDataPoints
             .Include(vp => vp.Device)
             .FirstOrDefaultAsync(vp => vp.Tag == tag);
+    }
+
+
+    /// <summary>
+    /// 设置数据快照，带过期时间判断
+    /// 如果数据已过期（超过配置的时间未更新），则设置为 null
+    /// 如果数据未过期，则使用上一次的数据
+    /// </summary>
+    /// <param name="collectedData">要设置的数据</param>
+    private void SetDataSnapshot(CollectedData collectedData)
+    {
+        // 更新或添加数据点的最新值
+        if (_dataSnapshot.TryGetValue(collectedData.DataPointId, out var existing))
+        {
+            // 检查现有数据是否已过期
+            if (existing.IsExpired(_dataExpiration))
+            {
+                // 已过期，设置为新数据（如果 Value 不为 null）
+                if (collectedData.Value != null)
+                {
+                    existing.Data = collectedData;
+                    existing.LastUpdateTime = DateTime.UtcNow;
+                }
+                else
+                {
+                    // Value 为 null 且已过期，保持过期状态
+                    existing.Data = collectedData;
+                    existing.LastUpdateTime = DateTime.MinValue;
+                }
+            }
+            else
+            {
+                // 未过期，只有 Value 不为 null 时才更新数据和 LastUpdateTime
+                if (collectedData.Value != null)
+                {
+                    existing.Data = collectedData;
+                    existing.LastUpdateTime = DateTime.UtcNow;
+                }
+                // 如果 Value 为 null，保持 existing.Data 和 LastUpdateTime 不变
+                // 这样超过 30 秒后会自动过期
+            }
+        }
+        else
+        {
+            // 新数据点，直接添加
+            _dataSnapshot[collectedData.DataPointId] = new TimestampedData
+            {
+                Data = collectedData,
+                LastUpdateTime = collectedData.Value != null ? DateTime.UtcNow : DateTime.MinValue
+            };
+        }
     }
 }

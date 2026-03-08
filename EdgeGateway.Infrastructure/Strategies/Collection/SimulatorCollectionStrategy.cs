@@ -50,6 +50,7 @@ public class SimulatorCollectionStrategy : ICollectionStrategy
     /// </remarks>
     public Task<IEnumerable<CollectedData>> ReadAsync(
         IEnumerable<DataPoint> dataPoints,
+        Action<CollectedData> callback,
         CancellationToken cancellationToken = default)
     {
         if (_currentDevice == null)

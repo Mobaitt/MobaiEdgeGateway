@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using EdgeGateway.Domain.Entities;
 
 namespace EdgeGateway.Domain.Interfaces;
@@ -35,8 +36,10 @@ public interface ICollectionStrategy
     /// </summary>
     /// <param name="dataPoints">需要采集的数据点列表</param>
     /// <param name="cancellationToken">取消令牌</param>
+    /// <param name="callback"></param>
     /// <returns>采集结果列表，每个数据点对应一条 CollectedData</returns>
     Task<IEnumerable<CollectedData>> ReadAsync(
         IEnumerable<DataPoint> dataPoints,
+        Action<CollectedData> callback,
         CancellationToken cancellationToken = default);
 }
