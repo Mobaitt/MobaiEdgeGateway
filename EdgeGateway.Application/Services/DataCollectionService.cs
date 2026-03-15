@@ -179,13 +179,13 @@ public class DataCollectionService
     private void StartVirtualNodeCalculator(CancellationToken cancellationToken)
     {
         _virtualNodeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        _virtualNodeTask = Task.Run(() =>
+        _virtualNodeTask = Task.Run(async () =>
         {
             try
             {
                 while (!_virtualNodeCts.Token.IsCancellationRequested)
                 {
-                    Task.Delay(1000, _virtualNodeCts.Token).Wait();
+                    await Task.Delay(1000, _virtualNodeCts.Token);
 
                     try
                     {
@@ -210,7 +210,7 @@ public class DataCollectionService
                                     Quality = result.Quality,
                                     Timestamp = DateTime.UtcNow
                                 };
-                                SetDataSnapshot(virtualData);
+                                await SetDataSnapshotAsync(virtualData);
                             }
                         }
                     }
@@ -306,7 +306,7 @@ public class DataCollectionService
         _deviceTasks[device.Id] = cts;
 
         // 在后台线程运行采集循环（不 await，并发执行）
-        _ = Task.Run(async () =>
+        _ = Task.Run((Func<Task>)(async () =>
         {
             _logger.LogInformation("设备 [{DeviceName}] 采集任务启动，协议：{Protocol}，周期：{Interval}ms",
                 device.Name, device.Protocol, device.PollingIntervalMs);
@@ -359,7 +359,7 @@ public class DataCollectionService
                 await strategy.DisconnectAsync();
                 _logger.LogInformation("设备 [{DeviceName}] 连接已断开", device.Name);
             }
-        }, cts.Token);
+        }), cts.Token);
     }
 
     /// <summary>
@@ -540,28 +540,28 @@ public class DataCollectionService
     /// 采集到每个数据点时立即触发规则引擎
     /// </summary>
     /// <param name="collectedData">要设置的数据</param>
-    private void SetDataSnapshot(CollectedData collectedData)
+    private async Task SetDataSnapshotAsync(CollectedData collectedData)
     {
         // 执行规则引擎（虚拟节点数据跳过规则引擎）
         if (collectedData.DataPointId >= 0)
         {
             try
             {
-                var ruleResult = _ruleEngine.ExecuteRulesAsync(collectedData, CancellationToken.None);
+                var ruleResult = await _ruleEngine.ExecuteRulesAsync(collectedData, CancellationToken.None);
 
-                if (ruleResult.Result.ShouldReject)
+                if (ruleResult.ShouldReject)
                 {
-                    _logger.LogDebug("数据点 {Tag} 被规则拒绝：{Error}", collectedData.Tag, ruleResult.Result.ErrorMessage);
+                    _logger.LogDebug("数据点 {Tag} 被规则拒绝：{Error}", collectedData.Tag, ruleResult.ErrorMessage);
                     return;
                 }
 
                 // 使用规则处理后的值
-                if (ruleResult.Result.Value != null)
+                if (ruleResult.Value != null)
                 {
-                    collectedData.Value = ruleResult.Result.Value;
+                    collectedData.Value = ruleResult.Value;
                 }
 
-                collectedData.Quality = ruleResult.Result.Quality;
+                collectedData.Quality = ruleResult.Quality;
             }
             catch (Exception ex)
             {
@@ -613,5 +613,14 @@ public class DataCollectionService
                 LastUpdateTime = collectedData.Value != null ? DateTime.UtcNow : DateTime.MinValue
             };
         }
+    }
+
+    /// <summary>
+    /// 设置数据快照（同步包装器，用于兼容 Action&lt;CollectedData&gt; 回调）
+    /// </summary>
+    private void SetDataSnapshot(CollectedData collectedData)
+    {
+        // 由于此方法在后台线程中被调用，使用 ConfigureAwait(false) 避免死锁
+        SetDataSnapshotAsync(collectedData).ConfigureAwait(false).GetAwaiter().GetResult();
     }
 }
