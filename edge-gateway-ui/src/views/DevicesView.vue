@@ -126,7 +126,7 @@ const CollectionProtocolOptions = ref<any[]>([])
 const loadCollectionProtocols = async () => {
   try {
     const res = await getCollectionProtocols()
-    CollectionProtocolOptions.value = (res as any).data || []
+    CollectionProtocolOptions.value = ((res as any).data || []).filter((item: any) => item.configurable !== false)
   } catch (error) {
     console.error('加载采集协议失败:', error)
   }
@@ -162,7 +162,7 @@ const filteredDevices = computed(() => {
 
 const getProtocolColor = (value: number) => {
   const protocol = CollectionProtocolOptions.value.find(p => p.value === value)
-  return protocol ? '#38dcc4' : '#8fa5c5'
+  return protocol?.color ?? '#8fa5c5'
 }
 
 const getProtocolBg = (value: number) => {

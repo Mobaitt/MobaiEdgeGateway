@@ -53,4 +53,9 @@ public class CollectionStrategyRegistry
 
         return (ICollectionStrategy)_serviceProvider.GetRequiredService(strategyType);
     }
+
+    /// <summary>
+    /// 获取当前已注册的采集协议列表
+    /// </summary>
+    public IReadOnlyCollection<CollectionProtocol> GetRegisteredProtocols() => _strategyMap.Keys.ToArray();
 }

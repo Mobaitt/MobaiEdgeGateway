@@ -158,6 +158,20 @@ public class DatabaseOptions
     public string ConnectionString { get; set; } = "Data Source=gateway.db";
 
     /// <summary>
+    /// 数据库初始化模式
+    /// 默认值：Auto
+    /// 说明：Auto=有迁移时优先 Migrate，否则 EnsureCreated；Migrate=仅执行迁移；EnsureCreated=直接建库
+    /// </summary>
+    public string InitializationMode { get; set; } = "Auto";
+
+    /// <summary>
+    /// 种子数据模式
+    /// 默认值：Demo
+    /// 说明：None=不写入种子数据；Demo=写入演示数据
+    /// </summary>
+    public string SeedMode { get; set; } = "Demo";
+
+    /// <summary>
     /// 是否启用敏感数据日志
     /// 默认值：false
     /// 说明：生产环境建议关闭，避免泄露敏感信息

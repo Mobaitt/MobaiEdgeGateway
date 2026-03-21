@@ -57,4 +57,9 @@ public class SendStrategyRegistry : ISendStrategyRegistry
 
         return (ISendStrategy)_serviceProvider.GetRequiredService(strategyType);
     }
+
+    /// <summary>
+    /// 获取当前已注册的发送协议列表
+    /// </summary>
+    public IReadOnlyCollection<SendProtocol> GetRegisteredProtocols() => _strategyMap.Keys.ToArray();
 }

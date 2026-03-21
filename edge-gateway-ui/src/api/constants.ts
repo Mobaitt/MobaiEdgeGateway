@@ -2,11 +2,11 @@
 // 采集协议枚举（与后端 CollectionProtocol 对应）
 // =============================================
 export const CollectionProtocol = {
-  Modbus:    { value: 1, label: 'Modbus',    color: '#4299e1', desc: '工业协议' },
-  OpcUa:     { value: 2, label: 'OPC UA',    color: '#9f7aea', desc: '工业自动化' },
-  S7:        { value: 3, label: 'Siemens S7', color: '#ed8936', desc: '西门子 PLC' },
-  Http:      { value: 4, label: 'HTTP',       color: '#48bb78', desc: 'HTTP 接口' },
-  Simulator: { value: 99, label: 'Simulator', color: '#38dcc4', desc: '模拟器' }
+  Simulator: { value: 0, label: 'Simulator', color: '#38dcc4', desc: '模拟器' },
+  Modbus:    { value: 1, label: 'Modbus', color: '#4299e1', desc: '工业协议' },
+  OpcUa:     { value: 2, label: 'OPC UA', color: '#9f7aea', desc: '工业自动化' },
+  Virtual:   { value: 3, label: 'Virtual', color: '#48bb78', desc: '计算节点' },
+  S7:        { value: 4, label: 'Siemens S7', color: '#ed8936', desc: '西门子 PLC' }
 }
 
 export const CollectionProtocolOptions = Object.values(CollectionProtocol).map(p => ({

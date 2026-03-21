@@ -1,4 +1,6 @@
-﻿using EdgeGateway.Domain.Enums;
+﻿using EdgeGateway.Application.Services;
+using EdgeGateway.Domain.Enums;
+using EdgeGateway.WebApi.DTOs.Response;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EdgeGateway.WebApi.Controllers;
@@ -11,22 +13,37 @@ namespace EdgeGateway.WebApi.Controllers;
 [Produces("application/json")]
 public class EnumsController : ControllerBase
 {
+    private readonly CollectionStrategyRegistry _collectionStrategyRegistry;
+    private readonly SendStrategyRegistry _sendStrategyRegistry;
+
+    public EnumsController(
+        CollectionStrategyRegistry collectionStrategyRegistry,
+        SendStrategyRegistry sendStrategyRegistry)
+    {
+        _collectionStrategyRegistry = collectionStrategyRegistry;
+        _sendStrategyRegistry = sendStrategyRegistry;
+    }
+
     /// <summary>
     /// 获取采集协议选项
     /// </summary>
     [HttpGet("collection-protocols")]
     public IActionResult GetCollectionProtocols()
     {
+        var registeredProtocols = _collectionStrategyRegistry.GetRegisteredProtocols().ToHashSet();
+
         var options = Enum.GetValues(typeof(CollectionProtocol))
             .Cast<CollectionProtocol>()
-            .Select(p => new
+            .Select(p => new ProtocolOptionResponse
             {
-                value = (int)p,
-                label = p.ToString(),
-                desc = GetProtocolDescription(p)
+                Value = (int)p,
+                Label = GetCollectionProtocolLabel(p),
+                Desc = GetProtocolDescription(p),
+                Color = GetCollectionProtocolColor(p),
+                Implemented = registeredProtocols.Contains(p),
+                Enabled = registeredProtocols.Contains(p),
+                Configurable = registeredProtocols.Contains(p)
             })
-            // 过滤掉没有实现的
-            .Where(p => ((List<int>)[1, 0]).Contains(p.value))
             .ToList();
 
         return Ok(new { data = options, message = "success" });
@@ -38,17 +55,21 @@ public class EnumsController : ControllerBase
     [HttpGet("send-protocols")]
     public IActionResult GetSendProtocols()
     {
+        var registeredProtocols = _sendStrategyRegistry.GetRegisteredProtocols().ToHashSet();
+
         var options = Enum.GetValues(typeof(SendProtocol))
             .Cast<SendProtocol>()
-            .Select(p => new
+            .Select(p => new ProtocolOptionResponse
             {
-                value = (int)p,
-                label = p.ToString(),
-                desc = GetSendProtocolDescription(p)
+                Value = (int)p,
+                Label = GetSendProtocolLabel(p),
+                Desc = GetSendProtocolDescription(p),
+                Color = GetSendProtocolColor(p),
+                Implemented = registeredProtocols.Contains(p),
+                Enabled = registeredProtocols.Contains(p),
+                Configurable = registeredProtocols.Contains(p)
             })
-            .
-            // 过滤掉没有实现的
-            Where(p => ((List<int>)[2, 5]).Contains(p.value)).ToList();
+            .ToList();
 
         return Ok(new { data = options, message = "success" });
     }
@@ -115,6 +136,29 @@ public class EnumsController : ControllerBase
         };
     }
 
+    private static string GetCollectionProtocolLabel(CollectionProtocol protocol)
+    {
+        return protocol switch
+        {
+            CollectionProtocol.OpcUa => "OPC UA",
+            CollectionProtocol.S7 => "Siemens S7",
+            _ => protocol.ToString()
+        };
+    }
+
+    private static string GetCollectionProtocolColor(CollectionProtocol protocol)
+    {
+        return protocol switch
+        {
+            CollectionProtocol.Simulator => "#38dcc4",
+            CollectionProtocol.Modbus => "#4299e1",
+            CollectionProtocol.OpcUa => "#9f7aea",
+            CollectionProtocol.Virtual => "#48bb78",
+            CollectionProtocol.S7 => "#ed8936",
+            _ => "#8fa5c5"
+        };
+    }
+
     private static string GetSendProtocolDescription(SendProtocol protocol)
     {
         return protocol switch
@@ -125,6 +169,29 @@ public class EnumsController : ControllerBase
             SendProtocol.LocalFile => "本地文件写入",
             SendProtocol.WebSocket => "WebSocket 服务端推送",
             _ => protocol.ToString()
+        };
+    }
+
+    private static string GetSendProtocolLabel(SendProtocol protocol)
+    {
+        return protocol switch
+        {
+            SendProtocol.Mqtt => "MQTT",
+            SendProtocol.LocalFile => "本地文件",
+            _ => protocol.ToString()
+        };
+    }
+
+    private static string GetSendProtocolColor(SendProtocol protocol)
+    {
+        return protocol switch
+        {
+            SendProtocol.Mqtt => "#f6b73c",
+            SendProtocol.Http => "#4299e1",
+            SendProtocol.Kafka => "#9f7aea",
+            SendProtocol.LocalFile => "#48bb78",
+            SendProtocol.WebSocket => "#38dcc4",
+            _ => "#8fa5c5"
         };
     }
 }

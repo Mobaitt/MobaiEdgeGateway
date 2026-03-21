@@ -90,10 +90,6 @@
           <el-icon class="hint-icon"><InfoFilled /></el-icon>
           <span>S7 协议，填写 PLC IP 与机架/槽号。</span>
         </div>
-        <div v-else-if="isHttpDevice" class="protocol-hint protocol-hint-inline">
-          <el-icon class="hint-icon"><InfoFilled /></el-icon>
-          <span>HTTP 接口，填写数据源 URL。</span>
-        </div>
         <div v-else-if="isSimulatorDevice" class="protocol-hint protocol-hint-inline">
           <el-icon class="hint-icon"><InfoFilled /></el-icon>
           <span>模拟器自动生成随机数据，无需地址配置。</span>
@@ -279,7 +275,6 @@ const isModbusDevice = computed(() => form.value.protocol === CollectionProtocol
 const isSimulatorDevice = computed(() => form.value.protocol === CollectionProtocol.Simulator.value)
 const isOpcUaDevice = computed(() => form.value.protocol === CollectionProtocol.OpcUa.value)
 const isS7Device = computed(() => form.value.protocol === CollectionProtocol.S7.value)
-const isHttpDevice = computed(() => form.value.protocol === CollectionProtocol.Http.value)
 
 const needAddressPort = computed(() => {
   const p = form.value.protocol
@@ -291,8 +286,7 @@ const addressPlaceholder = computed(() => {
     case CollectionProtocol.Modbus.value: return 'IP 地址 或 COM3'
     case CollectionProtocol.OpcUa.value: return 'opc.tcp://host:4840'
     case CollectionProtocol.S7.value: return 'PLC IP 地址'
-    case CollectionProtocol.Http.value: return 'https://api.example.com/data'
-    default: return '设备地址或 URL'
+    default: return '设备地址'
   }
 })
 

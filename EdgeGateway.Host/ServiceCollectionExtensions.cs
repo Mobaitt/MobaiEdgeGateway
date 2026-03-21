@@ -9,7 +9,10 @@ using EdgeGateway.Infrastructure.Strategies.Collection;
 using EdgeGateway.Infrastructure.Strategies.Send;
 using EdgeGateway.Infrastructure.WebSocket;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace EdgeGateway.Host;
 
@@ -24,45 +27,45 @@ public static class ServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddEdgeGateway(
         this IServiceCollection services,
+        IConfiguration? configuration = null,
         string dbPath = "gateway.db")
     {
-        // ========== 配置选项 ==========
-        // 注意：实际配置值从 Program.cs 中通过 IConfiguration 读取并配置
-        services.Configure<GatewayOptions>(options =>
+        var optionsBuilder = services.AddOptions<GatewayOptions>()
+            .Configure(options => ApplyDefaultGatewayOptions(options, dbPath))
+            .ValidateOnStart();
+
+        if (configuration != null)
         {
-            // 这里提供默认值作为后备（当配置文件不存在时使用）
-            options.Collection.AggregateWindowMs = 1000;
-            options.Collection.DataExpirationSeconds = 30;
-            options.Collection.DefaultPollingIntervalMs = 1000;
-            options.Collection.MinPollingIntervalMs = 100;
-            options.Collection.MaxPollingIntervalMs = 60000;
+            optionsBuilder.Bind(configuration.GetSection("GatewayOptions"));
+        }
 
-            options.Send.ChannelCacheExpirationSeconds = 30;
-            options.Send.HttpTimeoutMs = 5000;
-            options.Send.MqttQoS = 1;
-            options.Send.MaxConcurrentChannels = 10;
-
-            options.Rules.CacheExpirationMinutes = 5;
-
-            options.VirtualNodes.CalculationCacheMs = 500;
-            options.VirtualNodes.MaxConcurrentCalculations = 20;
-
-            options.Database.Type = "SQLite";
-            options.Database.ConnectionString = $"Data Source={dbPath}";
-            options.Database.EnableSensitiveDataLogging = false;
-        });
+        services.AddSingleton<IValidateOptions<GatewayOptions>, GatewayOptionsValidator>();
 
         // ========== 数据库 ==========
-        services.AddDbContext<GatewayDbContext>(options =>
-            options.UseSqlite($"Data Source={dbPath}")
-                   .EnableSensitiveDataLogging()
-                   .LogTo(Console.WriteLine, Microsoft.Extensions.Logging.LogLevel.Information));
+        services.AddDbContext<GatewayDbContext>((serviceProvider, options) =>
+        {
+            var gatewayOptions = serviceProvider.GetRequiredService<IOptions<GatewayOptions>>().Value;
+            options.UseSqlite(gatewayOptions.Database.ConnectionString);
+
+            if (gatewayOptions.Database.EnableSensitiveDataLogging)
+            {
+                options.EnableSensitiveDataLogging()
+                       .LogTo(Console.WriteLine, LogLevel.Information);
+            }
+        });
 
         // 注册 IDbContextFactory（供 RuleEngine 等使用）
-        services.AddDbContextFactory<GatewayDbContext>(options =>
-            options.UseSqlite($"Data Source={dbPath}")
-                   .EnableSensitiveDataLogging()
-                   .LogTo(Console.WriteLine, Microsoft.Extensions.Logging.LogLevel.Information));
+        services.AddDbContextFactory<GatewayDbContext>((serviceProvider, options) =>
+        {
+            var gatewayOptions = serviceProvider.GetRequiredService<IOptions<GatewayOptions>>().Value;
+            options.UseSqlite(gatewayOptions.Database.ConnectionString);
+
+            if (gatewayOptions.Database.EnableSensitiveDataLogging)
+            {
+                options.EnableSensitiveDataLogging()
+                       .LogTo(Console.WriteLine, LogLevel.Information);
+            }
+        });
 
         // ========== 仓储层 ==========
         services.AddScoped<IDeviceRepository, DeviceRepository>();
@@ -151,10 +154,80 @@ public static class ServiceCollectionExtensions
     {
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<GatewayDbContext>();
-        await db.Database.EnsureCreatedAsync();
-        
-        // 初始化测试数据
+        var options = scope.ServiceProvider.GetRequiredService<IOptions<GatewayOptions>>().Value;
+        var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DatabaseInitializer");
+
+        await InitializeDatabaseSchemaAsync(db, options, logger);
+
         var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
-        await seeder.InitializeTestDataAsync();
+        if (string.Equals(options.Database.SeedMode, "Demo", StringComparison.OrdinalIgnoreCase))
+        {
+            await seeder.InitializeTestDataAsync();
+        }
+        else
+        {
+            logger.LogInformation("已跳过演示种子数据初始化，当前 SeedMode={SeedMode}", options.Database.SeedMode);
+        }
+    }
+
+    private static void ApplyDefaultGatewayOptions(GatewayOptions options, string dbPath)
+    {
+        options.Collection.AggregateWindowMs = 1000;
+        options.Collection.DataExpirationSeconds = 30;
+        options.Collection.DefaultPollingIntervalMs = 1000;
+        options.Collection.MinPollingIntervalMs = 100;
+        options.Collection.MaxPollingIntervalMs = 60000;
+
+        options.Send.ChannelCacheExpirationSeconds = 30;
+        options.Send.HttpTimeoutMs = 5000;
+        options.Send.MqttQoS = 1;
+        options.Send.MaxConcurrentChannels = 10;
+
+        options.Rules.CacheExpirationMinutes = 5;
+
+        options.VirtualNodes.CalculationCacheMs = 500;
+        options.VirtualNodes.MaxConcurrentCalculations = 20;
+
+        options.Database.Type = "SQLite";
+        options.Database.ConnectionString = $"Data Source={dbPath}";
+        options.Database.InitializationMode = "Auto";
+        options.Database.SeedMode = "Demo";
+        options.Database.EnableSensitiveDataLogging = false;
+    }
+
+    private static async Task InitializeDatabaseSchemaAsync(
+        GatewayDbContext db,
+        GatewayOptions options,
+        ILogger logger)
+    {
+        var mode = options.Database.InitializationMode.Trim();
+
+        if (string.Equals(mode, "Auto", StringComparison.OrdinalIgnoreCase))
+        {
+            var hasMigrations = (await db.Database.GetMigrationsAsync()).Any();
+
+            if (hasMigrations)
+            {
+                logger.LogInformation("检测到 EF Core 迁移，按 Auto 模式执行 Migrate");
+                await db.Database.MigrateAsync();
+            }
+            else
+            {
+                logger.LogInformation("未检测到 EF Core 迁移，按 Auto 模式执行 EnsureCreated");
+                await db.Database.EnsureCreatedAsync();
+            }
+
+            return;
+        }
+
+        if (string.Equals(mode, "Migrate", StringComparison.OrdinalIgnoreCase))
+        {
+            logger.LogInformation("按配置执行数据库迁移初始化");
+            await db.Database.MigrateAsync();
+            return;
+        }
+
+        logger.LogInformation("按配置执行 EnsureCreated 数据库初始化");
+        await db.Database.EnsureCreatedAsync();
     }
 }

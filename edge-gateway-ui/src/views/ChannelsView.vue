@@ -95,7 +95,7 @@ const SendProtocolOptions = ref<any[]>([])
 const loadSendProtocols = async () => {
   try {
     const res = await getSendProtocols()
-    SendProtocolOptions.value = (res as any).data || []
+    SendProtocolOptions.value = ((res as any).data || []).filter((item: any) => item.configurable !== false)
   } catch (error) {
     console.error('加载发送协议失败:', error)
   }

@@ -13,9 +13,9 @@ public static class ConsoleEntryPoint
     public static async Task RunAsync(string[] args)
     {
         var host = Host.CreateDefaultBuilder(args)
-            .ConfigureServices((_, services) =>
+            .ConfigureServices((context, services) =>
             {
-                services.AddEdgeGateway(dbPath: "gateway.db");
+                services.AddEdgeGateway(context.Configuration, dbPath: "gateway.db");
                 services.AddHostedService<GatewayWorker>();
             })
             .ConfigureLogging(logging =>

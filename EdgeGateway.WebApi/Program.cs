@@ -1,5 +1,4 @@
 using EdgeGateway.Application.Services;
-using EdgeGateway.Domain.Options;
 using EdgeGateway.Host;
 using EdgeGateway.Infrastructure.Http;
 using EdgeGateway.Infrastructure.WebSocket;
@@ -11,27 +10,8 @@ using Microsoft.OpenApi.Models;
 // =============================================
 var builder = WebApplication.CreateBuilder(args);
 
-// ========== 从配置文件读取网关配置 ==========
-var gatewayOptions = builder.Configuration.GetSection("GatewayOptions").Get<GatewayOptions>() ?? new GatewayOptions();
-builder.Services.Configure<GatewayOptions>(builder.Configuration.GetSection("GatewayOptions"));
-
-// 从配置获取数据库连接字符串
-var dbPath = "gateway.db";
-if (!string.IsNullOrEmpty(builder.Configuration["Database:ConnectionString"]))
-{
-    // 解析连接字符串中的 Data Source
-    var connStr = builder.Configuration["Database:ConnectionString"];
-    var dsIndex = connStr.IndexOf("Data Source=", StringComparison.OrdinalIgnoreCase);
-    if (dsIndex >= 0)
-    {
-        var dsPart = connStr.Substring(dsIndex + "Data Source=".Length).Split(';')[0].Trim();
-        if (!string.IsNullOrEmpty(dsPart))
-            dbPath = dsPart;
-    }
-}
-
 // ========== 注册网关核心服务（设备仓储、策略、采集/发送服务）==========
-builder.Services.AddEdgeGateway(dbPath: dbPath);
+builder.Services.AddEdgeGateway(builder.Configuration);
 
 // ========== Web API 相关服务 ==========
 builder.Services.AddControllers()
