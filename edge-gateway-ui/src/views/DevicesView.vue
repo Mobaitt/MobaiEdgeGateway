@@ -1,7 +1,7 @@
 <template>
   <div class="devices-view page-enter">
     <PageHeader title="设备管理" desc="管理边缘采集设备及其通信配置">
-      <el-button type="primary" :icon="Plus" @click="openCreate">新增设备</el-button>
+      <el-button class="eg-primary-action" type="primary" :icon="Plus" @click="openCreate">新增设备</el-button>
     </PageHeader>
 
     <div class="toolbar">

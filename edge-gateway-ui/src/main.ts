@@ -5,9 +5,14 @@ import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import router from './router'
 import App from './App.vue'
+import { initializeTheme } from './composables/useTheme'
+import './styles/theme.css'
 import './styles/global.css'
+import './styles/page-patterns.css'
 import './styles/dialogs.scss'
 import 'element-plus/dist/index.css'
+
+initializeTheme()
 
 const app = createApp(App)
 

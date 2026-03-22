@@ -1,7 +1,7 @@
 <template>
   <div class="rules-view page-enter">
     <PageHeader title="规则管理" desc="配置数据校验、转换、限制与计算规则">
-      <el-button type="primary" :icon="Plus" @click="openCreateDialog">新建规则</el-button>
+      <el-button class="eg-primary-action" type="primary" :icon="Plus" @click="openCreateDialog">新建规则</el-button>
     </PageHeader>
 
     <!-- 工具栏 -->

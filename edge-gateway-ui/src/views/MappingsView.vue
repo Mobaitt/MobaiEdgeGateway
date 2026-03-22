@@ -9,7 +9,7 @@
           <div class="channel-tag mono">{{ route.query.channelName || `通道 #${route.params.id}` }}</div>
         </div>
       </div>
-      <el-button type="primary" :icon="Plus" @click="openBindDialog">绑定数据点</el-button>
+      <el-button class="eg-primary-action" type="primary" :icon="Plus" @click="openBindDialog">绑定数据点</el-button>
     </div>
 
     <!-- 说明横幅 -->
@@ -88,7 +88,7 @@
         </el-table>
 
         <!-- 分页 -->
-        <div class="pagination-bar">
+        <div class="pagination-bar eg-pagination-bar">
           <el-pagination
             v-model:current-page="pagination.page"
             v-model:page-size="pagination.pageSize"
@@ -101,7 +101,7 @@
         </div>
 
         <EmptyState v-if="mappings.length === 0 && !loading" message="尚未绑定任何数据点" icon="Connection">
-          <el-button type="primary" size="small" @click="openBindDialog">立即绑定</el-button>
+          <el-button class="eg-primary-action" type="primary" size="small" @click="openBindDialog">立即绑定</el-button>
         </EmptyState>
       </div>
     </div>

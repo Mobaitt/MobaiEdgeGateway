@@ -32,7 +32,7 @@
     </div>
 
     <div class="main-content">
-      <div class="toolbar">
+      <div class="toolbar eg-toolbar-surface">
         <div class="toolbar-left">
           <el-input
             v-model="searchText"
@@ -56,8 +56,8 @@
           </el-select>
         </div>
         <div class="toolbar-right">
-          <el-button :icon="Refresh" circle :loading="refreshing" @click="refreshData" />
-          <el-dropdown split-button type="primary" @click="openCreate">
+          <el-button class="eg-circle-action" :icon="Refresh" circle :loading="refreshing" @click="refreshData" />
+          <el-dropdown class="eg-split-action" split-button type="primary" @click="openCreate">
             <el-icon><Plus /></el-icon>
             新增数据点
             <template #dropdown>
@@ -161,7 +161,7 @@
           </el-table-column>
         </el-table>
 
-        <div class="pagination-bar">
+        <div class="pagination-bar eg-pagination-bar">
           <el-pagination
             v-model:current-page="pagination.page"
             v-model:page-size="pagination.pageSize"
@@ -773,14 +773,7 @@ onUnmounted(() => {
 }
 
 .pagination-bar {
-  padding: 12px 16px;
-  border-top: 1px solid var(--border-subtle);
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  background: var(--bg-base);
-  flex-shrink: 0;
-  gap: 8px;
+  padding: 0;
 }
 
 .tag-text {
@@ -810,158 +803,4 @@ onUnmounted(() => {
   color: var(--text-secondary);
 }
 
-:deep(.toolbar-right .el-button.is-circle) {
-  width: 38px;
-  height: 38px;
-  border-radius: 12px;
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-base);
-  color: var(--text-secondary);
-  box-shadow: none;
-  transition: all 0.2s ease;
-}
-
-:deep(.toolbar-right .el-button.is-circle:hover) {
-  border-color: rgba(56, 220, 196, 0.4);
-  color: var(--cyan);
-  background: rgba(56, 220, 196, 0.08);
-  transform: translateY(-1px);
-}
-
-:deep(.toolbar-right .el-dropdown) {
-  display: inline-flex;
-}
-
-:deep(.toolbar-right .el-dropdown .el-button-group) {
-  display: inline-flex;
-  border-radius: 14px;
-  overflow: hidden;
-  box-shadow: 0 10px 28px rgba(11, 18, 32, 0.28);
-}
-
-:deep(.toolbar-right .el-dropdown .el-button-group .el-button) {
-  height: 44px;
-  border-color: rgba(56, 220, 196, 0.24) !important;
-  background: linear-gradient(135deg, rgba(56, 220, 196, 0.96) 0%, rgba(46, 189, 170, 0.96) 100%) !important;
-  color: #f3fffd !important;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
-:deep(.toolbar-right .el-dropdown .el-button-group .el-button:first-child) {
-  padding-inline: 18px 16px;
-}
-
-:deep(.toolbar-right .el-dropdown .el-button-group .el-button:last-child) {
-  width: 44px;
-  padding: 0;
-  border-left-color: rgba(255, 255, 255, 0.18) !important;
-}
-
-:deep(.toolbar-right .el-dropdown .el-button-group .el-button:hover) {
-  background: linear-gradient(135deg, rgba(60, 231, 209, 1) 0%, rgba(48, 195, 176, 1) 100%) !important;
-  border-color: rgba(60, 231, 209, 0.36) !important;
-}
-
-:deep(.toolbar-right .el-dropdown .el-button-group .el-button .el-icon) {
-  color: inherit;
-}
-
-:deep(.el-pagination) {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0;
-}
-
-:deep(.el-pagination__total) {
-  color: var(--text-muted);
-  font-size: 13px;
-  font-weight: 500;
-}
-
-:deep(.el-pagination__sizes) {
-  margin-right: 8px;
-}
-
-:deep(.el-pagination__sizes .el-input) {
-  width: 108px;
-}
-
-:deep(.el-pagination .btn-prev),
-:deep(.el-pagination .btn-next),
-:deep(.el-pagination__sizes .el-input__wrapper),
-:deep(.el-pagination__jump .el-input__wrapper) {
-  height: 34px;
-  border-radius: 10px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  box-shadow: none;
-  transition: all 0.2s ease;
-}
-
-:deep(.el-pagination .btn-prev),
-:deep(.el-pagination .btn-next) {
-  min-width: 34px;
-  color: var(--text-secondary);
-}
-
-:deep(.el-pagination .btn-prev:hover),
-:deep(.el-pagination .btn-next:hover),
-:deep(.el-pagination__sizes .el-input__wrapper:hover),
-:deep(.el-pagination__jump .el-input__wrapper:hover) {
-  border-color: rgba(56, 220, 196, 0.42);
-  color: var(--cyan);
-  background: rgba(56, 220, 196, 0.08);
-}
-
-:deep(.el-pager) {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-:deep(.el-pager li) {
-  min-width: 34px;
-  height: 34px;
-  line-height: 34px;
-  margin: 0;
-  border-radius: 10px;
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-card);
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 600;
-  transition: all 0.2s ease;
-}
-
-:deep(.el-pager li:hover) {
-  border-color: rgba(56, 220, 196, 0.42);
-  background: rgba(56, 220, 196, 0.08);
-  color: var(--cyan);
-  transform: translateY(-1px);
-}
-
-:deep(.el-pager li.is-active) {
-  border-color: rgba(56, 220, 196, 0.62);
-  background: linear-gradient(135deg, rgba(56, 220, 196, 0.94) 0%, rgba(46, 189, 170, 0.94) 100%);
-  color: #f3fffd;
-  box-shadow: 0 8px 20px rgba(56, 220, 196, 0.22);
-}
-
-:deep(.el-pagination__jump) {
-  margin-left: 10px;
-  color: var(--text-muted);
-  font-size: 13px;
-}
-
-:deep(.el-pagination__jump .el-input) {
-  width: 56px;
-  margin: 0 4px;
-}
-
-:deep(.el-pagination__jump .el-input__inner) {
-  text-align: center;
-  font-size: 13px;
-}
 </style>

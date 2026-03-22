@@ -65,6 +65,10 @@
             <el-icon><Lock /></el-icon>
             <span>演示模式</span>
           </div>
+          <button class="theme-toggle" type="button" :title="isDark ? '切换到明亮模式' : '切换到暗色模式'" @click="toggleTheme">
+            <el-icon><component :is="isDark ? 'Sunny' : 'Moon'" /></el-icon>
+            <span>{{ isDark ? '明亮模式' : '暗色模式' }}</span>
+          </button>
           <div class="sys-time mono">{{ currentTime }}</div>
           <div class="version-tag">v1.0.0</div>
         </div>
@@ -88,6 +92,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { getGatewayStatus } from '@/api/gateway'
 import type { GatewayStatus } from '@/types'
 import { getDemoModeStatus } from '@/api/system'
+import { useTheme } from '@/composables/useTheme'
 
 const route = useRoute()
 const router = useRouter()
@@ -97,6 +102,7 @@ const demoModeEnabled = ref(false)
 const currentTime = ref('')
 const deviceCount = ref(0)
 const channelCount = ref(0)
+const { isDark, toggleTheme } = useTheme()
 
 const navItems = computed(() => {
   const layoutRoute = router.getRoutes().find((r) => r.path === '/' && r.children?.length)
@@ -293,6 +299,33 @@ onUnmounted(() => {
   background: var(--bg-panel);
 }
 .topbar-right { display: flex; align-items: center; gap: 16px; }
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: var(--theme-surface-glow);
+}
+
+.theme-toggle:hover {
+  color: var(--cyan);
+  border-color: var(--border-accent);
+  background: var(--bg-hover);
+  transform: translateY(-1px);
+}
+
+.theme-toggle span {
+  font-size: 12px;
+  font-weight: 600;
+}
 
 /* 演示模式徽章 */
 .demo-mode-badge {

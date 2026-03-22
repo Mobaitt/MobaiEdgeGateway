@@ -1,7 +1,7 @@
 <template>
   <div class="channels-view page-enter">
     <PageHeader title="发送通道" desc="配置数据发送目标及数据点绑定关系">
-      <el-button type="primary" :icon="Plus" @click="openCreate">新增通道</el-button>
+      <el-button class="eg-primary-action" type="primary" :icon="Plus" @click="openCreate">新增通道</el-button>
     </PageHeader>
 
     <!-- 通道卡片列表 -->
