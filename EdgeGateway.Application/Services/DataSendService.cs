@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using EdgeGateway.Domain.Entities;
 using EdgeGateway.Domain.Interfaces;
 using EdgeGateway.Domain.Options;
@@ -25,7 +26,7 @@ public class DataSendService
     private readonly GatewayOptions _options;
 
     // 已初始化的发送策略实例缓存（通道 ID → 策略实例），避免重复连接
-    private readonly Dictionary<int, ISendStrategy> _strategyCache = new();
+    private readonly ConcurrentDictionary<int, ISendStrategy> _strategyCache = new();
     private readonly SemaphoreSlim _initLock = new(1, 1);
 
     // 通道配置缓存（通道 ID → 通道配置），避免频繁查询数据库
@@ -90,12 +91,11 @@ public class DataSendService
     /// </summary>
     public async Task DisableChannelAsync(int channelId)
     {
-        if (_strategyCache.TryGetValue(channelId, out var strategy))
+        if (_strategyCache.TryRemove(channelId, out var strategy))
         {
             try
             {
                 await strategy.DisposeAsync();
-                _strategyCache.Remove(channelId);
                 _logger.LogInformation("发送通道已停用：ID={ChannelId}", channelId);
             }
             catch (Exception ex)
@@ -359,7 +359,7 @@ public class DataSendService
     /// </summary>
     public async Task DisposeAllAsync()
     {
-        foreach (var (id, strategy) in _strategyCache)
+        foreach (var (id, strategy) in _strategyCache.ToArray())
         {
             try { await strategy.DisposeAsync(); }
             catch (Exception ex) { _logger.LogError(ex, "释放通道 [{Id}] 策略资源时出错", id); }

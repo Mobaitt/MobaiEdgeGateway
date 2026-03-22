@@ -16,6 +16,14 @@ public interface IDataPointRepository
     /// <summary>获取指定设备下的所有数据点</summary>
     Task<IEnumerable<DataPoint>> GetByDeviceIdAsync(int deviceId);
 
+    Task<(List<DataPoint> Items, int Total)> GetPagedByDeviceIdAsync(
+        int deviceId,
+        int page,
+        int pageSize,
+        string? search = null,
+        int? dataType = null,
+        bool? isEnabled = null);
+
     /// <summary>新增数据点</summary>
     Task<DataPoint> AddAsync(DataPoint dataPoint);
 

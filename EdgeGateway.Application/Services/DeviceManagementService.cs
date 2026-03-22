@@ -1,6 +1,5 @@
 using EdgeGateway.Domain.Entities;
 using EdgeGateway.Domain.Interfaces;
-using EdgeGateway.Infrastructure.Repositories;
 using Microsoft.Extensions.Logging;
 
 namespace EdgeGateway.Application.Services;
@@ -117,7 +116,7 @@ public class DeviceManagementService
 
     /// <summary>分页查询设备数据点</summary>
     public Task<(List<DataPoint> Items, int Total)> GetPagedDataPointsAsync(int deviceId, int page, int pageSize, string? search = null, int? dataType = null, bool? isEnabled = null) =>
-        ((DataPointRepository)_dataPointRepo).GetPagedByDeviceIdAsync(deviceId, page, pageSize, search, dataType, isEnabled);
+        _dataPointRepo.GetPagedByDeviceIdAsync(deviceId, page, pageSize, search, dataType, isEnabled);
 
     /// <summary>获取单个数据点</summary>
     public Task<DataPoint?> GetDataPointAsync(int id) =>
@@ -258,7 +257,7 @@ public class DeviceManagementService
 
     /// <summary>分页查询通道映射</summary>
     public Task<(List<ChannelDataPointMapping> Items, int Total)> GetPagedChannelMappingsAsync(int channelId, int page, int pageSize, string? search = null, bool? isEnabled = null, bool? isVirtual = null) =>
-        ((ChannelMappingRepository)_mappingRepo).GetPagedByChannelIdAsync(channelId, page, pageSize, search, isEnabled, isVirtual);
+        _mappingRepo.GetPagedByChannelIdAsync(channelId, page, pageSize, search, isEnabled, isVirtual);
 
     /// <summary>删除映射关系</summary>
     public async Task DeleteMappingAsync(int mappingId)

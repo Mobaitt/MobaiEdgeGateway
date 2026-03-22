@@ -11,6 +11,14 @@ public interface IChannelMappingRepository
     /// <summary>获取指定通道的所有数据点映射（含数据点导航属性）</summary>
     Task<IEnumerable<ChannelDataPointMapping>> GetByChannelIdAsync(int channelId);
 
+    Task<(List<ChannelDataPointMapping> Items, int Total)> GetPagedByChannelIdAsync(
+        int channelId,
+        int page,
+        int pageSize,
+        string? search = null,
+        bool? isEnabled = null,
+        bool? isVirtual = null);
+
     /// <summary>获取指定数据点的所有通道映射（含通道导航属性）</summary>
     Task<IEnumerable<ChannelDataPointMapping>> GetByDataPointIdAsync(int dataPointId);
 

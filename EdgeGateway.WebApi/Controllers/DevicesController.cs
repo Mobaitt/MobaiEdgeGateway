@@ -355,7 +355,7 @@ public class DevicesController : ControllerBase
     private static DeviceListItem MapToListItem(
         Device d,
         int virtualPointCount = 0,
-        DataCollectionService.DeviceRuntimeSnapshot? runtimeStatus = null)
+        RuntimeDeviceSnapshot? runtimeStatus = null)
     {
         var response = new DeviceListItem
         {
@@ -386,7 +386,7 @@ public class DevicesController : ControllerBase
     private static DeviceResponse MapToDetail(
         Device d,
         int virtualPointCount = 0,
-        DataCollectionService.DeviceRuntimeSnapshot? runtimeStatus = null)
+        RuntimeDeviceSnapshot? runtimeStatus = null)
     {
         var response = new DeviceResponse
         {
@@ -416,7 +416,7 @@ public class DevicesController : ControllerBase
         return response;
     }
 
-    private static void ApplyRuntimeStatus(DeviceListItem target, DataCollectionService.DeviceRuntimeSnapshot? runtimeStatus)
+    private static void ApplyRuntimeStatus(DeviceListItem target, RuntimeDeviceSnapshot? runtimeStatus)
     {
         if (runtimeStatus == null)
             return;
@@ -434,7 +434,7 @@ public class DevicesController : ControllerBase
         target.IsConnected = runtimeStatus.IsConnected;
     }
 
-    private static void ApplyRuntimeStatus(DeviceResponse target, DataCollectionService.DeviceRuntimeSnapshot? runtimeStatus)
+    private static void ApplyRuntimeStatus(DeviceResponse target, RuntimeDeviceSnapshot? runtimeStatus)
     {
         if (runtimeStatus == null)
             return;
