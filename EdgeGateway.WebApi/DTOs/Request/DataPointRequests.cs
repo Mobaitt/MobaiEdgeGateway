@@ -12,6 +12,10 @@ public class PagedRequest
 
 public class ControlDataPointRequest
 {
+    [Required(ErrorMessage = "Tag is required")]
+    [MaxLength(200)]
+    public string Tag { get; set; } = string.Empty;
+
     [Required(ErrorMessage = "Target value is required")]
     public JsonElement Value { get; set; }
 }
@@ -57,6 +61,7 @@ public class CreateDataPointRequest
     public ModbusByteOrder? ModbusByteOrder { get; set; }
     public byte RegisterLength { get; set; } = 1;
     public bool IsEnabled { get; set; } = true;
+    public bool IsControllable { get; set; }
 }
 
 public class UpdateDataPointRequest
@@ -79,4 +84,5 @@ public class UpdateDataPointRequest
     public ModbusByteOrder? ModbusByteOrder { get; set; }
     public byte? RegisterLength { get; set; }
     public bool? IsEnabled { get; set; }
+    public bool? IsControllable { get; set; }
 }

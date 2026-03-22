@@ -30,6 +30,7 @@ export interface DataPointItem {
   dataTypeValue?: number
   unit?: string
   isEnabled: boolean
+  isControllable?: boolean
   createdAt?: string
   modbusSlaveId?: number
   modbusFunctionCode?: number

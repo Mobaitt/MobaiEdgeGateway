@@ -27,6 +27,7 @@ public class DataPointResponse
     public string? Unit { get; set; }
 
     public bool IsEnabled { get; set; }
+    public bool IsControllable { get; set; }
     public DateTime CreatedAt { get; set; }
 
     // Modbus 配置字段

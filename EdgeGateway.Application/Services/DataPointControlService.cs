@@ -32,7 +32,6 @@ public class DataPointControlService
 
     public async Task<object?> ControlAsync(int deviceId, int dataPointId, object? value, CancellationToken cancellationToken = default)
     {
-        // 校验点位是否存在，且属于目标设备
         var dataPoint = await _dataPointRepository.GetByIdAsync(dataPointId)
             ?? throw new InvalidOperationException($"Data point ID={dataPointId} was not found");
 
@@ -42,42 +41,36 @@ public class DataPointControlService
         if (!dataPoint.IsEnabled)
             throw new InvalidOperationException("The target data point is disabled");
 
+        if (!dataPoint.IsControllable)
+            throw new InvalidOperationException("The target data point is not controllable");
+
         var device = await _deviceRepository.GetByIdAsync(deviceId)
             ?? throw new InvalidOperationException($"Device ID={deviceId} was not found");
 
         if (!device.IsEnabled)
             throw new InvalidOperationException("The target device is disabled");
 
-        // 根据设备协议解析具体的读写策略
         var strategy = _strategyRegistry.Resolve(device.Protocol);
         object? actualValue = null;
 
-        await _collectionService.ExecuteWithDeviceLockAsync(
-            deviceId,
-            async token =>
-            {
-                try
-                {
-                    await strategy.ConnectAsync(device, token);
-                    await strategy.WriteAsync(dataPoint, value, token);
+        try
+        {
+            await strategy.ConnectAsync(device, cancellationToken);
+            await strategy.WriteAsync(dataPoint, value, cancellationToken);
 
-                    CollectedData? readBack = null;
-                    await strategy.ReadAsync(
-                        [dataPoint],
-                        collected => readBack = collected,
-                        token);
+            CollectedData? readBack = null;
+            await strategy.ReadAsync(
+                [dataPoint],
+                collected => readBack = collected,
+                cancellationToken);
 
-                    actualValue = readBack?.Value ?? value;
-
-                    // 写入成功后立即覆盖内存快照，确保前端实时值同步刷新
-                    await _collectionService.OverrideDataPointValueAsync(dataPoint, actualValue, device.Code);
-                }
-                finally
-                {
-                    await strategy.DisconnectAsync(token);
-                }
-            },
-            cancellationToken);
+            actualValue = readBack?.Value ?? value;
+            await _collectionService.OverrideDataPointValueAsync(dataPoint, actualValue, device.Code);
+        }
+        finally
+        {
+            await strategy.DisconnectAsync(cancellationToken);
+        }
 
         _logger.LogInformation(
             "Point control succeeded: Device={DeviceCode}, Tag={Tag}, Value={Value}",
@@ -86,5 +79,14 @@ public class DataPointControlService
             actualValue);
 
         return actualValue;
+    }
+
+    public async Task<(DataPoint DataPoint, object? Value)> ControlByTagAsync(string tag, object? value, CancellationToken cancellationToken = default)
+    {
+        var dataPoint = await _dataPointRepository.GetByTagAsync(tag)
+            ?? throw new InvalidOperationException($"Data point Tag='{tag}' was not found");
+
+        var actualValue = await ControlAsync(dataPoint.DeviceId, dataPoint.Id, value, cancellationToken);
+        return (dataPoint, actualValue);
     }
 }

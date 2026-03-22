@@ -109,6 +109,13 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="允许控制">
+              <el-switch v-model="form.isControllable" active-color="#38dcc4" />
+            </el-form-item>
+          </el-col>
+        </el-row>
       </div>
 
       <!-- Modbus 配置：仅当设备为 Modbus 时显示 -->
@@ -216,6 +223,7 @@ interface DataPointForm {
   dataType: number | null
   unit: string
   isEnabled: boolean
+  isControllable: boolean
   modbusSlaveId: number
   modbusFunctionCode: number
   modbusByteOrder: number
@@ -259,6 +267,7 @@ const form = ref<DataPointForm>({
   dataType: null,
   unit: '',
   isEnabled: true,
+  isControllable: false,
   modbusSlaveId: 1,
   modbusFunctionCode: 3,
   modbusByteOrder: 1,
@@ -291,6 +300,7 @@ const resetForm = () => {
     dataType: null,
     unit: '',
     isEnabled: true,
+    isControllable: false,
     modbusSlaveId: 1,
     modbusFunctionCode: 3,
     modbusByteOrder: 1,
@@ -313,6 +323,7 @@ watch(
         dataType: dataPoint.dataTypeValue ?? (typeof dataPoint.dataType === 'number' ? dataPoint.dataType : null),
         unit: dataPoint.unit || '',
         isEnabled: dataPoint.isEnabled,
+        isControllable: dataPoint.isControllable ?? false,
         modbusSlaveId: dataPoint.modbusSlaveId || 1,
         modbusFunctionCode: dataPoint.modbusFunctionCode || 3,
         modbusByteOrder: dataPoint.modbusByteOrder || 1,

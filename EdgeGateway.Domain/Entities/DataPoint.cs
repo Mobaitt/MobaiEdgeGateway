@@ -46,6 +46,8 @@ public class DataPoint
     /// <summary>是否启用采集</summary>
     public bool IsEnabled { get; set; } = true;
 
+    public bool IsControllable { get; set; }
+
     /// <summary>创建时间</summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

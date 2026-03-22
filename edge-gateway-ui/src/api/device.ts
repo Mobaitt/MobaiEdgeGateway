@@ -57,5 +57,5 @@ export const getDeviceRealtimeData = (deviceId) =>
   request.get(`/devices/${deviceId}/datapoints/realtime`)
 
 /** 鎺у埗鏁版嵁鐐?*/
-export const controlDataPoint = (deviceId, dataPointId, value) =>
-  request.post(`/devices/${deviceId}/datapoints/${dataPointId}/control`, { value })
+export const controlDataPoint = (tag, value) =>
+  request.post('/devices/datapoints/control', { tag, value })

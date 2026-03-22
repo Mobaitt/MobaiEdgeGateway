@@ -18,6 +18,9 @@ public class DataPointRepository : IDataPointRepository
     public async Task<DataPoint?> GetByIdAsync(int id) =>
         await _db.DataPoints.FindAsync(id);
 
+    public async Task<DataPoint?> GetByTagAsync(string tag) =>
+        await _db.DataPoints.FirstOrDefaultAsync(dp => dp.Tag == tag);
+
     /// <inheritdoc/>
     public async Task<IEnumerable<DataPoint>> GetByDeviceIdAsync(int deviceId) =>
         await _db.DataPoints

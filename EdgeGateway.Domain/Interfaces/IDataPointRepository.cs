@@ -11,6 +11,8 @@ public interface IDataPointRepository
     /// <summary>根据ID获取数据点</summary>
     Task<DataPoint?> GetByIdAsync(int id);
 
+    Task<DataPoint?> GetByTagAsync(string tag);
+
     /// <summary>获取指定设备下的所有数据点</summary>
     Task<IEnumerable<DataPoint>> GetByDeviceIdAsync(int deviceId);
 

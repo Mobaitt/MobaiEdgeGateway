@@ -43,7 +43,6 @@ public class DataCollectionService
 
     // 每个设备的采集任务句柄（设备 Id → CancellationTokenSource）
     private readonly ConcurrentDictionary<int, CancellationTokenSource> _deviceTasks = new();
-    private readonly ConcurrentDictionary<int, SemaphoreSlim> _deviceLocks = new();
 
     // 全量数据快照：DataPointId → 带时间戳的采集数据（唯一数据源）
     // 使用 ConcurrentDictionary 替代 ReaderWriterLockSlim + Dictionary，提升并发性能
@@ -295,20 +294,6 @@ public class DataCollectionService
     /// <summary>
     /// 在设备级通信锁内执行操作，避免采集与控制并发访问同一设备。
     /// </summary>
-    public async Task ExecuteWithDeviceLockAsync(int deviceId, Func<CancellationToken, Task> action, CancellationToken cancellationToken = default)
-    {
-        var deviceLock = _deviceLocks.GetOrAdd(deviceId, _ => new SemaphoreSlim(1, 1));
-        await deviceLock.WaitAsync(cancellationToken);
-
-        try
-        {
-            await action(cancellationToken);
-        }
-        finally
-        {
-            deviceLock.Release();
-        }
-    }
 
 
     /// <summary>
@@ -374,10 +359,7 @@ public class DataCollectionService
                     {
                         // 执行一轮数据采集
                         // 采集策略会通过 SetDataSnapshot 回调实时更新快照（带过期判断和规则引擎）
-                        await ExecuteWithDeviceLockAsync(
-                            device.Id,
-                            token => strategy.ReadAsync(enabledPoints, SetDataSnapshot, token),
-                            cts.Token);
+                        await strategy.ReadAsync(enabledPoints, SetDataSnapshot, cts.Token);
                     }
                     catch (Exception ex) when (ex is not OperationCanceledException)
                     {

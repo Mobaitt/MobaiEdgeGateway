@@ -63,3 +63,4 @@ temp/
 /EdgeGateway.WebApi/output
 
 */wwwroot/*
+.build-verify

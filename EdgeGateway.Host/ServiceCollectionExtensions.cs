@@ -156,6 +156,7 @@ public static class ServiceCollectionExtensions
 
         // 执行数据库迁移：将 DataPointId 列迁移到 DataPointIdsJson
         await MigrateDataPointIdColumnAsync(db);
+        await MigrateDataPointIsControllableColumnAsync(db);
 
         // 初始化测试数据
         var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
@@ -207,6 +208,27 @@ public static class ServiceCollectionExtensions
         catch (Exception ex)
         {
             Console.WriteLine($"数据库迁移失败：{ex.Message}");
+        }
+    }
+
+    private static async Task MigrateDataPointIsControllableColumnAsync(GatewayDbContext db)
+    {
+        try
+        {
+            var tableInfo = await db.Database.SqlQueryRaw<ColumnInfo>(
+                "PRAGMA table_info(DataPoints)").ToListAsync();
+
+            if (tableInfo.Any(c => c.Name == "IsControllable"))
+                return;
+
+            await db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE DataPoints ADD COLUMN IsControllable INTEGER NOT NULL DEFAULT 0");
+
+            Console.WriteLine("数据库迁移完成：DataPoints 增加 IsControllable 列");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"DataPoints.IsControllable 列迁移失败：{ex.Message}");
         }
     }
 

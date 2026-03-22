@@ -145,7 +145,7 @@
           <el-table-column label="操作" width="240" align="right" fixed="right">
             <template #default="{ row }">
               <el-button
-                v-if="!row.isVirtual"
+                v-if="!row.isVirtual && row.isControllable"
                 size="small"
                 text
                 type="warning"
@@ -247,6 +247,7 @@ type DataPointForm = {
   dataType: number | null
   unit: string
   isEnabled: boolean
+  isControllable: boolean
   modbusSlaveId: number
   modbusFunctionCode: number
   modbusByteOrder: number
@@ -511,7 +512,7 @@ const handleControlSubmit = async (value: unknown) => {
 
   controlSubmitting.value = true
   try {
-    const res = await controlDataPoint(deviceId.value, controllingDataPoint.value.id, value)
+    const res = await controlDataPoint(controllingDataPoint.value.tag, value)
     const latest = (res as { data?: RealtimeDataItem }).data
 
     if (latest?.tag) {

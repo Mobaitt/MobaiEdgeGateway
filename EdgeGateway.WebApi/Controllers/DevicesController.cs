@@ -234,7 +234,8 @@ public class DevicesController : ControllerBase
             ModbusFunctionCode = req.ModbusFunctionCode,
             ModbusByteOrder = req.ModbusByteOrder,
             RegisterLength = req.RegisterLength,
-            IsEnabled = req.IsEnabled
+            IsEnabled = req.IsEnabled,
+            IsControllable = req.IsControllable
         };
 
         var created = await _deviceService.CreateDataPointAsync(dataPoint);
@@ -282,6 +283,7 @@ public class DevicesController : ControllerBase
         if (req.ModbusByteOrder.HasValue) dataPoint.ModbusByteOrder = req.ModbusByteOrder.Value;
         if (req.RegisterLength.HasValue) dataPoint.RegisterLength = req.RegisterLength.Value;
         if (req.IsEnabled.HasValue) dataPoint.IsEnabled = req.IsEnabled.Value;
+        if (req.IsControllable.HasValue) dataPoint.IsControllable = req.IsControllable.Value;
 
         await _deviceService.UpdateDataPointAsync(dataPoint);
 
@@ -311,27 +313,19 @@ public class DevicesController : ControllerBase
         return Ok(ApiResponse.Ok("Data point deleted"));
     }
 
-    [HttpPost("{deviceId:int}/datapoints/{dataPointId:int}/control")]
+    [HttpPost("datapoints/control")]
     [ProducesResponseType(typeof(ApiResponse<DataPointRealtimeResponse>), 200)]
     [ProducesResponseType(typeof(ApiResponse), 404)]
-    public async Task<IActionResult> ControlDataPoint(int deviceId, int dataPointId, [FromBody] ControlDataPointRequest req)
+    public async Task<IActionResult> ControlDataPointByTag([FromBody] ControlDataPointRequest req)
     {
-        var device = await _deviceService.GetDeviceAsync(deviceId);
-        if (device == null)
-            return NotFound(ApiResponse.Fail($"Device ID={deviceId} was not found"));
-
-        var dataPoint = await _deviceService.GetDataPointAsync(dataPointId);
-        if (dataPoint == null || dataPoint.DeviceId != deviceId)
-            return NotFound(ApiResponse.Fail($"Data point ID={dataPointId} was not found"));
-
         var controlValue = ConvertJsonValue(req.Value);
-        var actualValue = await _dataPointControlService.ControlAsync(deviceId, dataPointId, controlValue, HttpContext.RequestAborted);
+        var result = await _dataPointControlService.ControlByTagAsync(req.Tag, controlValue, HttpContext.RequestAborted);
 
         var response = new DataPointRealtimeResponse
         {
-            DataPointId = dataPoint.Id,
-            Tag = dataPoint.Tag,
-            Value = actualValue,
+            DataPointId = result.DataPoint.Id,
+            Tag = result.DataPoint.Tag,
+            Value = result.Value,
             Quality = "Good",
             Timestamp = DateTime.UtcNow
         };
@@ -344,8 +338,11 @@ public class DevicesController : ControllerBase
         Id = d.Id,
         Name = d.Name,
         Code = d.Code,
+        Description = d.Description,
         Protocol = d.Protocol.ToString(),
+        ProtocolValue = (int)d.Protocol,
         Address = d.Address,
+        Port = d.Port,
         PollingIntervalMs = d.PollingIntervalMs,
         IsEnabled = d.IsEnabled,
         DataPointCount = d.DataPoints.Count + virtualPointCount
@@ -381,6 +378,7 @@ public class DevicesController : ControllerBase
         DataTypeValue = (int)dp.DataType,
         Unit = dp.Unit,
         IsEnabled = dp.IsEnabled,
+        IsControllable = dp.IsControllable,
         CreatedAt = dp.CreatedAt,
         ModbusSlaveId = dp.ModbusSlaveId,
         ModbusFunctionCode = dp.ModbusFunctionCode,
