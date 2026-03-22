@@ -126,6 +126,7 @@ public static class ServiceCollectionExtensions
 
         // ========== 应用层服务 ==========
         services.AddScoped<DeviceManagementService>();
+        services.AddScoped<DataPointControlService>();
         services.AddSingleton<DataSendService>();
         services.AddSingleton<DataCollectionService>();
         services.AddScoped<RuleManagementService>();

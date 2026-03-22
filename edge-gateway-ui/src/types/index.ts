@@ -21,6 +21,7 @@ export interface DeviceItem {
 /** 数据点 */
 export interface DataPointItem {
   id: number
+  deviceId?: number
   name: string
   tag: string
   description?: string

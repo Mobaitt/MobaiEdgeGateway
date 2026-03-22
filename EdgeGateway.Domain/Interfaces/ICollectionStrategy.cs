@@ -41,4 +41,12 @@ public interface ICollectionStrategy
         IEnumerable<DataPoint> dataPoints,
         Action<CollectedData> callback,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 写入单个数据点的目标值。
+    /// </summary>
+    Task<object?> WriteAsync(
+        DataPoint dataPoint,
+        object? value,
+        CancellationToken cancellationToken = default);
 }

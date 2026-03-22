@@ -55,3 +55,7 @@ export const toggleDataPoint = (deviceId, dataPointId, isEnabled) =>
 /** 获取设备数据点的实时数据 */
 export const getDeviceRealtimeData = (deviceId) =>
   request.get(`/devices/${deviceId}/datapoints/realtime`)
+
+/** 鎺у埗鏁版嵁鐐?*/
+export const controlDataPoint = (deviceId, dataPointId, value) =>
+  request.post(`/devices/${deviceId}/datapoints/${dataPointId}/control`, { value })
