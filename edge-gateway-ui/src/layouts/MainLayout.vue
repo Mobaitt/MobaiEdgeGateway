@@ -217,7 +217,7 @@ onUnmounted(() => {
   flex-shrink: 0;
   color: #0a0e1a;
 }
-.logo-title { display: block; font-size: 15px; font-weight: 800; color: var(--text-primary); line-height: 1.2; }
+.logo-title { display: block; font-size: 12px; font-weight: 800; color: var(--text-primary); line-height: 1.2; }
 .logo-sub   { display: block; font-size: 10px; color: var(--text-muted); letter-spacing: 0.06em; margin-top: 2px; }
 
 /* 状态条 */
