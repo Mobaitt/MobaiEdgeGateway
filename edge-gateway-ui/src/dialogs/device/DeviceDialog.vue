@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <el-dialog
     :model-value="modelValue"
     :title="editingDevice ? '编辑设备' : '新增设备'"
@@ -77,7 +77,6 @@
           </el-tag>
         </el-form-item>
 
-        <!-- 协议说明 -->
         <div v-if="isModbusDevice" class="protocol-hint protocol-hint-inline">
           <el-icon class="hint-icon"><InfoFilled /></el-icon>
           <span>Modbus TCP/RTU，支持功能码 01/02/03/04/05/06/15/16。</span>
@@ -99,7 +98,6 @@
           <span>模拟器自动生成随机数据，无需地址配置。</span>
         </div>
 
-        <!-- 设备地址/端口 -->
         <template v-if="needAddressPort">
           <el-row :gutter="16">
             <el-col :span="showPortField ? 16 : 24">
@@ -150,12 +148,28 @@
         </el-row>
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="启用重连">
+            <el-form-item>
+              <template #label>
+                <span class="label-with-tip">
+                  启用重连
+                  <el-tooltip content="设备连接不上，或读取异常满足重连条件时，会自动重新建立连接。" placement="top">
+                    <el-icon class="field-help"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </span>
+              </template>
               <el-switch v-model="form.reconnectEnabled" active-color="#38dcc4" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="失败阈值">
+            <el-form-item>
+              <template #label>
+                <span class="label-with-tip">
+                  失败阈值
+                  <el-tooltip content="连续读取失败达到这个次数后立即重连，例如设为 3，则连续失败 3 次就重连。" placement="top">
+                    <el-icon class="field-help"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </span>
+              </template>
               <el-input-number
                 v-model="form.maxConsecutiveReadFailures"
                 :min="1"
@@ -168,7 +182,15 @@
         </el-row>
         <el-row :gutter="16">
           <el-col :span="8">
-            <el-form-item label="单轮次数">
+            <el-form-item>
+              <template #label>
+                <span class="label-with-tip">
+                  单轮次数
+                  <el-tooltip content="一次重连轮次里最多尝试连接多少次，例如设为 3，则本轮最多连 3 次。" placement="top">
+                    <el-icon class="field-help"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </span>
+              </template>
               <el-input-number
                 v-model="form.reconnectRetryCount"
                 :min="1"
@@ -180,7 +202,15 @@
             </el-form-item>
           </el-col>
           <el-col :span="8">
-            <el-form-item label="单次间隔">
+            <el-form-item>
+              <template #label>
+                <span class="label-with-tip">
+                  单次间隔
+                  <el-tooltip content="同一轮里每次重试之间等待多久，例如 1000 表示等待 1 秒再试下一次。" placement="top">
+                    <el-icon class="field-help"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </span>
+              </template>
               <el-input-number
                 v-model="form.reconnectRetryDelayMs"
                 :min="100"
@@ -193,7 +223,15 @@
             </el-form-item>
           </el-col>
           <el-col :span="8">
-            <el-form-item label="轮次间隔">
+            <el-form-item>
+              <template #label>
+                <span class="label-with-tip">
+                  轮次间隔
+                  <el-tooltip content="一整轮重连都失败后，下一轮开始前等待多久。" placement="top">
+                    <el-icon class="field-help"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </span>
+              </template>
               <el-input-number
                 v-model="form.reconnectIntervalMs"
                 :min="500"
@@ -208,7 +246,15 @@
         </el-row>
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="比例窗口">
+            <el-form-item>
+              <template #label>
+                <span class="label-with-tip">
+                  比例窗口
+                  <el-tooltip content="统计最近多少次读取结果用于计算失败率，例如设为 10，则看最近 10 次采集。" placement="top">
+                    <el-icon class="field-help"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </span>
+              </template>
               <el-input-number
                 v-model="form.readFailureWindowSize"
                 :min="3"
@@ -220,7 +266,15 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="比例阈值">
+            <el-form-item>
+              <template #label>
+                <span class="label-with-tip">
+                  比例阈值
+                  <el-tooltip content="在比例窗口内失败占比超过这个值就重连，例如窗口 10、阈值 50%，表示最近 10 次里失败 5 次及以上就重连。" placement="top">
+                    <el-icon class="field-help"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </span>
+              </template>
               <el-input-number
                 v-model="form.readFailureRateThresholdPercent"
                 :min="1"
@@ -253,7 +307,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { InfoFilled, MagicStick } from '@element-plus/icons-vue'
+import { InfoFilled, MagicStick, QuestionFilled } from '@element-plus/icons-vue'
 import FormSection from '@/components/FormSection.vue'
 import { generateCodeWithTimestamp } from '@/utils/codeGenerate'
 import { CollectionProtocol } from '@/api/constants'
@@ -358,7 +412,6 @@ const resetForm = () => {
   formRef.value?.clearValidate()
 }
 
-// 监听编辑设备变化，填充表单
 watch(
   () => props.editingDevice,
   (device) => {
@@ -388,7 +441,6 @@ watch(
   { immediate: true }
 )
 
-// 计算属性
 const isModbusDevice = computed(() => form.value.protocol === CollectionProtocol.Modbus.value)
 const isSimulatorDevice = computed(() => form.value.protocol === CollectionProtocol.Simulator.value)
 const isOpcUaDevice = computed(() => form.value.protocol === CollectionProtocol.OpcUa.value)
@@ -447,8 +499,41 @@ const handleClose = () => {
 
 <style scoped lang="scss">
 .device-form {
+  :deep(.form-section) {
+    border-radius: 18px;
+    padding: 18px;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 251, 252, 0.92));
+    box-shadow: 0 10px 30px rgba(15, 37, 51, 0.04);
+  }
+
+  :deep(.section-title) {
+    font-size: 13px;
+    letter-spacing: 0.03em;
+    margin-bottom: 14px;
+    padding-bottom: 8px;
+  }
+
+  :deep(.el-form-item__label) {
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
   .compact {
     margin-bottom: 16px;
   }
+}
+
+
+.label-with-tip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.field-help {
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: help;
 }
 </style>
