@@ -2,6 +2,7 @@
   "name": "edge-gateway-ui",
   "version": "1.0.0",
   "description": "边缘采集网关管理系统前端",
+  "author": "mobai",
   "type": "module",
   "scripts": {
     "dev": "vite",

@@ -74,6 +74,7 @@ public class DataCollectionService
 
     private object? GetSnapshotValue(string tag)
     {
+        // 虚拟节点按 Tag 读取快照时，先通过索引定位数据点，再校验是否过期。
         if (_tagIndex.TryGetValue(tag, out var dataPointId) &&
             _dataSnapshot.TryGetValue(dataPointId, out var snapshotData))
         {
@@ -93,6 +94,7 @@ public class DataCollectionService
         {
             try
             {
+                // 聚合器按固定时间窗批量下发最新快照，避免每个采样点都立即触发发送。
                 while (!_aggregatorCts.Token.IsCancellationRequested)
                 {
                     await Task.Delay(_aggregateWindowMs, _aggregatorCts.Token);
@@ -141,6 +143,7 @@ public class DataCollectionService
         {
             try
             {
+                // 虚拟点独立于设备采集循环运行，持续基于最新快照做表达式计算。
                 while (!_virtualNodeCts.Token.IsCancellationRequested)
                 {
                     await Task.Delay(1000, _virtualNodeCts.Token);
@@ -191,6 +194,7 @@ public class DataCollectionService
             if (_dataSnapshot.IsEmpty)
                 return;
 
+            // 发送阶段直接读取当前快照，确保一个窗口内每个点只保留最后一次有效值。
             var dataToSend = new List<CollectedData>(_dataSnapshot.Count);
             foreach (var kvp in _dataSnapshot)
                 dataToSend.Add(kvp.Value.Data);
@@ -344,6 +348,7 @@ public class DataCollectionService
                 while (!cts.Token.IsCancellationRequested)
                 {
                     reconnectRound++;
+                    // 每一轮先完成连接，成功后再进入稳定采集循环；失败则按设备策略等待重连。
                     var connected = await TryConnectWithRetryAsync(strategy, device, state, reconnectRound, cts.Token);
                     if (!connected)
                     {
@@ -378,6 +383,7 @@ public class DataCollectionService
 
                             try
                             {
+                                // 采集策略内部负责协议读写，本层只接收结果并写入统一快照。
                                 await strategy.ReadAsync(enabledPoints, SetDataSnapshot, cts.Token);
                                 consecutiveReadFailures = 0;
                                 state.MarkReadSuccess();
@@ -598,6 +604,7 @@ public class DataCollectionService
         {
             try
             {
+                // 实体数据点先经过规则引擎，虚拟点则跳过，避免重复处理表达式输出。
                 var ruleResult = await _ruleEngine.ExecuteRulesAsync(collectedData, CancellationToken.None);
 
                 if (ruleResult.ShouldReject)
@@ -619,6 +626,7 @@ public class DataCollectionService
 
         _tagIndex[collectedData.Tag] = collectedData.DataPointId;
 
+        // 快照只保留每个数据点的最新有效值，并用时间戳控制过期清理。
         if (_dataSnapshot.TryGetValue(collectedData.DataPointId, out var existing))
         {
             if (existing.IsExpired(_dataExpiration))

@@ -298,6 +298,7 @@ const getChannelColor = (value: number) => {
 const refresh = async () => {
   loading.value = true
   try {
+    // 首页先并发拉取网关、设备、通道概况，再补齐每台设备下的数据点用于统计分布。
     const [statusRes, deviceRes, channelRes] = await Promise.all([
       getGatewayStatus(),
       getDevices(),
@@ -307,7 +308,7 @@ const refresh = async () => {
     status.value = ((statusRes as { data?: GatewayStatus })?.data ?? {}) as GatewayStatus
     allDevices.value = ((deviceRes as { data?: unknown[] })?.data ?? []) as typeof allDevices.value
     
-    // 获取所有数据点
+    // 数据点接口按设备拆分，这里聚合为首页统一统计口径。
     const dataPointPromises = allDevices.value.map(device => 
       fetch(`/api/devices/${device.id}/datapoints`).then(res => res.json())
     )

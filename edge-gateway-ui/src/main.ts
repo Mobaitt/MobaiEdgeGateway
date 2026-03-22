@@ -12,6 +12,7 @@ import './styles/page-patterns.css'
 import './styles/dialogs.scss'
 import 'element-plus/dist/index.css'
 
+// 应用启动前先恢复主题变量，避免页面首屏出现样式闪烁。
 initializeTheme()
 
 const app = createApp(App)

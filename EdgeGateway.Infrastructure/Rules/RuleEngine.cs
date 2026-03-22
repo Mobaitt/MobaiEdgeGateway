@@ -82,6 +82,7 @@ public class RuleEngine : IRuleEngine
                 .OrderBy(r => r.Priority)
                 .ToListAsync();
 
+            // 启动时统一装载一次，再按作用域拆分到不同缓存，减少运行期查询数据库的次数。
             // 分类缓存
             // 全局规则：没有绑定设备和数据点的规则
             _globalRulesCache = allRules.Where(r => r.DataPointIds.Count == 0 && r.DeviceId == null).ToList();
@@ -196,6 +197,7 @@ public class RuleEngine : IRuleEngine
     {
         await LoadRulesCacheAsync();
 
+        // 一条采集数据可能同时命中全局规则、设备规则和数据点规则，最终按优先级串行执行。
         var applicableRules = GetApplicableRules(data);
         var triggeredRules = new List<string>();
         object? currentValue = data.Value;
@@ -394,8 +396,7 @@ public class RuleEngine : IRuleEngine
         if (config == null)
             return RuleExecutionResult.Ok(data.Value);
 
-        // 计算规则通常需要多个数据点，这里简化处理
-        // 实际使用时，计算规则应该由专门的服务来处理
+        // 计算类规则目前保留扩展点，跨点位计算由虚拟节点引擎承担，避免两套计算职责重叠。
         return RuleExecutionResult.Ok(data.Value);
     }
 
@@ -442,6 +443,7 @@ public class RuleEngine : IRuleEngine
         if (!config.MaxRateOfChange.HasValue)
             return RuleExecutionResult.Ok(currentValue);
 
+        // 变化率校验依赖上一条成功通过规则的数据，因此这里读取内部缓存而不是原始设备值。
         if (_lastValues.TryGetValue(data.DataPointId, out var lastValue))
         {
             var timeSpan = (DateTime.UtcNow - lastValue.Timestamp).TotalSeconds;
@@ -469,6 +471,7 @@ public class RuleEngine : IRuleEngine
         if (!config.DeadBand.HasValue)
             return RuleExecutionResult.Ok(currentValue);
 
+        // 死区过滤返回上一值而不是拒绝数据，这样发送链路看到的是平滑后的连续值。
         if (_lastValues.TryGetValue(data.DataPointId, out var lastValue))
         {
             if (TryConvertToDouble(lastValue.Value, out var lastDoubleValue))

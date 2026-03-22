@@ -117,6 +117,7 @@ app.Use(async (context, next) =>
 {
     var path = context.Request.Path.Value;
 
+    // 这类请求不经过控制器，直接交给监听服务处理，便于实现设备主动上报模式。
     // 检查是否是 HTTP 服务端模式的请求
     if (!string.IsNullOrEmpty(path) && path.StartsWith("/api/http-data", StringComparison.OrdinalIgnoreCase))
     {

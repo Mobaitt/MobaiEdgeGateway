@@ -68,6 +68,7 @@ public class VirtualNodeEngine : IVirtualNodeEngine
         {
             _virtualPointCache[point.Id] = point;
 
+            // 预解析依赖，后续定时计算时只做取值和求值，减少重复正则扫描。
             // 构建依赖关系缓存
             var dependencies = ParseDependencies(point.Expression);
             _dependencyCache[point.Id] = dependencies;
@@ -121,6 +122,7 @@ public class VirtualNodeEngine : IVirtualNodeEngine
     {
         try
         {
+            // 依赖值全部来自实时快照，因此虚拟点天然跟随采集结果和规则处理结果变化。
             // 从缓存获取依赖关系（避免重复解析表达式）
             var dependencies = _dependencyCache.GetOrAdd(virtualDataPoint.Id, _ => ParseDependencies(virtualDataPoint.Expression));
             var dependencyValues = new Dictionary<string, object?>();
@@ -143,6 +145,7 @@ public class VirtualNodeEngine : IVirtualNodeEngine
             var missingDependencies = dependencies.Where(d => dependencyValues[d] == null).ToList();
             if (missingDependencies.Any() && dependencies.Any())
             {
+                // 依赖不完整时返回不确定质量，避免用 0 或旧值误导后续发送链路。
                 return new VirtualNodeCalculationResult
                 {
                     Value = null,
@@ -221,7 +224,7 @@ public class VirtualNodeEngine : IVirtualNodeEngine
         var pattern = @"\b([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\b";
         var matches = System.Text.RegularExpressions.Regex.Matches(expression, pattern);
 
-        // 排除常见函数和关键字
+        // 排除常见函数和关键字，剩余标识符默认视为数据点 Tag。
         var excludeKeywords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "Math", "Abs", "Sqrt", "Sin", "Cos", "Tan", "Asin", "Acos", "Atan",
@@ -319,7 +322,7 @@ public class VirtualNodeEngine : IVirtualNodeEngine
         // 处理表达式：将带点号的 Tag 名用方括号包裹，使 NCalc 能正确识别
         var processedExpression = expression;
 
-        // 按长度降序排序，避免短 Tag 名替换长 Tag 名的问题
+        // 按长度降序替换，避免 A 替换后误伤 A.B 这类更长的标签。
         var sortedTags = values.Keys.OrderByDescending(t => t.Length).ToList();
 
         foreach (var tag in sortedTags)
