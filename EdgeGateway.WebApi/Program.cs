@@ -20,14 +20,14 @@ builder.Services.Configure<DemoModeOptions>(builder.Configuration.GetSection("De
 
 // 从配置获取数据库连接字符串
 var dbPath = "gateway.db";
-if (!string.IsNullOrEmpty(builder.Configuration["Database:ConnectionString"]))
+var connectionString = builder.Configuration["Database:ConnectionString"];
+if (!string.IsNullOrEmpty(connectionString))
 {
     // 解析连接字符串中的 Data Source
-    var connStr = builder.Configuration["Database:ConnectionString"];
-    var dsIndex = connStr.IndexOf("Data Source=", StringComparison.OrdinalIgnoreCase);
+    var dsIndex = connectionString.IndexOf("Data Source=", StringComparison.OrdinalIgnoreCase);
     if (dsIndex >= 0)
     {
-        var dsPart = connStr.Substring(dsIndex + "Data Source=".Length).Split(';')[0].Trim();
+        var dsPart = connectionString.Substring(dsIndex + "Data Source=".Length).Split(';')[0].Trim();
         if (!string.IsNullOrEmpty(dsPart))
             dbPath = dsPart;
     }

@@ -94,13 +94,17 @@ public class GatewayDbContext : DbContext
         // ============ 映射关系表配置 ============
         modelBuilder.Entity<ChannelDataPointMapping>(entity =>
         {
-            entity.ToTable("ChannelDataPointMappings");
+            entity.ToTable("ChannelDataPointMappings", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_ChannelDataPointMapping_DataPoint",
+                    "DataPointId IS NOT NULL OR VirtualDataPointId IS NOT NULL");
+            });
             entity.HasKey(e => e.Id);
             entity.Property(e => e.DataPointTag).HasMaxLength(200);
             entity.Property(e => e.DataPointName).HasMaxLength(100);
 
             // DataPointId 和 VirtualDataPointId 至少有一个有值
-            entity.HasCheckConstraint("CK_ChannelDataPointMapping_DataPoint", "DataPointId IS NOT NULL OR VirtualDataPointId IS NOT NULL");
 
             // 同一通道不能重复添加同一数据点（包括普通数据点和虚拟数据点）
             entity.HasIndex(e => new { e.ChannelId, e.DataPointId }).IsUnique();

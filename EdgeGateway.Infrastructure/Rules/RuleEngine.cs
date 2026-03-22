@@ -216,7 +216,7 @@ public class RuleEngine : IRuleEngine
                         _logger.LogWarning("规则 [{RuleName}] 拒绝数据：{Tag}, 值：{Value}, 原因：{Reason}",
                             rule.Name, data.Tag, currentValue, result.ErrorMessage);
 
-                        return RuleExecutionResult.Fail(result.ErrorMessage, shouldReject: true);
+                        return RuleExecutionResult.Fail(result.ErrorMessage ?? "规则执行失败", shouldReject: true);
                     }
 
                     if (rule.OnFailure == FailureAction.DefaultValue)
