@@ -33,6 +33,13 @@ public class Device
 
     /// <summary>采集周期（毫秒）</summary>
     public int PollingIntervalMs { get; set; } = 1000;
+    public bool ReconnectEnabled { get; set; } = true;
+    public int ReconnectRetryCount { get; set; } = 3;
+    public int ReconnectRetryDelayMs { get; set; } = 1000;
+    public int ReconnectIntervalMs { get; set; } = 5000;
+    public int MaxConsecutiveReadFailures { get; set; } = 3;
+    public int ReadFailureWindowSize { get; set; } = 10;
+    public double ReadFailureRateThresholdPercent { get; set; } = 50;
 
     /// <summary>创建时间</summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

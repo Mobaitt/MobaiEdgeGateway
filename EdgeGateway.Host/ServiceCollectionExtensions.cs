@@ -9,28 +9,25 @@ using EdgeGateway.Infrastructure.Strategies.Collection;
 using EdgeGateway.Infrastructure.Strategies.Send;
 using EdgeGateway.Infrastructure.WebSocket;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace EdgeGateway.Host;
 
 /// <summary>
-/// 依赖注入注册扩展类
-/// 将所有层的服务统一在此注册，保持 Program.cs 简洁
+/// 依赖注入注册扩展类。
 /// </summary>
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// 注册边缘网关所有服务
+    /// 注册边缘网关所需服务。
     /// </summary>
     public static IServiceCollection AddEdgeGateway(
         this IServiceCollection services,
         string dbPath = "gateway.db")
     {
-        // ========== 配置选项 ==========
-        // 注意：实际配置值从 Program.cs 中通过 IConfiguration 读取并配置
         services.Configure<GatewayOptions>(options =>
         {
-            // 这里提供默认值作为后备（当配置文件不存在时使用）
             options.Collection.AggregateWindowMs = 1000;
             options.Collection.DataExpirationSeconds = 30;
             options.Collection.DefaultPollingIntervalMs = 1000;
@@ -52,79 +49,60 @@ public static class ServiceCollectionExtensions
             options.Database.EnableSensitiveDataLogging = false;
         });
 
-        // ========== 数据库 ==========
         services.AddDbContext<GatewayDbContext>(options =>
             options.UseSqlite($"Data Source={dbPath}")
                    .EnableSensitiveDataLogging()
                    .LogTo(Console.WriteLine, Microsoft.Extensions.Logging.LogLevel.Information));
 
-        // 注册 IDbContextFactory（供 RuleEngine 等使用）
         services.AddDbContextFactory<GatewayDbContext>(options =>
             options.UseSqlite($"Data Source={dbPath}")
                    .EnableSensitiveDataLogging()
                    .LogTo(Console.WriteLine, Microsoft.Extensions.Logging.LogLevel.Information));
 
-        // ========== 仓储层 ==========
         services.AddScoped<IDeviceRepository, DeviceRepository>();
         services.AddScoped<IDataPointRepository, DataPointRepository>();
         services.AddScoped<IChannelRepository, ChannelRepository>();
         services.AddScoped<IChannelMappingRepository, ChannelMappingRepository>();
 
-        // ========== 采集策略实现（Transient：每次获取新实例，避免跨设备状态污染）==========
         services.AddTransient<SimulatorCollectionStrategy>();
         services.AddTransient<ModbusCollectionStrategy>();
-        // 其他策略（OpcUa、S7 等）按需在此注册
 
-        // ========== 发送策略实现 ==========
         services.AddTransient<LocalFileSendStrategy>();
         services.AddTransient<MqttSendStrategy>();
         services.AddTransient<HttpSendStrategy>();
         services.AddTransient<WebSocketSendStrategy>();
-        // 其他策略（Kafka 等）按需在此注册
 
-        // ========== WebSocket 连接管理器（单例） ==========
         services.AddSingleton<WebSocketConnectionManager>();
 
-        // ========== HTTP 监听服务（单例，供 HTTP 服务端模式使用） ==========
         services.AddSingleton<HttpListenerService>();
         services.AddSingleton<IHttpListenerService>(sp => sp.GetRequiredService<HttpListenerService>());
 
-        // ========== 策略注册器（工厂） ==========
-        // 采集策略注册器：协议枚举 → 策略类型
         services.AddSingleton<CollectionStrategyRegistry>(sp =>
         {
             var registry = new CollectionStrategyRegistry(sp,
                 sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<CollectionStrategyRegistry>>());
 
-            // 在此注册所有支持的采集协议
             registry.Register<SimulatorCollectionStrategy>(CollectionProtocol.Simulator);
             registry.Register<ModbusCollectionStrategy>(CollectionProtocol.Modbus);
-            // registry.Register<OpcUaCollectionStrategy>(CollectionProtocol.OpcUa);
-            // registry.Register<S7CollectionStrategy>(CollectionProtocol.S7);
 
             return registry;
         });
 
-        // 发送策略注册器：协议枚举 → 策略类型
         services.AddSingleton<SendStrategyRegistry>(sp =>
         {
             var registry = new SendStrategyRegistry(sp,
                 sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<SendStrategyRegistry>>());
 
-            // 在此注册所有支持的发送协议
             registry.Register<LocalFileSendStrategy>(SendProtocol.LocalFile);
             registry.Register<MqttSendStrategy>(SendProtocol.Mqtt);
             registry.Register<HttpSendStrategy>(SendProtocol.Http);
             registry.Register<WebSocketSendStrategy>(SendProtocol.WebSocket);
-            // registry.Register<KafkaSendStrategy>(SendProtocol.Kafka);
 
             return registry;
         });
 
-        // 注册发送策略注册器接口
         services.AddSingleton<ISendStrategyRegistry>(sp => sp.GetRequiredService<SendStrategyRegistry>());
 
-        // ========== 应用层服务 ==========
         services.AddScoped<DeviceManagementService>();
         services.AddScoped<DataPointControlService>();
         services.AddSingleton<DataSendService>();
@@ -132,78 +110,61 @@ public static class ServiceCollectionExtensions
         services.AddScoped<RuleManagementService>();
         services.AddScoped<VirtualNodeManagementService>();
 
-        // ========== 规则引擎和虚拟节点引擎 ==========
         services.AddSingleton<IRuleEngine, EdgeGateway.Infrastructure.Rules.RuleEngine>();
         services.AddSingleton<IVirtualNodeEngine, EdgeGateway.Infrastructure.VirtualNodes.VirtualNodeEngine>();
 
-        // 数据库种子服务
         services.AddSingleton<DatabaseSeeder>();
 
-        // HTTP 客户端（供 HttpSendStrategy 使用）
         services.AddHttpClient("GatewayHttpClient");
 
         return services;
     }
 
     /// <summary>
-    /// 确保数据库已创建并应用迁移（开发环境使用 EnsureCreated，生产建议用 Migrate）
+    /// 确保数据库已创建，并在启动时按实体定义补齐缺失字段。
     /// </summary>
     public static async Task InitializeDatabaseAsync(this IServiceProvider services)
     {
         using var scope = services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<GatewayDbContext>();
+
         await db.Database.EnsureCreatedAsync();
 
-        // 执行数据库迁移：将 DataPointId 列迁移到 DataPointIdsJson
+        // 保留历史特殊迁移，处理旧字段升级为新结构。
         await MigrateDataPointIdColumnAsync(db);
-        await MigrateDataPointIsControllableColumnAsync(db);
 
-        // 初始化测试数据
+        // 根据实体定义自动补齐缺失列。
+        await SyncEntityColumnsAsync(db);
+
         var seeder = scope.ServiceProvider.GetRequiredService<DatabaseSeeder>();
         await seeder.InitializeTestDataAsync();
     }
 
     /// <summary>
-    /// 迁移数据点 ID 列：从 DataPointId (int?) 到 DataPointIdsJson (string)
+    /// 迁移旧版 DataPointRules.DataPointId 到 DataPointIdsJson。
     /// </summary>
     private static async Task MigrateDataPointIdColumnAsync(GatewayDbContext db)
     {
         try
         {
-            // 检查是否需要迁移：如果表有 DataPointId 列但没有 DataPointIdsJson 列
-            var hasDataPointIdColumn = false;
-            var hasDataPointIdsJsonColumn = false;
+            var tableInfo = await GetTableInfoAsync(db, "DataPointRules");
+            var hasDataPointIdColumn = tableInfo.Any(c => c.Name == "DataPointId");
+            var hasDataPointIdsJsonColumn = tableInfo.Any(c => c.Name == "DataPointIdsJson");
 
-            try
-            {
-                // SQLite 中检查列是否存在
-                var tableInfo = await db.Database.SqlQueryRaw<ColumnInfo>(
-                    "PRAGMA table_info(DataPointRules)").ToListAsync();
-                
-                hasDataPointIdColumn = tableInfo.Any(c => c.Name == "DataPointId");
-                hasDataPointIdsJsonColumn = tableInfo.Any(c => c.Name == "DataPointIdsJson");
-            }
-            catch
-            {
-                // 如果查询失败，假设需要迁移
-                hasDataPointIdColumn = true;
-                hasDataPointIdsJsonColumn = false;
-            }
+            if (!hasDataPointIdColumn || hasDataPointIdsJsonColumn)
+                return;
 
-            if (hasDataPointIdColumn && !hasDataPointIdsJsonColumn)
-            {
-                // 添加新列
-                await db.Database.ExecuteSqlRawAsync(
-                    "ALTER TABLE DataPointRules ADD COLUMN DataPointIdsJson TEXT MAX(500)");
+            await db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE \"DataPointRules\" ADD COLUMN \"DataPointIdsJson\" TEXT");
 
-                // 迁移现有数据：将 DataPointId 转换为 JSON 数组
-                await db.Database.ExecuteSqlRawAsync(
-                    @"UPDATE DataPointRules 
-                      SET DataPointIdsJson = '[' || DataPointId || ']'
-                      WHERE DataPointId IS NOT NULL");
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                UPDATE "DataPointRules"
+                SET "DataPointIdsJson" = '[' || "DataPointId" || ']'
+                WHERE "DataPointId" IS NOT NULL
+                """);
 
-                Console.WriteLine("数据库迁移完成：DataPointId -> DataPointIdsJson");
-            }
+            Console.WriteLine("数据库迁移完成：DataPointId -> DataPointIdsJson");
         }
         catch (Exception ex)
         {
@@ -211,32 +172,188 @@ public static class ServiceCollectionExtensions
         }
     }
 
-    private static async Task MigrateDataPointIsControllableColumnAsync(GatewayDbContext db)
+    /// <summary>
+    /// 根据实体定义补齐缺失列。
+    /// 仅处理新增列，不处理删列、改名和类型变更。
+    /// </summary>
+    private static async Task SyncEntityColumnsAsync(GatewayDbContext db)
     {
-        try
+        foreach (var entityType in db.Model.GetEntityTypes())
         {
-            var tableInfo = await db.Database.SqlQueryRaw<ColumnInfo>(
-                "PRAGMA table_info(DataPoints)").ToListAsync();
+            if (entityType.IsOwned() || entityType.FindPrimaryKey() == null)
+                continue;
 
-            if (tableInfo.Any(c => c.Name == "IsControllable"))
-                return;
+            var tableName = entityType.GetTableName();
+            if (string.IsNullOrWhiteSpace(tableName))
+                continue;
 
-            await db.Database.ExecuteSqlRawAsync(
-                "ALTER TABLE DataPoints ADD COLUMN IsControllable INTEGER NOT NULL DEFAULT 0");
+            var schema = entityType.GetSchema();
+            var storeObject = StoreObjectIdentifier.Table(tableName, schema);
+            var existingColumns = await GetTableInfoAsync(db, tableName);
+            var existingColumnNames = existingColumns
+                .Select(column => column.Name)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-            Console.WriteLine("数据库迁移完成：DataPoints 增加 IsControllable 列");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"DataPoints.IsControllable 列迁移失败：{ex.Message}");
+            foreach (var property in entityType.GetProperties())
+            {
+                if (property.IsPrimaryKey())
+                    continue;
+
+                var columnName = property.GetColumnName(storeObject);
+                if (string.IsNullOrWhiteSpace(columnName) || existingColumnNames.Contains(columnName))
+                    continue;
+
+                var sql = BuildAddColumnSql(tableName, columnName, property);
+                await db.Database.ExecuteSqlRawAsync(sql);
+
+                Console.WriteLine($"数据库字段已补齐：{tableName}.{columnName}");
+            }
         }
     }
 
-    private class ColumnInfo
+    private static async Task<List<ColumnInfo>> GetTableInfoAsync(GatewayDbContext db, string tableName)
+    {
+        var result = new List<ColumnInfo>();
+        var escapedTableName = EscapeSqliteIdentifier(tableName);
+
+        await using var connection = db.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+            await connection.OpenAsync();
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"PRAGMA table_info(\"{escapedTableName}\")";
+
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            result.Add(new ColumnInfo
+            {
+                Cid = reader.GetInt32(0),
+                Name = reader.GetString(1),
+                Type = reader.IsDBNull(2) ? string.Empty : reader.GetString(2),
+                Notnull = !reader.IsDBNull(3) && reader.GetInt32(3) == 1,
+                DfltValue = reader.IsDBNull(4) ? null : reader.GetString(4),
+                Pk = !reader.IsDBNull(5) ? reader.GetInt32(5) : 0
+            });
+        }
+
+        return result;
+    }
+
+    private static string BuildAddColumnSql(string tableName, string columnName, IProperty property)
+    {
+        var escapedTableName = EscapeSqliteIdentifier(tableName);
+        var escapedColumnName = EscapeSqliteIdentifier(columnName);
+        var storeType = property.GetColumnType() ?? property.GetRelationalTypeMapping().StoreType;
+        var nullability = property.IsNullable ? "NULL" : "NOT NULL";
+        var defaultClause = BuildDefaultClause(property);
+
+        return $"ALTER TABLE \"{escapedTableName}\" ADD COLUMN \"{escapedColumnName}\" {storeType} {nullability}{defaultClause}";
+    }
+
+    private static string BuildDefaultClause(IProperty property)
+    {
+        if (property.IsNullable)
+            return string.Empty;
+
+        var defaultValueSql = property.GetDefaultValueSql();
+        if (!string.IsNullOrWhiteSpace(defaultValueSql))
+            return $" DEFAULT ({defaultValueSql})";
+
+        var defaultValue = property.GetDefaultValue();
+        if (defaultValue is null)
+            defaultValue = GetClrDefaultValue(property.ClrType);
+
+        return defaultValue is null ? string.Empty : $" DEFAULT {FormatSqlLiteral(defaultValue, property.ClrType)}";
+    }
+
+    private static object? GetClrDefaultValue(Type clrType)
+    {
+        var actualType = Nullable.GetUnderlyingType(clrType) ?? clrType;
+
+        if (actualType == typeof(string))
+            return string.Empty;
+
+        if (actualType == typeof(Guid))
+            return Guid.Empty;
+
+        if (actualType == typeof(DateTime))
+            return DateTime.MinValue;
+
+        if (actualType == typeof(DateTimeOffset))
+            return DateTimeOffset.MinValue;
+
+        if (actualType == typeof(byte[]))
+            return Array.Empty<byte>();
+
+        return actualType.IsValueType ? Activator.CreateInstance(actualType) : null;
+    }
+
+    private static string FormatSqlLiteral(object value, Type clrType)
+    {
+        var actualType = Nullable.GetUnderlyingType(clrType) ?? clrType;
+
+        if (actualType.IsEnum)
+        {
+            var numericValue = Convert.ChangeType(value, Enum.GetUnderlyingType(actualType));
+            return Convert.ToString(numericValue, System.Globalization.CultureInfo.InvariantCulture) ?? "0";
+        }
+
+        if (actualType == typeof(bool))
+            return (bool)value ? "1" : "0";
+
+        if (actualType == typeof(string))
+            return $"'{EscapeSqlLiteral((string)value)}'";
+
+        if (actualType == typeof(Guid))
+            return $"'{value}'";
+
+        if (actualType == typeof(DateTime))
+            return $"'{((DateTime)value).ToString("O", System.Globalization.CultureInfo.InvariantCulture)}'";
+
+        if (actualType == typeof(DateTimeOffset))
+            return $"'{((DateTimeOffset)value).ToString("O", System.Globalization.CultureInfo.InvariantCulture)}'";
+
+        if (actualType == typeof(byte[]))
+            return "X''";
+
+        if (actualType == typeof(float) ||
+            actualType == typeof(double) ||
+            actualType == typeof(decimal))
+        {
+            return Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? "0";
+        }
+
+        if (actualType == typeof(byte) ||
+            actualType == typeof(sbyte) ||
+            actualType == typeof(short) ||
+            actualType == typeof(ushort) ||
+            actualType == typeof(int) ||
+            actualType == typeof(uint) ||
+            actualType == typeof(long) ||
+            actualType == typeof(ulong))
+        {
+            return Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture) ?? "0";
+        }
+
+        return $"'{EscapeSqlLiteral(value.ToString() ?? string.Empty)}'";
+    }
+
+    private static string EscapeSqlLiteral(string value)
+    {
+        return value.Replace("'", "''");
+    }
+
+    private static string EscapeSqliteIdentifier(string identifier)
+    {
+        return identifier.Replace("\"", "\"\"");
+    }
+
+    private sealed class ColumnInfo
     {
         public int Cid { get; set; }
-        public string Name { get; set; } = "";
-        public string Type { get; set; } = "";
+        public string Name { get; set; } = string.Empty;
+        public string Type { get; set; } = string.Empty;
         public bool Notnull { get; set; }
         public string? DfltValue { get; set; }
         public int Pk { get; set; }

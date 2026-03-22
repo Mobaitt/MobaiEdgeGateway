@@ -1,3 +1,4 @@
+using System.IO;
 using System.Net.Sockets;
 using EdgeGateway.Domain.Entities;
 using EdgeGateway.Domain.Enums;
@@ -99,6 +100,12 @@ public class ModbusCollectionStrategy : ICollectionStrategy
             }
             catch (Exception ex)
             {
+                if (IsConnectionLevelException(ex))
+                {
+                    _isConnected = false;
+                    throw;
+                }
+
                 _logger.LogWarning(
                     ex,
                     "Failed to read Modbus group SlaveId={SlaveId}, FunctionCode={FunctionCode}",
@@ -201,6 +208,12 @@ public class ModbusCollectionStrategy : ICollectionStrategy
             }
             catch (Exception ex)
             {
+                if (IsConnectionLevelException(ex))
+                {
+                    _isConnected = false;
+                    throw;
+                }
+
                 _logger.LogWarning(
                     ex,
                     "Failed to read range [{StartAddress}-{EndAddress}]",
@@ -213,6 +226,25 @@ public class ModbusCollectionStrategy : ICollectionStrategy
                 }
             }
         }
+    }
+
+    private static bool IsConnectionLevelException(Exception ex)
+    {
+        if (ex is SocketException or IOException or ObjectDisposedException)
+            return true;
+
+        if (ex is InvalidOperationException invalidOperationException)
+        {
+            var message = invalidOperationException.Message;
+            if (!string.IsNullOrWhiteSpace(message) &&
+                (message.Contains("non-connected sockets", StringComparison.OrdinalIgnoreCase) ||
+                 message.Contains("not connected", StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+        }
+
+        return ex.InnerException != null && IsConnectionLevelException(ex.InnerException);
     }
 
     private static List<AddressRange> MergeContinuousAddresses(List<DataPoint> points)

@@ -148,6 +148,92 @@
             </el-form-item>
           </el-col>
         </el-row>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="启用重连">
+              <el-switch v-model="form.reconnectEnabled" active-color="#38dcc4" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="失败阈值">
+              <el-input-number
+                v-model="form.maxConsecutiveReadFailures"
+                :min="1"
+                :max="100"
+                style="width: 100%"
+                controls-position="right"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :span="8">
+            <el-form-item label="单轮次数">
+              <el-input-number
+                v-model="form.reconnectRetryCount"
+                :min="1"
+                :max="100"
+                style="width: 100%"
+                controls-position="right"
+                :disabled="!form.reconnectEnabled"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="单次间隔">
+              <el-input-number
+                v-model="form.reconnectRetryDelayMs"
+                :min="100"
+                :max="60000"
+                :step="100"
+                style="width: 100%"
+                controls-position="right"
+                :disabled="!form.reconnectEnabled"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="轮次间隔">
+              <el-input-number
+                v-model="form.reconnectIntervalMs"
+                :min="500"
+                :max="600000"
+                :step="500"
+                style="width: 100%"
+                controls-position="right"
+                :disabled="!form.reconnectEnabled"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="比例窗口">
+              <el-input-number
+                v-model="form.readFailureWindowSize"
+                :min="3"
+                :max="1000"
+                style="width: 100%"
+                controls-position="right"
+                :disabled="!form.reconnectEnabled"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="比例阈值">
+              <el-input-number
+                v-model="form.readFailureRateThresholdPercent"
+                :min="1"
+                :max="100"
+                :step="5"
+                style="width: 80%"
+                controls-position="right"
+                :disabled="!form.reconnectEnabled"
+              />
+              <span class="form-hint" style="margin-left: 8px">%</span>
+            </el-form-item>
+          </el-col>
+        </el-row>
       </FormSection>
     </el-form>
 
@@ -182,6 +268,13 @@ interface DeviceForm {
   port: number | null
   pollingIntervalMs: number
   isEnabled: boolean
+  reconnectEnabled: boolean
+  reconnectRetryCount: number
+  reconnectRetryDelayMs: number
+  reconnectIntervalMs: number
+  maxConsecutiveReadFailures: number
+  readFailureWindowSize: number
+  readFailureRateThresholdPercent: number
 }
 
 interface Props {
@@ -215,7 +308,14 @@ const form = ref<DeviceForm>({
   address: '',
   port: null,
   pollingIntervalMs: 1000,
-  isEnabled: true
+  isEnabled: true,
+  reconnectEnabled: true,
+  reconnectRetryCount: 3,
+  reconnectRetryDelayMs: 1000,
+  reconnectIntervalMs: 5000,
+  maxConsecutiveReadFailures: 3,
+  readFailureWindowSize: 10,
+  readFailureRateThresholdPercent: 50
 })
 
 const rules = {
@@ -246,7 +346,14 @@ const resetForm = () => {
     address: '',
     port: null,
     pollingIntervalMs: 1000,
-    isEnabled: true
+    isEnabled: true,
+    reconnectEnabled: true,
+    reconnectRetryCount: 3,
+    reconnectRetryDelayMs: 1000,
+    reconnectIntervalMs: 5000,
+    maxConsecutiveReadFailures: 3,
+    readFailureWindowSize: 10,
+    readFailureRateThresholdPercent: 50
   }
   formRef.value?.clearValidate()
 }
@@ -265,7 +372,14 @@ watch(
         address: device.address ?? '',
         port: device.port ?? null,
         pollingIntervalMs: device.pollingIntervalMs ?? 1000,
-        isEnabled: device.isEnabled ?? true
+        isEnabled: device.isEnabled ?? true,
+        reconnectEnabled: device.reconnectEnabled ?? true,
+        reconnectRetryCount: device.reconnectRetryCount ?? 3,
+        reconnectRetryDelayMs: device.reconnectRetryDelayMs ?? 1000,
+        reconnectIntervalMs: device.reconnectIntervalMs ?? 5000,
+        maxConsecutiveReadFailures: device.maxConsecutiveReadFailures ?? 3,
+        readFailureWindowSize: device.readFailureWindowSize ?? 10,
+        readFailureRateThresholdPercent: device.readFailureRateThresholdPercent ?? 50
       }
     } else {
       resetForm()

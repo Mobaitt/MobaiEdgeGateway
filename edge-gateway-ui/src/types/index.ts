@@ -14,6 +14,24 @@ export interface DeviceItem {
   port?: number | null
   pollingIntervalMs: number
   isEnabled: boolean
+  reconnectEnabled?: boolean
+  reconnectRetryCount?: number
+  reconnectRetryDelayMs?: number
+  reconnectIntervalMs?: number
+  maxConsecutiveReadFailures?: number
+  readFailureWindowSize?: number
+  readFailureRateThresholdPercent?: number
+  runtimeStatus?: string
+  runtimeStatusMessage?: string
+  lastError?: string | null
+  lastConnectedAt?: string | null
+  lastReadAt?: string | null
+  lastFailureAt?: string | null
+  consecutiveReadFailures?: number
+  readFailureRatePercent?: number
+  currentReconnectRound?: number
+  currentReconnectAttempt?: number
+  isConnected?: boolean
   dataPointCount: number
   createdAt?: string
 }

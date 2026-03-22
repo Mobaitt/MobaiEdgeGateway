@@ -41,13 +41,17 @@ public class DevicesController : ControllerBase
     {
         var devices = await _deviceService.GetAllDevicesAsync();
         var allVirtualPoints = await _virtualNodeService.GetAllVirtualDataPointsAsync();
+        var runtimeStatuses = _collectionService.GetAllDeviceRuntimeStatuses();
 
         var virtualPointCounts = allVirtualPoints
             .GroupBy(vp => vp.DeviceId)
             .ToDictionary(g => g.Key, g => g.Count());
 
         var result = devices
-            .Select(d => MapToListItem(d, virtualPointCounts.GetValueOrDefault(d.Id, 0)))
+            .Select(d => MapToListItem(
+                d,
+                virtualPointCounts.GetValueOrDefault(d.Id, 0),
+                runtimeStatuses.GetValueOrDefault(d.Id)))
             .ToList();
 
         return Ok(ApiResponse<List<DeviceListItem>>.Ok(result, $"Loaded {result.Count} devices"));
@@ -63,7 +67,8 @@ public class DevicesController : ControllerBase
             return NotFound(ApiResponse.Fail($"Device ID={id} was not found"));
 
         var virtualPointCount = (await _virtualNodeService.GetVirtualDataPointsByDeviceIdAsync(id)).Count;
-        return Ok(ApiResponse<DeviceResponse>.Ok(MapToDetail(device, virtualPointCount)));
+        var runtimeStatus = _collectionService.GetDeviceRuntimeStatus(id);
+        return Ok(ApiResponse<DeviceResponse>.Ok(MapToDetail(device, virtualPointCount, runtimeStatus)));
     }
 
     [HttpPost]
@@ -80,7 +85,14 @@ public class DevicesController : ControllerBase
             Address = req.Address,
             Port = req.Port,
             PollingIntervalMs = req.PollingIntervalMs,
-            IsEnabled = req.IsEnabled
+            IsEnabled = req.IsEnabled,
+            ReconnectEnabled = req.ReconnectEnabled,
+            ReconnectRetryCount = req.ReconnectRetryCount,
+            ReconnectRetryDelayMs = req.ReconnectRetryDelayMs,
+            ReconnectIntervalMs = req.ReconnectIntervalMs,
+            MaxConsecutiveReadFailures = req.MaxConsecutiveReadFailures,
+            ReadFailureWindowSize = req.ReadFailureWindowSize,
+            ReadFailureRateThresholdPercent = req.ReadFailureRateThresholdPercent
         };
 
         var created = await _deviceService.CreateDeviceAsync(device);
@@ -107,6 +119,13 @@ public class DevicesController : ControllerBase
         device.Port = req.Port;
         device.PollingIntervalMs = req.PollingIntervalMs;
         device.IsEnabled = req.IsEnabled;
+        device.ReconnectEnabled = req.ReconnectEnabled;
+        device.ReconnectRetryCount = req.ReconnectRetryCount;
+        device.ReconnectRetryDelayMs = req.ReconnectRetryDelayMs;
+        device.ReconnectIntervalMs = req.ReconnectIntervalMs;
+        device.MaxConsecutiveReadFailures = req.MaxConsecutiveReadFailures;
+        device.ReadFailureWindowSize = req.ReadFailureWindowSize;
+        device.ReadFailureRateThresholdPercent = req.ReadFailureRateThresholdPercent;
 
         await _deviceService.UpdateDeviceAsync(device);
         return Ok(ApiResponse.Ok("Device updated"));
@@ -333,37 +352,105 @@ public class DevicesController : ControllerBase
         return Ok(ApiResponse<DataPointRealtimeResponse>.Ok(response, "Data point control succeeded"));
     }
 
-    private static DeviceListItem MapToListItem(Device d, int virtualPointCount = 0) => new()
+    private static DeviceListItem MapToListItem(
+        Device d,
+        int virtualPointCount = 0,
+        DataCollectionService.DeviceRuntimeSnapshot? runtimeStatus = null)
     {
-        Id = d.Id,
-        Name = d.Name,
-        Code = d.Code,
-        Description = d.Description,
-        Protocol = d.Protocol.ToString(),
-        ProtocolValue = (int)d.Protocol,
-        Address = d.Address,
-        Port = d.Port,
-        PollingIntervalMs = d.PollingIntervalMs,
-        IsEnabled = d.IsEnabled,
-        DataPointCount = d.DataPoints.Count + virtualPointCount
-    };
+        var response = new DeviceListItem
+        {
+            Id = d.Id,
+            Name = d.Name,
+            Code = d.Code,
+            Description = d.Description,
+            Protocol = d.Protocol.ToString(),
+            ProtocolValue = (int)d.Protocol,
+            Address = d.Address,
+            Port = d.Port,
+            PollingIntervalMs = d.PollingIntervalMs,
+            IsEnabled = d.IsEnabled,
+            ReconnectEnabled = d.ReconnectEnabled,
+            ReconnectRetryCount = d.ReconnectRetryCount,
+            ReconnectRetryDelayMs = d.ReconnectRetryDelayMs,
+            ReconnectIntervalMs = d.ReconnectIntervalMs,
+            MaxConsecutiveReadFailures = d.MaxConsecutiveReadFailures,
+            ReadFailureWindowSize = d.ReadFailureWindowSize,
+            ReadFailureRateThresholdPercent = d.ReadFailureRateThresholdPercent,
+            DataPointCount = d.DataPoints.Count + virtualPointCount
+        };
 
-    private static DeviceResponse MapToDetail(Device d, int virtualPointCount = 0) => new()
+        ApplyRuntimeStatus(response, runtimeStatus);
+        return response;
+    }
+
+    private static DeviceResponse MapToDetail(
+        Device d,
+        int virtualPointCount = 0,
+        DataCollectionService.DeviceRuntimeSnapshot? runtimeStatus = null)
     {
-        Id = d.Id,
-        Name = d.Name,
-        Code = d.Code,
-        Description = d.Description,
-        Protocol = d.Protocol.ToString(),
-        ProtocolValue = (int)d.Protocol,
-        Address = d.Address,
-        Port = d.Port,
-        IsEnabled = d.IsEnabled,
-        PollingIntervalMs = d.PollingIntervalMs,
-        DataPointCount = d.DataPoints.Count + virtualPointCount,
-        CreatedAt = d.CreatedAt,
-        UpdatedAt = d.UpdatedAt
-    };
+        var response = new DeviceResponse
+        {
+            Id = d.Id,
+            Name = d.Name,
+            Code = d.Code,
+            Description = d.Description,
+            Protocol = d.Protocol.ToString(),
+            ProtocolValue = (int)d.Protocol,
+            Address = d.Address,
+            Port = d.Port,
+            IsEnabled = d.IsEnabled,
+            PollingIntervalMs = d.PollingIntervalMs,
+            ReconnectEnabled = d.ReconnectEnabled,
+            ReconnectRetryCount = d.ReconnectRetryCount,
+            ReconnectRetryDelayMs = d.ReconnectRetryDelayMs,
+            ReconnectIntervalMs = d.ReconnectIntervalMs,
+            MaxConsecutiveReadFailures = d.MaxConsecutiveReadFailures,
+            ReadFailureWindowSize = d.ReadFailureWindowSize,
+            ReadFailureRateThresholdPercent = d.ReadFailureRateThresholdPercent,
+            DataPointCount = d.DataPoints.Count + virtualPointCount,
+            CreatedAt = d.CreatedAt,
+            UpdatedAt = d.UpdatedAt
+        };
+
+        ApplyRuntimeStatus(response, runtimeStatus);
+        return response;
+    }
+
+    private static void ApplyRuntimeStatus(DeviceListItem target, DataCollectionService.DeviceRuntimeSnapshot? runtimeStatus)
+    {
+        if (runtimeStatus == null)
+            return;
+
+        target.RuntimeStatus = runtimeStatus.Status;
+        target.RuntimeStatusMessage = runtimeStatus.StatusMessage;
+        target.LastError = runtimeStatus.LastError;
+        target.LastConnectedAt = runtimeStatus.LastConnectedAt;
+        target.LastReadAt = runtimeStatus.LastReadAt;
+        target.LastFailureAt = runtimeStatus.LastFailureAt;
+        target.ConsecutiveReadFailures = runtimeStatus.ConsecutiveReadFailures;
+        target.ReadFailureRatePercent = runtimeStatus.ReadFailureRatePercent;
+        target.CurrentReconnectRound = runtimeStatus.CurrentReconnectRound;
+        target.CurrentReconnectAttempt = runtimeStatus.CurrentReconnectAttempt;
+        target.IsConnected = runtimeStatus.IsConnected;
+    }
+
+    private static void ApplyRuntimeStatus(DeviceResponse target, DataCollectionService.DeviceRuntimeSnapshot? runtimeStatus)
+    {
+        if (runtimeStatus == null)
+            return;
+
+        target.RuntimeStatus = runtimeStatus.Status;
+        target.RuntimeStatusMessage = runtimeStatus.StatusMessage;
+        target.LastError = runtimeStatus.LastError;
+        target.LastConnectedAt = runtimeStatus.LastConnectedAt;
+        target.LastReadAt = runtimeStatus.LastReadAt;
+        target.LastFailureAt = runtimeStatus.LastFailureAt;
+        target.ConsecutiveReadFailures = runtimeStatus.ConsecutiveReadFailures;
+        target.ReadFailureRatePercent = runtimeStatus.ReadFailureRatePercent;
+        target.CurrentReconnectRound = runtimeStatus.CurrentReconnectRound;
+        target.CurrentReconnectAttempt = runtimeStatus.CurrentReconnectAttempt;
+        target.IsConnected = runtimeStatus.IsConnected;
+    }
 
     private static DataPointResponse MapDataPointToResponse(DataPoint dp, string deviceName) => new()
     {
