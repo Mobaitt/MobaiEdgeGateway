@@ -5,6 +5,9 @@ import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
 import { fileURLToPath, URL } from 'node:url'
 
+// 前端打包输出到 WebApi 项目的 wwwroot 目录，由 ASP.NET Core 作为静态文件服务
+const outDir = fileURLToPath(new URL('../EdgeGateway.WebApi/wwwroot', import.meta.url))
+
 export default defineConfig({
   plugins: [
     vue(),
@@ -33,6 +36,8 @@ export default defineConfig({
     }
   },
   build: {
+    outDir,
+    emptyOutDir: true,
     charset: 'utf8',
     rollupOptions: {
       output: {

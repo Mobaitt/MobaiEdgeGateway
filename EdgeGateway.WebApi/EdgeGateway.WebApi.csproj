@@ -22,5 +22,6 @@
 
   <ItemGroup>
     <Folder Include="output\" />
+    <Folder Include="wwwroot\" />
   </ItemGroup>
 </Project>

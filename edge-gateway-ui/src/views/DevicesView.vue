@@ -25,7 +25,7 @@
       <span v-if="autoRefreshEnabled" class="auto-refresh-hint">自动刷新中</span>
     </div>
 
-    <div v-loading="loading" class="devices-grid">
+    <div class="devices-grid">
       <div
         v-for="device in filteredDevices"
         :key="device.id"
@@ -144,7 +144,6 @@ import type { DeviceItem } from '@/types'
 
 const router = useRouter()
 const { confirm: confirmDeleteFn } = useConfirmDelete()
-const loading = ref(false)
 const devices = ref<DeviceItem[]>([])
 const CollectionProtocolOptions = ref<any[]>([])
 
@@ -203,12 +202,11 @@ const getProtocolBg = (value: number) => {
 }
 
 const fetchDevices = async () => {
-  loading.value = true
   try {
     const res = await getDevices()
     devices.value = ((res as { data?: DeviceItem[] })?.data ?? []) as DeviceItem[]
-  } finally {
-    loading.value = false
+  } catch {
+    // 静默失败，后续自动刷新会重试
   }
 }
 
