@@ -18,6 +18,7 @@ public class GatewayController : ControllerBase
     private readonly DataSendService _sendService;
     private readonly IDeviceRepository _deviceRepo;
     private readonly IChannelRepository _channelRepo;
+    private readonly VirtualNodeManagementService _virtualNodeService;
     private readonly ILogger<GatewayController> _logger;
 
     public GatewayController(
@@ -25,12 +26,14 @@ public class GatewayController : ControllerBase
         DataSendService sendService,
         IDeviceRepository deviceRepo,
         IChannelRepository channelRepo,
+        VirtualNodeManagementService virtualNodeService,
         ILogger<GatewayController> logger)
     {
         _collectionService = collectionService;
         _sendService       = sendService;
         _deviceRepo        = deviceRepo;
         _channelRepo       = channelRepo;
+        _virtualNodeService = virtualNodeService;
         _logger            = logger;
     }
 
@@ -43,15 +46,16 @@ public class GatewayController : ControllerBase
     {
         var allDevices  = (await _deviceRepo.GetAllAsync()).ToList();
         var allChannels = (await _channelRepo.GetAllAsync()).ToList();
+        var virtualPoints = await _virtualNodeService.GetAllVirtualDataPointsAsync();
 
         var status = new GatewayStatusResponse
         {
-            IsRunning       = true,  // 能调到此接口说明服务正在运行
+            IsRunning       = true,
             TotalDevices    = allDevices.Count,
             EnabledDevices  = allDevices.Count(d => d.IsEnabled),
             TotalChannels   = allChannels.Count,
             EnabledChannels = allChannels.Count(c => c.IsEnabled),
-            TotalDataPoints = allDevices.Sum(d => d.DataPoints.Count),
+            TotalDataPoints = allDevices.Sum(d => d.DataPoints.Count) + virtualPoints.Count,
             ServerTime      = DateTime.UtcNow
         };
 

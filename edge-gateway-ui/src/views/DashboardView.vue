@@ -205,11 +205,11 @@ const stats = computed(() => [
     key: 'datapoints',
     label: '数据点总数',
     icon: 'DataLine',
-    value: allDataPoints.value.length,
+    value: status.value.totalDataPoints ?? allDataPoints.value.length,
     color: '#9f7aea',
     bg: 'rgba(159,122,234,0.1)',
     badge: 'info',
-    sub: `${allDataPoints.value.length} 采集点`
+    sub: `${status.value.totalDataPoints ?? allDataPoints.value.length} 采集点`
   },
   {
     key: 'enabledDevices',
@@ -309,12 +309,12 @@ const refresh = async () => {
     allDevices.value = ((deviceRes as { data?: unknown[] })?.data ?? []) as typeof allDevices.value
     
     // 数据点接口按设备拆分，这里聚合为首页统一统计口径。
-    const dataPointPromises = allDevices.value.map(device => 
+    const dataPointPromises = allDevices.value.map(device =>
       fetch(`/api/devices/${device.id}/datapoints`).then(res => res.json())
     )
     const dataPointResults = await Promise.all(dataPointPromises)
     allDataPoints.value = dataPointResults.flatMap((res: any) => res.data || [])
-    
+
     allChannels.value = ((channelRes as { data?: unknown[] })?.data ?? []) as typeof allChannels.value
   } finally {
     loading.value = false
