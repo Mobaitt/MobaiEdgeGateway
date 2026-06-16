@@ -250,16 +250,19 @@ const isDeviceAllSelected = (device: DeviceTreeItem) => {
   const normalAllSelected = device.dataPoints.every(
     (dp) => isMapped(dp.id) || selectedIds.value.has(dp.id)
   )
-  const virtualAllSelected = virtualPoints.every((vp) => virtualSelectedIds.value.has(vp.id))
+  const virtualAllSelected = virtualPoints.every(
+    (vp) => isVirtualMapped(vp.id) || virtualSelectedIds.value.has(vp.id)
+  )
   return normalAllSelected && virtualAllSelected
 }
 
 const isDeviceIndeterminate = (device: DeviceTreeItem) => {
   const virtualPoints = getFilteredVirtualPointsByDevice(device.id)
   const normalSelectable = device.dataPoints.filter((dp) => !isMapped(dp.id))
+  const virtualSelectable = virtualPoints.filter((vp) => !isVirtualMapped(vp.id))
   const normalSelectedCount = normalSelectable.filter((dp) => selectedIds.value.has(dp.id)).length
-  const virtualSelectedCount = virtualPoints.filter((vp) => virtualSelectedIds.value.has(vp.id)).length
-  const totalSelectable = normalSelectable.length + virtualPoints.length
+  const virtualSelectedCount = virtualSelectable.filter((vp) => virtualSelectedIds.value.has(vp.id)).length
+  const totalSelectable = normalSelectable.length + virtualSelectable.length
   const totalSelected = normalSelectedCount + virtualSelectedCount
   return totalSelected > 0 && totalSelected < totalSelectable
 }
@@ -267,13 +270,14 @@ const isDeviceIndeterminate = (device: DeviceTreeItem) => {
 const toggleDevice = (device: DeviceTreeItem) => {
   const virtualPoints = getFilteredVirtualPointsByDevice(device.id)
   const normalSelectable = device.dataPoints.filter((dp) => !isMapped(dp.id))
+  const virtualSelectable = virtualPoints.filter((vp) => !isVirtualMapped(vp.id))
 
   if (isDeviceAllSelected(device)) {
     normalSelectable.forEach((dp) => selectedIds.value.delete(dp.id))
-    virtualPoints.forEach((vp) => virtualSelectedIds.value.delete(vp.id))
+    virtualSelectable.forEach((vp) => virtualSelectedIds.value.delete(vp.id))
   } else {
     normalSelectable.forEach((dp) => selectedIds.value.add(dp.id))
-    virtualPoints.forEach((vp) => virtualSelectedIds.value.add(vp.id))
+    virtualSelectable.forEach((vp) => virtualSelectedIds.value.add(vp.id))
   }
 }
 

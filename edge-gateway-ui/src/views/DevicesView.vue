@@ -20,9 +20,8 @@
           :value="o.value"
         />
       </el-select>
-      <el-button :icon="Refresh" circle :loading="refreshing" title="刷新数据" @click="manualRefresh" />
+      <el-button :icon="Refresh" circle title="刷新数据" @click="manualRefresh" />
       <span class="total-hint mono">共 {{ filteredDevices.length }} 台设备</span>
-      <span v-if="autoRefreshEnabled" class="auto-refresh-hint">自动刷新中</span>
     </div>
 
     <div class="devices-grid">
@@ -365,17 +364,6 @@ onUnmounted(() => {
   font-size: 12px;
   color: var(--text-muted);
   margin-left: auto;
-}
-
-.auto-refresh-hint {
-  font-size: 12px;
-  color: var(--text-success);
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
 }
 
 .devices-grid {
