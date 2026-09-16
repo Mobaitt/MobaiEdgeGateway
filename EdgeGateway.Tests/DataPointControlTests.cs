@@ -56,7 +56,7 @@ public class DataPointControlTests
     }
 
     [Fact]
-    public async Task RejectedSampleIsVisibleAsBadWithoutReplacingAcceptedSnapshot()
+    public async Task RejectedSampleIsNullAndRejectedWithoutReplacingAcceptedSnapshot()
     {
         await using var context = await GatewayTestContext.CreateAsync();
         var point = await context.AddPointAsync();
@@ -78,8 +78,8 @@ public class DataPointControlTests
         Assert.Equal(DataQuality.Good, accepted.Quality);
 
         var observed = Assert.Single(context.Collection.GetDeviceRealtimeData(point.DeviceId));
-        Assert.Equal((short)131, observed.Value);
-        Assert.Equal(DataQuality.Bad, observed.Quality);
+        Assert.Null(observed.Value);
+        Assert.Equal(DataQuality.Rejected, observed.Quality);
     }
 
     public sealed class FailedReadBackStrategy : ICollectionStrategy

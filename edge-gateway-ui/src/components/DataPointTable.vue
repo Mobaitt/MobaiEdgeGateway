@@ -31,7 +31,7 @@
 
       <el-table-column label="实时值" width="150" align="center">
         <template #default="{ row }">
-          <span v-if="getRealtimeData(row)" class="mono realtime-value" :class="getQualityClass(getRealtimeData(row)!.quality)">
+          <span v-if="getRealtimeData(row)" class="badge mono realtime-value" :class="getQualityClass(getRealtimeData(row)!.quality)">
             {{ formatRowValue(row) }}
             <span v-if="row.unit" class="value-unit">{{ row.unit }}</span>
           </span>

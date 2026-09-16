@@ -38,6 +38,7 @@ html, body, #app {
 .badge.bad     { background: rgba(240, 95, 110, 0.12); color: #f05f6e; border: 1px solid rgba(240, 95, 110, 0.3); }
 .badge.warn    { background: rgba(246, 183, 60, 0.12); color: #f6b73c; border: 1px solid rgba(246, 183, 60, 0.3); }
 .badge.info    { background: rgba(56, 220, 196, 0.12); color: #38dcc4; border: 1px solid rgba(56, 220, 196, 0.3); }
+.badge.rejected { background: rgba(249, 115, 22, 0.12); color: #f97316; border: 1px solid rgba(249, 115, 22, 0.3); }
 
 /* 脉冲动画（在线状态指示灯）*/
 @keyframes pulse {

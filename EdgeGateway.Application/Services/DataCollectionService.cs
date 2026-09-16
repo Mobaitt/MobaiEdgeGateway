@@ -230,7 +230,7 @@ public class DataCollectionService
         _dataSnapshot.Values.Where(x => x.Data.DeviceId == deviceId).Select(x => x.Data).ToList();
 
     /// <summary>
-    /// 获取页面实时展示数据。该结果包含最近一次被规则拒绝的原始值，质量为 Rejected，
+    /// 获取页面实时展示数据。该结果包含最近一次采样的质量结果；被规则拒绝时值为 null、质量为 Rejected，
     /// 而不会污染用于通道下发和虚拟节点计算的有效快照。
     /// </summary>
     public List<CollectedData> GetDeviceRealtimeData(int deviceId) =>
@@ -804,7 +804,8 @@ public class DataCollectionService
 
                 if (ruleResult.ShouldReject)
                 {
-                    // 拒绝只阻止下发，不丢失页面对最近一次原始采样的可见性。
+                    // 拒绝只阻止下发，页面保留该点位的质量状态，但不展示未经允许使用的值。
+                    observedData.Value = null;
                     observedData.Quality = ruleResult.Quality;
                     SetLatestObservedSnapshot(observedData);
                     _logger.LogDebug("数据点 {Tag} 被规则拒绝：{Error}", collectedData.Tag, ruleResult.ErrorMessage);
