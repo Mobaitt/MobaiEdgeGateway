@@ -4,6 +4,36 @@
   border-radius: var(--radius-lg);
 }
 
+/* 列表筛选搜索框统一外观，避免页面间使用 Element Plus 默认尺寸。 */
+.eg-search-input {
+  min-width: 0;
+}
+
+.eg-search-input .el-input__wrapper {
+  height: 36px;
+  padding: 0 11px;
+  border: 1px solid var(--border-muted) !important;
+  border-radius: 8px !important;
+  background: var(--bg-base) !important;
+  box-shadow: none !important;
+  transition: border-color .2s ease, background .2s ease, box-shadow .2s ease;
+}
+
+.eg-search-input .el-input__wrapper:hover,
+.eg-search-input .el-input__wrapper.is-focus {
+  border-color: var(--border-accent) !important;
+  background: var(--bg-base) !important;
+}
+
+.eg-search-input .el-input__prefix,
+.eg-search-input .el-input__clear {
+  color: var(--text-muted);
+}
+
+.eg-search-input .el-input__inner {
+  color: var(--text-primary) !important;
+}
+
 .eg-primary-action.el-button,
 .eg-primary-action .el-button {
   height: 38px;
