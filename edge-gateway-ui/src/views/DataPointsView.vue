@@ -48,6 +48,7 @@
             <el-option label="Good" value="Good" />
             <el-option label="Bad" value="Bad" />
             <el-option label="Uncertain" value="Uncertain" />
+            <el-option label="Rejected" value="Rejected" />
           </el-select>
           <el-select v-model="filterType" clearable placeholder="点位类型" style="width: 140px">
             <el-option label="全部" value="" />
@@ -432,6 +433,7 @@ const getQualityClass = (quality: string) => {
   if (quality === 'Good') return 'good'
   if (quality === 'Bad') return 'bad'
   if (quality === 'Uncertain') return 'uncertain'
+  if (quality === 'Rejected') return 'rejected'
   return ''
 }
 

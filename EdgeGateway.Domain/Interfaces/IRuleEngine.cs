@@ -54,7 +54,11 @@ public class RuleExecutionResult
     /// <summary>
     /// 创建失败结果
     /// </summary>
-    public static RuleExecutionResult Fail(string errorMessage, bool shouldReject = false, object? defaultValue = null)
+    public static RuleExecutionResult Fail(
+        string errorMessage,
+        bool shouldReject = false,
+        object? defaultValue = null,
+        DataQuality quality = DataQuality.Bad)
     {
         return new RuleExecutionResult
         {
@@ -62,7 +66,7 @@ public class RuleExecutionResult
             ErrorMessage = errorMessage,
             ShouldReject = shouldReject,
             Value = defaultValue,
-            Quality = DataQuality.Bad
+            Quality = quality
         };
     }
 }

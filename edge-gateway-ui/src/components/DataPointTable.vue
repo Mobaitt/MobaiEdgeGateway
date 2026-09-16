@@ -154,6 +154,7 @@ const getRealtimeData = (row: DataPointRow) => props.realtimeData[row.tag] || nu
 .realtime-value.good, .badge.good { color: var(--text-success); }
 .realtime-value.bad, .badge.bad { color: var(--text-danger); }
 .realtime-value.uncertain, .badge.uncertain { color: var(--text-warn); }
+.realtime-value.rejected, .badge.rejected { color: var(--text-warn); }
 .badge.info { color: var(--text-secondary); }
 
 .pagination-bar { min-height: 58px; padding: 11px 16px; }

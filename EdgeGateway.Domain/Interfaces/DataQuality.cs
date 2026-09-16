@@ -13,5 +13,8 @@ public enum DataQuality
     Bad = 1,
 
     /// <summary>不确定质量，数据可能不准确</summary>
-    Uncertain = 2
+    Uncertain = 2,
+
+    /// <summary>规则拒绝，采样值未通过校验且不会进入有效快照</summary>
+    Rejected = 3
 }
