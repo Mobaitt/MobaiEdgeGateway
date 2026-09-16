@@ -274,6 +274,10 @@ onUnmounted(() => {
   border-top: 1px solid var(--border-subtle);
   display: flex; justify-content: flex-end;
 }
+.sidebar.collapsed .sidebar-footer {
+  justify-content: center;
+  padding-inline: 0;
+}
 .collapse-btn {
   background: none; border: 1px solid var(--border-muted);
   color: var(--text-muted); border-radius: 6px;
