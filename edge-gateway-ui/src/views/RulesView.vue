@@ -84,6 +84,7 @@
       :data-points="dataPoints"
       :submitting="submitting"
       @submit="handleSubmit"
+      @device-change="handleRuleDeviceChange"
       @close="handleDialogClose"
       @show-help="showConfigHelp"
     />
@@ -107,7 +108,7 @@ import RuleHelpDialog from '@/dialogs/rule/RuleHelpDialog.vue'
 import type {CreateRuleRequest, Rule, RuleType, UpdateRuleRequest} from '@/types/rule'
 import type {DataPoint, Device} from '@/types/device'
 import {createRule, deleteRule as deleteRuleApi, getRules, toggleRule, updateRule} from '@/api/rule'
-import {getAllDataPoints, getDevices} from '@/api/device'
+import {getDataPoints, getDevices} from '@/api/device'
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -169,11 +170,28 @@ const loadDevicesAndPoints = async () => {
   try {
     const devicesRes = await getDevices()
     devices.value = devicesRes.data
-    const pointsRes = await getAllDataPoints()
-    dataPoints.value = pointsRes.data
   } catch (error) {
-    console.error('加载设备和数据点失败', error)
+    console.error('加载设备失败', error)
   }
+}
+
+const loadDataPointsForDevice = async (deviceId: number | null) => {
+  if (deviceId === null) {
+    dataPoints.value = []
+    return
+  }
+
+  try {
+    const response = await getDataPoints(deviceId)
+    dataPoints.value = response.data
+  } catch (error) {
+    dataPoints.value = []
+    ElMessage.error('加载设备数据点失败')
+  }
+}
+
+const handleRuleDeviceChange = (deviceId: number | null) => {
+  void loadDataPointsForDevice(deviceId)
 }
 
 const clearRuleTypeFilter = () => {
@@ -184,11 +202,13 @@ const clearRuleTypeFilter = () => {
 
 const openCreateDialog = () => {
   editingRule.value = null
+  dataPoints.value = []
   dialogVisible.value = true
 }
 
-const openEditDialog = (rule: Rule) => {
+const openEditDialog = async (rule: Rule) => {
   editingRule.value = rule
+  await loadDataPointsForDevice(rule.deviceId)
   dialogVisible.value = true
 }
 

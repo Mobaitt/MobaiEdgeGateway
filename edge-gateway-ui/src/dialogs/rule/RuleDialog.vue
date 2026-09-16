@@ -136,6 +136,7 @@ interface Props {
 interface Emits {
   (e: 'update:modelValue', value: boolean): void
   (e: 'submit', data: RuleForm): void
+  (e: 'device-change', value: number | null): void
   (e: 'close'): void
   (e: 'showHelp'): void
 }
@@ -203,9 +204,14 @@ const groupedDataPoints = computed(() => {
 watch(
   () => form.value.deviceId,
   (deviceId) => {
-    if (deviceId === null) return
+    const selectedDeviceId = deviceId ?? null
+    emit('device-change', selectedDeviceId)
+    if (selectedDeviceId === null) {
+      form.value.dataPointIds = []
+      return
+    }
     form.value.dataPointIds = (form.value.dataPointIds || [])
-      .filter(id => props.dataPoints.some(point => point.id === id && point.deviceId === deviceId))
+      .filter(id => props.dataPoints.some(point => point.id === id && point.deviceId === selectedDeviceId))
   }
 )
 
