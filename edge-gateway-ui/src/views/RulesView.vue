@@ -12,6 +12,7 @@
         clearable
         style="width: 160px"
         @change="loadRules"
+        @clear="clearRuleTypeFilter"
       >
         <el-option label="限制规则" :value="0" />
         <el-option label="转换规则" :value="1" />
@@ -117,7 +118,7 @@ const filterType = ref<RuleType | null>(null)
 const dialogVisible = ref(false)
 const helpDialogVisible = ref(false)
 const editingRule = ref<Rule | null>(null)
-const rules = computed(() => filterType.value === null
+const rules = computed(() => filterType.value == null
   ? allRules.value
   : allRules.value.filter(rule => rule.ruleType === filterType.value))
 
@@ -173,6 +174,12 @@ const loadDevicesAndPoints = async () => {
   } catch (error) {
     console.error('加载设备和数据点失败', error)
   }
+}
+
+const clearRuleTypeFilter = () => {
+  // Element Plus 清空时可能将 v-model 设为 undefined，统一归一化为 null，
+  // 确保计算列表回到完整规则集合。
+  filterType.value = null
 }
 
 const openCreateDialog = () => {
