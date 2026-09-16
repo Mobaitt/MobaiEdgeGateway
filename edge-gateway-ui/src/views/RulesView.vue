@@ -96,7 +96,7 @@
 </template>
 
 <script setup lang="ts">
-import {onMounted, reactive, ref} from 'vue'
+import {computed, onMounted, reactive, ref} from 'vue'
 import {ElMessage, ElMessageBox} from 'element-plus'
 import {Delete, Edit, Plus} from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
@@ -110,13 +110,16 @@ import {getAllDataPoints, getDevices} from '@/api/device'
 
 const loading = ref(false)
 const submitting = ref(false)
-const rules = ref<Rule[]>([])
+const allRules = ref<Rule[]>([])
 const devices = ref<Device[]>([])
 const dataPoints = ref<DataPoint[]>([])
 const filterType = ref<RuleType | null>(null)
 const dialogVisible = ref(false)
 const helpDialogVisible = ref(false)
 const editingRule = ref<Rule | null>(null)
+const rules = computed(() => filterType.value === null
+  ? allRules.value
+  : allRules.value.filter(rule => rule.ruleType === filterType.value))
 
 const form = reactive<CreateRuleRequest>({
   name: '',
@@ -152,15 +155,8 @@ const getDataPointLabel = (dataPointId: number, fallbackName?: string) => {
 const loadRules = async () => {
   loading.value = true
   try {
-    let allRules: Rule[]
-    if (filterType.value !== null) {
-      const response = await getRules()
-      allRules = response.data.filter(r => r.ruleType === filterType.value)
-    } else {
-      const response = await getRules()
-      allRules = response.data
-    }
-    rules.value = allRules
+    const response = await getRules()
+    allRules.value = response.data
   } catch (error) {
     ElMessage.error('加载规则失败')
   } finally {

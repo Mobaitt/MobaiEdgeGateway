@@ -47,10 +47,11 @@
       <el-form-item label="数据点" prop="dataPointIds">
         <el-select
           v-model="form.dataPointIds"
-          placeholder="可选，留空表示全局规则，支持多选"
+          :placeholder="form.deviceId == null ? '请先选择设备' : '可选，留空表示该设备级规则'"
           clearable
           multiple
           filterable
+          :disabled="form.deviceId == null"
           style="width: 100%"
         >
           <el-option-group
@@ -177,7 +178,14 @@ const isEdit = computed(() => !!props.editingRule)
 const groupedDataPoints = computed(() => {
   const groups = new Map<number, { deviceId: number; deviceName: string; points: DataPoint[] }>()
   
-  props.dataPoints.forEach(point => {
+  const selectedIds = new Set(form.value.dataPointIds || [])
+  const visiblePoints = props.dataPoints.filter(point =>
+    form.value.deviceId !== null
+      ? point.deviceId === form.value.deviceId
+      : selectedIds.has(point.id)
+  )
+
+  visiblePoints.forEach(point => {
     if (!groups.has(point.deviceId)) {
       const device = props.devices.find(d => d.id === point.deviceId)
       groups.set(point.deviceId, {
@@ -191,6 +199,15 @@ const groupedDataPoints = computed(() => {
   
   return Array.from(groups.values())
 })
+
+watch(
+  () => form.value.deviceId,
+  (deviceId) => {
+    if (deviceId === null) return
+    form.value.dataPointIds = (form.value.dataPointIds || [])
+      .filter(id => props.dataPoints.some(point => point.id === id && point.deviceId === deviceId))
+  }
+)
 
 const resetForm = () => {
   form.value = {
@@ -216,7 +233,7 @@ watch(
       form.value = {
         name: rule.name,
         ruleType: rule.ruleType,
-        deviceId: rule.deviceId,
+        deviceId: rule.deviceId ?? null,
         dataPointIds: rule.dataPointIds || [],
         priority: rule.priority,
         ruleConfig: rule.ruleConfig,

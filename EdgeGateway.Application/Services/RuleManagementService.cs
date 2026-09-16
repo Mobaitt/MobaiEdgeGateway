@@ -32,11 +32,12 @@ public class RuleManagementService
     public async Task<List<DataPointRule>> GetAllRulesAsync()
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
-        return await context.DataPointRules
+        var rules = await context.DataPointRules
             .Include(r => r.DataPoint)
             .Include(r => r.Device)
             .OrderBy(r => r.Priority)
             .ToListAsync();
+        return await AttachDataPointDisplayNamesAsync(context, rules);
     }
 
     /// <summary>
@@ -45,10 +46,13 @@ public class RuleManagementService
     public async Task<DataPointRule?> GetRuleByIdAsync(int id)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
-        return await context.DataPointRules
+        var rule = await context.DataPointRules
             .Include(r => r.DataPoint)
             .Include(r => r.Device)
             .FirstOrDefaultAsync(r => r.Id == id);
+        if (rule == null) return null;
+        await AttachDataPointDisplayNamesAsync(context, [rule]);
+        return rule;
     }
 
     /// <summary>
@@ -64,10 +68,10 @@ public class RuleManagementService
             .Where(r => r.DataPointIdsJson != null)
             .ToListAsync();
 
-        return rules
+        return await AttachDataPointDisplayNamesAsync(context, rules
             .Where(r => r.DataPointIds.Contains(dataPointId))
             .OrderBy(r => r.Priority)
-            .ToList();
+            .ToList());
     }
 
     /// <summary>
@@ -76,10 +80,12 @@ public class RuleManagementService
     public async Task<List<DataPointRule>> GetRulesByDeviceIdAsync(int deviceId)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
-        return await context.DataPointRules
+        var rules = await context.DataPointRules
+            .Include(r => r.Device)
             .Where(r => r.DeviceId == deviceId)
             .OrderBy(r => r.Priority)
             .ToListAsync();
+        return await AttachDataPointDisplayNamesAsync(context, rules);
     }
 
     /// <summary>
@@ -92,10 +98,36 @@ public class RuleManagementService
         var rules = await context.DataPointRules
             .ToListAsync();
 
-        return rules
+        return await AttachDataPointDisplayNamesAsync(context, rules
             .Where(r => r.DataPointIds.Count == 0 && r.DeviceId == null)
             .OrderBy(r => r.Priority)
-            .ToList();
+            .ToList());
+    }
+
+    private static async Task<List<DataPointRule>> AttachDataPointDisplayNamesAsync(
+        GatewayDbContext context,
+        List<DataPointRule> rules)
+    {
+        var ids = rules.SelectMany(rule => rule.DataPointIds).Distinct().ToList();
+        if (ids.Count == 0)
+            return rules;
+
+        var points = await context.DataPoints
+            .Include(point => point.Device)
+            .Where(point => ids.Contains(point.Id))
+            .ToListAsync();
+        var pointById = points.ToDictionary(point => point.Id);
+
+        foreach (var rule in rules)
+        {
+            rule.DataPointDisplayNames = rule.DataPointIds
+                .Select(id => pointById.TryGetValue(id, out var point)
+                    ? point.Device != null ? $"{point.Device.Name}.{point.Name}" : point.Name
+                    : $"数据点 #{id}")
+                .ToList();
+        }
+
+        return rules;
     }
 
     /// <summary>

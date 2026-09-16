@@ -60,9 +60,11 @@ public class RuleResponse
         {
             Id = rule.Id,
             DataPointIds = rule.DataPointIds,
-            DataPointNames = rule.DataPointIds.Select(id => 
-                rule.Device?.Name != null ? $"{rule.Device.Name}.数据点{id}" : $"数据点{id}"
-            ).ToList(),
+            DataPointNames = rule.DataPointDisplayNames.Count > 0
+                ? rule.DataPointDisplayNames
+                : rule.DataPointIds.Select(id =>
+                    rule.Device?.Name != null ? $"{rule.Device.Name}.数据点{id}" : $"数据点{id}"
+                ).ToList(),
             DeviceId = rule.DeviceId,
             DeviceName = rule.Device?.Name,
             Name = rule.Name,
