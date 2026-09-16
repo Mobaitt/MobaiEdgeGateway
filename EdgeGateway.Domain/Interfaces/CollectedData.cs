@@ -29,4 +29,7 @@ public class CollectedData
 
     /// <summary>采集时间戳（UTC）</summary>
     public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+
+    /// <summary>本次协议读取包含的数据点数量，用于限制规则执行。</summary>
+    public int? ReadBatchSize { get; set; }
 }

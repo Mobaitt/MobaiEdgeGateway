@@ -73,6 +73,16 @@ public class RuleExecutionResult
 public interface IRuleEngine
 {
     /// <summary>
+    /// 设置跨数据点计算规则读取最新快照的委托。
+    /// </summary>
+    void SetDataSnapshotGetter(Func<string, object?> getDataSnapshot);
+
+    /// <summary>
+    /// 获取指定设备本次读取适用的最短规则超时时间。
+    /// </summary>
+    Task<int?> GetReadTimeoutMsAsync(int deviceId, IReadOnlyCollection<int> dataPointIds);
+
+    /// <summary>
     /// 对单个数据点执行所有适用的规则
     /// </summary>
     /// <param name="data">原始采集数据</param>

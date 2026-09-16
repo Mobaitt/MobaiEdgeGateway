@@ -57,10 +57,17 @@ public class RuleManagementService
     public async Task<List<DataPointRule>> GetRulesByDataPointIdAsync(int dataPointId)
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
-        return await context.DataPointRules
-            .Where(r => r.DataPointIdsJson != null && r.DataPointIds.Contains(dataPointId))
-            .OrderBy(r => r.Priority)
+        // DataPointIds 是基于 JSON 列的 NotMapped 属性，不能下推到 EF 查询中。
+        // 先筛出有绑定数据点的规则，再在内存中按反序列化后的 ID 列表过滤。
+        var rules = await context.DataPointRules
+            .Include(r => r.Device)
+            .Where(r => r.DataPointIdsJson != null)
             .ToListAsync();
+
+        return rules
+            .Where(r => r.DataPointIds.Contains(dataPointId))
+            .OrderBy(r => r.Priority)
+            .ToList();
     }
 
     /// <summary>
@@ -81,10 +88,14 @@ public class RuleManagementService
     public async Task<List<DataPointRule>> GetGlobalRulesAsync()
     {
         await using var context = await _dbContextFactory.CreateDbContextAsync();
-        return await context.DataPointRules
+        // DataPointIds 是 NotMapped 属性，必须在加载实体后判断是否为空。
+        var rules = await context.DataPointRules
+            .ToListAsync();
+
+        return rules
             .Where(r => r.DataPointIds.Count == 0 && r.DeviceId == null)
             .OrderBy(r => r.Priority)
-            .ToListAsync();
+            .ToList();
     }
 
     /// <summary>

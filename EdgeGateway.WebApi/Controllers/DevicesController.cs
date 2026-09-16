@@ -258,7 +258,7 @@ public class DevicesController : ControllerBase
     [ProducesResponseType(typeof(ApiResponse<List<DataPointRealtimeResponse>>), 200)]
     public IActionResult GetDeviceRealtimeData(int deviceId)
     {
-        var realtimeData = _collectionService.GetDeviceSnapshotData(deviceId);
+        var realtimeData = _collectionService.GetDeviceRealtimeData(deviceId);
         var result = realtimeData.Select(d => new DataPointRealtimeResponse
         {
             DataPointId = d.DataPointId,

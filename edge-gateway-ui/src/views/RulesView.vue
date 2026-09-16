@@ -40,7 +40,7 @@
                 :key="row.dataPointIds[index]"
                 size="small"
               >
-                {{ name }}
+                {{ getDataPointLabel(row.dataPointIds[index], name) }}
               </el-tag>
             </div>
             <span v-else style="color: var(--text-muted);">全局规则</span>
@@ -139,6 +139,14 @@ const getRuleTypeTag = (type: RuleType) => {
 const getRuleTypeText = (type: RuleType) => {
   const texts = ['限制规则', '转换规则', '校验规则', '计算规则']
   return texts[type] || '未知'
+}
+
+const getDataPointLabel = (dataPointId: number, fallbackName?: string) => {
+  const point = dataPoints.value.find(item => item.id === dataPointId)
+  if (!point) return fallbackName || `数据点 #${dataPointId}`
+
+  const device = devices.value.find(item => item.id === point.deviceId)
+  return device ? `${device.name}.${point.name}` : point.name
 }
 
 const loadRules = async () => {
@@ -282,4 +290,5 @@ onMounted(() => {
     min-height: 0;
   }
 }
+
 </style>
