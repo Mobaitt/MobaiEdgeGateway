@@ -31,7 +31,7 @@
 
       <el-table-column label="实时值" width="150" align="center">
         <template #default="{ row }">
-          <span v-if="getRealtimeData(row)" class="badge mono realtime-value" :class="getQualityClass(getRealtimeData(row)!.quality)">
+          <span v-if="getRealtimeData(row)" class="badge mono realtime-value">
             {{ formatRowValue(row) }}
             <span v-if="row.unit" class="value-unit">{{ row.unit }}</span>
           </span>
@@ -39,7 +39,7 @@
         </template>
       </el-table-column>
 
-      <el-table-column label="质量" width="100" align="center">
+      <el-table-column label="质量" width="140" align="center">
         <template #default="{ row }">
           <span v-if="getRealtimeData(row)" class="badge mono" :class="getQualityClass(getRealtimeData(row)!.quality)">
             {{ getRealtimeData(row)!.quality }}
@@ -150,7 +150,7 @@ const getRealtimeData = (row: DataPointRow) => props.realtimeData[row.tag] || nu
 .tag-text { color: var(--cyan); }
 .mono { font-family: var(--font-mono); }
 .addr-text, .time-text, .empty-text, .value-unit { color: var(--text-muted); }
-.realtime-value { font-weight: 600; }
+.realtime-value { font-weight: 600; color: var(--text-primary); background: var(--bg-card); border-color: var(--border-muted); }
 .realtime-value.good, .badge.good { color: var(--text-success); }
 .realtime-value.bad, .badge.bad { color: var(--text-danger); }
 .realtime-value.uncertain, .badge.uncertain { color: var(--text-warn); }
