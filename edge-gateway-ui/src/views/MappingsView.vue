@@ -52,7 +52,7 @@
           </div>
         </div>
 
-        <el-table :data="mappings" v-loading="loading" row-key="id" @selection-change="handleSelectionChange">
+        <AppTable :data="mappings" :loading="loading" row-key="id" @selection-change="handleSelectionChange">
           <el-table-column type="selection" width="55" :reserve-selection="true" />
 
           <el-table-column label="数据点 Tag" min-width="220">
@@ -85,7 +85,7 @@
               </el-button>
             </template>
           </el-table-column>
-        </el-table>
+        </AppTable>
 
         <!-- 分页 -->
         <div class="pagination-bar eg-pagination-bar">
@@ -126,6 +126,7 @@ import {useRoute, useRouter} from 'vue-router'
 import {ElMessage, ElMessageBox} from 'element-plus'
 import {ArrowLeft, Delete, InfoFilled, Plus, Search} from '@element-plus/icons-vue'
 import EmptyState from '@/components/EmptyState.vue'
+import AppTable from '@/components/AppTable.vue'
 import BindDataPointDialog from '@/dialogs/mapping/BindDataPointDialog.vue'
 import {bindDataPoints, bindVirtualDataPoints, deleteMapping, getMappings, getMappingsPaged} from '@/api/channel'
 import {getDataPoints, getDevices} from '@/api/device'

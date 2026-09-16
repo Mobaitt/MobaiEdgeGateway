@@ -589,12 +589,14 @@ public class DataCollectionService
             if (device == null)
             {
                 _deviceDataPoints.TryRemove(deviceId, out _);
+                ClearDeviceSnapshotData(deviceId);
                 return;
             }
 
             var enabledPoints = device.DataPoints
                 .Where(dp => dp.IsEnabled)
                 .ToList();
+            ReconcileDeviceDataPoints(deviceId, enabledPoints);
             _deviceDataPoints[deviceId] = enabledPoints;
 
             if (device.IsEnabled && !IsDeviceCollecting(deviceId))
@@ -698,6 +700,38 @@ public class DataCollectionService
 
         foreach (var tagKey in tagKeysToRemove)
             _tagIndex.TryRemove(tagKey, out _);
+    }
+
+    private void ReconcileDeviceDataPoints(int deviceId, IReadOnlyList<DataPoint> currentPoints)
+    {
+        if (!_deviceDataPoints.TryGetValue(deviceId, out var previousPoints))
+            return;
+
+        var currentById = currentPoints.ToDictionary(point => point.Id);
+        foreach (var previous in previousPoints)
+        {
+            if (!currentById.TryGetValue(previous.Id, out var current) || HasSamplingConfigurationChanged(previous, current))
+                RemoveDataPointSnapshot(previous.Id);
+        }
+    }
+
+    private static bool HasSamplingConfigurationChanged(DataPoint previous, DataPoint current) =>
+        !string.Equals(previous.Tag, current.Tag, StringComparison.Ordinal) ||
+        !string.Equals(previous.Address, current.Address, StringComparison.Ordinal) ||
+        previous.DataType != current.DataType ||
+        previous.RegisterLength != current.RegisterLength ||
+        previous.ModbusSlaveId != current.ModbusSlaveId ||
+        previous.ModbusFunctionCode != current.ModbusFunctionCode ||
+        previous.ModbusByteOrder != current.ModbusByteOrder ||
+        previous.ModbusBitIndex != current.ModbusBitIndex ||
+        !string.Equals(previous.Unit, current.Unit, StringComparison.Ordinal);
+
+    private void RemoveDataPointSnapshot(int dataPointId)
+    {
+        _dataSnapshot.TryRemove(dataPointId, out _);
+
+        foreach (var tag in _tagIndex.Where(pair => pair.Value == dataPointId).Select(pair => pair.Key).ToList())
+            _tagIndex.TryRemove(tag, out _);
     }
 
     private async Task SetDataSnapshotAsync(CollectedData collectedData, bool replaceExisting = false)

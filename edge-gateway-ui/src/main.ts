@@ -6,11 +6,12 @@ import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import router from './router'
 import App from './App.vue'
 import { initializeTheme } from './composables/useTheme'
+// 先加载组件库默认样式，再加载项目主题，避免默认白色按钮覆盖深色主题。
+import 'element-plus/dist/index.css'
 import './styles/theme.css'
 import './styles/global.css'
 import './styles/page-patterns.css'
 import './styles/dialogs.scss'
-import 'element-plus/dist/index.css'
 
 // 应用启动前先恢复主题变量，避免页面首屏出现样式闪烁。
 initializeTheme()

@@ -105,6 +105,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISendStrategyRegistry>(sp => sp.GetRequiredService<SendStrategyRegistry>());
 
         services.AddScoped<DeviceManagementService>();
+        services.AddScoped<DataPointTemplateService>();
         services.AddScoped<DataPointControlService>();
         services.AddSingleton<DataSendService>();
         services.AddSingleton<DeviceRuntimeStateStore>();
@@ -131,6 +132,22 @@ public static class ServiceCollectionExtensions
         var db = scope.ServiceProvider.GetRequiredService<GatewayDbContext>();
 
         await db.Database.EnsureCreatedAsync();
+
+        // EnsureCreated 不会为已存在的旧数据库补建新表。
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "DataPointTemplates" (
+                "Id" INTEGER NOT NULL CONSTRAINT "PK_DataPointTemplates" PRIMARY KEY AUTOINCREMENT,
+                "Name" TEXT NOT NULL,
+                "Description" TEXT NULL,
+                "Protocol" INTEGER NOT NULL,
+                "PointsJson" TEXT NOT NULL,
+                "CreatedAt" TEXT NOT NULL,
+                "UpdatedAt" TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS "IX_DataPointTemplates_Name"
+                ON "DataPointTemplates" ("Name");
+            """);
 
         // 保留历史特殊迁移，处理旧字段升级为新结构。
         await MigrateDataPointIdColumnAsync(db);

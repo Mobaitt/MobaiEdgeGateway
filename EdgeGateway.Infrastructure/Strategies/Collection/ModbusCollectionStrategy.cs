@@ -298,16 +298,16 @@ public class ModbusCollectionStrategy : ICollectionStrategy
                 switch (functionCode)
                 {
                     case 1:
-                        var coils = await _master!.ReadCoilsAsync(slaveId, range.StartAddress, (ushort)range.Count);
+                    case 2:
+                        var bits = functionCode == 1
+                            ? await _master!.ReadCoilsAsync(slaveId, range.StartAddress, (ushort)range.Count)
+                            : await _master!.ReadInputsAsync(slaveId, range.StartAddress, (ushort)range.Count);
                         foreach (var point in range.Points)
                         {
                             var offset = ParseAddress(point.Address) - range.StartAddress;
-                            callback(CreateCollectedData(point, deviceCode, offset < coils.Length ? coils[offset] : null));
+                            callback(CreateCollectedData(point, deviceCode, offset < bits.Length ? bits[offset] : null));
                         }
                         continue;
-
-                    case 2:
-                        throw new InvalidOperationException("Discrete input reads are not supported by this strategy.");
 
                     case 3:
                     case 4:
@@ -505,7 +505,8 @@ public class ModbusCollectionStrategy : ICollectionStrategy
         // 64 位排列按参考界面中的四个 16 位字处理：
         // ABCD=AB CD EF GH，CDAB=GH EF CD AB，BADC=BA DC FE HG，DCBA=HG FE BA DC。
         var logicalBytes = Reorder64BitWords(wireBytes, byteOrder);
-        return logicalBytes.Reverse().ToArray();
+        Array.Reverse(logicalBytes);
+        return logicalBytes;
     }
 
     private static CollectedData CreateCollectedData(DataPoint dp, string deviceCode, object? value)
@@ -561,7 +562,8 @@ public class ModbusCollectionStrategy : ICollectionStrategy
 
         if (bytes.Length == 8)
         {
-            var logicalBytes = bytes.Reverse().ToArray();
+            var logicalBytes = (byte[])bytes.Clone();
+            Array.Reverse(logicalBytes);
             return ToRegisters(Reorder64BitWords(logicalBytes, byteOrder));
         }
 

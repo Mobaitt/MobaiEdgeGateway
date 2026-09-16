@@ -6,21 +6,24 @@
 
 .eg-primary-action.el-button,
 .eg-primary-action .el-button {
-  height: 42px;
-  padding: 0 18px;
-  border-radius: 14px;
-  border-color: rgba(56, 220, 196, 0.24) !important;
-  background: var(--theme-button-highlight) !important;
-  color: #f3fffd !important;
+  height: 38px;
+  padding: 0 15px;
+  border-radius: 10px;
+  border-color: var(--action-border) !important;
+  background: var(--action-bg) !important;
+  color: var(--action-text) !important;
   font-weight: 700;
   letter-spacing: 0.02em;
-  box-shadow: var(--theme-button-shadow);
+  box-shadow: var(--action-shadow);
+  transition: background .2s ease, border-color .2s ease, box-shadow .2s ease, transform .2s ease;
 }
 
 .eg-primary-action.el-button:hover,
 .eg-primary-action .el-button:hover {
-  background: var(--theme-button-highlight-hover) !important;
-  border-color: rgba(60, 231, 209, 0.36) !important;
+  background: var(--action-bg-hover) !important;
+  border-color: var(--action-border-hover) !important;
+  color: var(--action-text-hover) !important;
+  box-shadow: var(--action-shadow);
   transform: translateY(-1px);
 }
 
@@ -77,6 +80,16 @@
 .eg-pagination-bar .el-pagination .btn-next {
   min-width: 34px;
   color: var(--text-secondary);
+}
+
+.eg-pagination-bar .el-pagination .btn-prev:disabled,
+.eg-pagination-bar .el-pagination .btn-next:disabled,
+.eg-pagination-bar .el-pagination .btn-prev.is-disabled,
+.eg-pagination-bar .el-pagination .btn-next.is-disabled {
+  border-color: var(--border-subtle) !important;
+  background: var(--bg-card) !important;
+  color: var(--text-muted) !important;
+  opacity: .72;
 }
 
 .eg-pagination-bar .el-pagination .btn-prev:hover,
@@ -143,7 +156,7 @@
   height: 38px;
   border-radius: 12px;
   border: 1px solid var(--border-subtle);
-  background: var(--bg-base);
+  background: var(--bg-card);
   color: var(--text-secondary);
   box-shadow: none;
   transition: all 0.2s ease;
@@ -162,35 +175,103 @@
 
 .eg-split-action .el-button-group {
   display: inline-flex;
-  border-radius: 14px;
+  border-radius: 11px;
   overflow: hidden;
-  box-shadow: var(--theme-button-shadow);
+  border: 1px solid var(--action-border);
+  background: var(--action-bg);
+  box-shadow: var(--action-shadow);
 }
 
 .eg-split-action .el-button-group .el-button {
-  height: 44px;
-  border-color: rgba(56, 220, 196, 0.24) !important;
-  background: var(--theme-button-highlight) !important;
-  color: #f3fffd !important;
+  height: 38px;
+  border: 0 !important;
+  background: transparent !important;
+  color: #9bb4d5 !important;
   font-weight: 700;
   letter-spacing: 0.02em;
 }
 
 .eg-split-action .el-button-group .el-button:first-child {
-  padding-inline: 18px 16px;
+  padding-inline: 14px 12px;
 }
 
 .eg-split-action .el-button-group .el-button:last-child {
-  width: 44px;
+  width: 38px;
   padding: 0;
-  border-left-color: rgba(255, 255, 255, 0.18) !important;
+  border-left: 1px solid var(--action-border) !important;
 }
 
 .eg-split-action .el-button-group .el-button:hover {
-  background: var(--theme-button-highlight-hover) !important;
-  border-color: rgba(60, 231, 209, 0.36) !important;
+  background: var(--action-bg-hover) !important;
+  color: var(--action-text-hover) !important;
 }
 
 .eg-split-action .el-button-group .el-button .el-icon {
   color: inherit;
+}
+
+/* 数据点相关下拉菜单：与深色页面保持一致，避免 Element Plus 默认白底。 */
+.datapoints-dropdown-popper.el-popper {
+  padding: 6px;
+  border: 1px solid rgba(120, 155, 190, .22) !important;
+  border-radius: 11px;
+  background: var(--dropdown-bg) !important;
+  box-shadow: var(--dropdown-shadow), 0 0 0 1px rgba(56, 220, 196, .06);
+}
+
+.datapoints-dropdown-popper .el-dropdown-menu,
+.datapoints-dropdown-popper .el-select-dropdown {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent !important;
+}
+
+.datapoints-dropdown-popper .el-select-dropdown {
+  min-width: 180px;
+}
+
+.datapoints-dropdown-popper .el-dropdown-menu__item,
+.datapoints-dropdown-popper .el-select-dropdown__item {
+  min-height: 34px;
+  margin: 2px 0;
+  padding: 0 10px;
+  border-radius: 8px;
+  color: var(--text-secondary) !important;
+  background: transparent !important;
+  line-height: 34px;
+  transition: background .18s ease, color .18s ease;
+}
+
+.datapoints-dropdown-popper .el-dropdown-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.datapoints-dropdown-popper .el-dropdown-menu__item:hover,
+.datapoints-dropdown-popper .el-dropdown-menu__item:focus,
+.datapoints-dropdown-popper .el-select-dropdown__item.hovering,
+.datapoints-dropdown-popper .el-select-dropdown__item:hover {
+  color: var(--text-primary) !important;
+  background: rgba(56, 220, 196, .08) !important;
+  box-shadow: none !important;
+}
+
+.datapoints-dropdown-popper .el-dropdown-menu__item .el-icon {
+  flex: 0 0 16px;
+  width: 16px;
+  margin-right: 0;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.datapoints-dropdown-popper .el-dropdown-menu__item:hover .el-icon,
+.datapoints-dropdown-popper .el-dropdown-menu__item:focus .el-icon {
+  color: var(--cyan);
+}
+
+.datapoints-dropdown-popper .el-select-dropdown__item.selected {
+  color: var(--cyan) !important;
+  font-weight: 600;
 }

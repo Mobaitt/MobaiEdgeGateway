@@ -315,8 +315,10 @@ const modbusTypeGroups: ModbusTypeGroup[] = [
     }))
   },
   {
-    label: '64 位 Double',
+    label: '64 位数值',
     options: byteOrders.flatMap(order => [
+      { key: `int64-${order.key}`, label: `Int64 ${order.doubleLabel}`, meta: `Int64 · ${order.doubleLabel}`, dataType: 7, byteOrder: order.value, registerLength: 4 },
+      { key: `uint64-${order.key}`, label: `Unsigned Int64 ${order.doubleLabel}`, meta: `UInt64 · ${order.doubleLabel}`, dataType: 8, byteOrder: order.value, registerLength: 4 },
       { key: `double-${order.key}`, label: `Double ${order.doubleLabel}`, meta: `Double · ${order.doubleLabel}`, dataType: 9, byteOrder: order.value, registerLength: 4 }
     ])
   },
@@ -584,7 +586,7 @@ const handleClose = () => {
     padding: 16px 18px 4px;
     border: 1px solid var(--border-subtle);
     border-radius: 14px;
-    background: rgba(10, 14, 26, 0.42);
+    background: var(--bg-base);
   }
 
   :deep(.section-title) {

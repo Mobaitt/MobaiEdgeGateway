@@ -57,6 +57,16 @@ export interface DataPointItem {
   modbusBitIndex?: number | null
 }
 
+export interface DataPointTemplateItem {
+  id: number
+  name: string
+  description?: string | null
+  protocol: string
+  pointCount: number
+  createdAt: string
+  updatedAt: string
+}
+
 /** 虚拟数据点 */
 export interface VirtualDataPoint {
   id: number

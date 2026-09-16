@@ -73,6 +73,9 @@ public class UpdateDataPointRequest
     public string? Description { get; set; }
 
     [MaxLength(200)]
+    public string? Tag { get; set; }
+
+    [MaxLength(200)]
     public string? Address { get; set; }
 
     public DataValueType? DataType { get; set; }

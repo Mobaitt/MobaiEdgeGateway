@@ -22,7 +22,7 @@
     </div>
 
     <div class="table-wrap">
-      <el-table :data="rules" v-loading="loading" stripe>
+      <AppTable :data="rules" :loading="loading" stripe>
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column prop="name" label="规则名称" min-width="150" />
         <el-table-column prop="ruleType" label="类型" width="100">
@@ -72,7 +72,7 @@
             </el-button>
           </template>
         </el-table-column>
-      </el-table>
+      </AppTable>
     </div>
 
     <!-- 创建/编辑规则弹窗 -->
@@ -100,6 +100,7 @@ import {onMounted, reactive, ref} from 'vue'
 import {ElMessage, ElMessageBox} from 'element-plus'
 import {Delete, Edit, Plus} from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
+import AppTable from '@/components/AppTable.vue'
 import RuleDialog from '@/dialogs/rule/RuleDialog.vue'
 import RuleHelpDialog from '@/dialogs/rule/RuleHelpDialog.vue'
 import type {CreateRuleRequest, Rule, RuleType, UpdateRuleRequest} from '@/types/rule'
@@ -245,6 +246,10 @@ onMounted(() => {
 
 <style scoped lang="scss">
 .rules-view {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+
   .toolbar {
     display: flex;
     align-items: center;
@@ -262,10 +267,19 @@ onMounted(() => {
   }
 
   .table-wrap {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
     background: var(--bg-card);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-lg);
     overflow: hidden;
+  }
+
+  .table-wrap :deep(.app-table) {
+    flex: 1;
+    min-height: 0;
   }
 }
 </style>

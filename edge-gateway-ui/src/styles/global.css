@@ -443,7 +443,7 @@ html, body, #app {
 }
 
 /* 加载 */
-.el-loading-mask { background: rgba(10,14,26,0.7) !important; }
+.el-loading-mask { background: var(--loading-mask-bg) !important; }
 .el-loading-spinner .path { stroke: var(--cyan) !important; }
 .el-loading-spinner .el-loading-text { color: var(--cyan) !important; }
 

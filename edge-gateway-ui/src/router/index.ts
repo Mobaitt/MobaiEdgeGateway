@@ -25,6 +25,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '数据点管理', hidden: true }
       },
       {
+        path: 'datapoint-templates',
+        name: 'DataPointTemplates',
+        component: () => import('@/views/DataPointTemplatesView.vue'),
+        meta: { title: '点位模板', icon: 'Files' }
+      },
+      {
         path: 'channels',
         name: 'Channels',
         component: () => import('@/views/ChannelsView.vue'),
