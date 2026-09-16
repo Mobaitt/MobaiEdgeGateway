@@ -207,8 +207,8 @@ const openCreateDialog = () => {
 }
 
 const openEditDialog = async (rule: Rule) => {
-  editingRule.value = rule
   await loadDataPointsForDevice(rule.deviceId)
+  editingRule.value = rule
   dialogVisible.value = true
 }
 
