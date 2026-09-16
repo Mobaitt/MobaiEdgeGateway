@@ -90,9 +90,12 @@ app.UseMiddleware<DemoModeMiddleware>();
 app.UseCors("AllowAll");
 
 // ========== 启用静态文件服务（wwwroot）- 必须在 Swagger 和 Routing 之前 ==========
-// 明确指定 wwwroot 目录
-app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "wwwroot")) });
-app.UseStaticFiles(new StaticFileOptions { FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "wwwroot")) });
+// 前端尚未构建时也要保证目录存在，否则 PhysicalFileProvider 会在启动阶段抛异常。
+var webRootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
+Directory.CreateDirectory(webRootPath);
+var webRootProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(webRootPath);
+app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = webRootProvider });
+app.UseStaticFiles(new StaticFileOptions { FileProvider = webRootProvider });
 
 // ========== 启用 ASP.NET Core WebSocket 支持（必须在自定义 WebSocket 中间件之前） ==========
 app.UseWebSockets();
@@ -136,7 +139,7 @@ app.MapControllers();
 // 排除：/api/*、/swagger/*、/ws
 app.MapFallbackToFile("index.html", new StaticFileOptions
 {
-    FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(Path.Combine(builder.Environment.ContentRootPath, "wwwroot"))
+    FileProvider = webRootProvider
 });
 
 // 根路径重定向到 Swagger（可选）

@@ -59,19 +59,28 @@ public class DataPointControlService
             await strategy.WriteAsync(dataPoint, value, cancellationToken);
 
             CollectedData? readBack = null;
-            await strategy.ReadAsync(
-                [dataPoint],
-                collected => readBack = collected,
-                cancellationToken);
+            try
+            {
+                await strategy.ReadAsync([dataPoint], collected => readBack = collected, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                await _collectionService.OverrideDataPointValueAsync(dataPoint, null, device.Code, DataQuality.Bad);
+                throw new InvalidOperationException("Write completed, but read-back failed; the device value is unconfirmed.", ex);
+            }
 
-            actualValue = readBack?.Value ?? value;
-            await _collectionService.OverrideDataPointValueAsync(dataPoint, actualValue, device.Code);
+            actualValue = readBack?.Value;
+            var quality = actualValue == null ? DataQuality.Bad : readBack!.Quality;
+            await _collectionService.OverrideDataPointValueAsync(dataPoint, actualValue, device.Code, quality);
+            if (quality != DataQuality.Good)
+                throw new InvalidOperationException("Write completed, but read-back quality is not Good; the device value is unconfirmed.");
         }
         finally
         {
-            await strategy.DisconnectAsync(cancellationToken);
+            // 请求取消后仍释放连接，清理失败不能覆盖原始写入或回读异常。
+            try { await strategy.DisconnectAsync(CancellationToken.None); }
+            catch (Exception ex) { _logger.LogWarning(ex, "Failed to disconnect after point control: {Tag}", dataPoint.Tag); }
         }
-
         _logger.LogInformation(
             "Point control succeeded: Device={DeviceCode}, Tag={Tag}, Value={Value}",
             device.Code,

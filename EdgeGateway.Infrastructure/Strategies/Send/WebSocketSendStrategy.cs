@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using EdgeGateway.Domain.Entities;
 using EdgeGateway.Domain.Interfaces;
 using EdgeGateway.Infrastructure.WebSocket;
@@ -107,7 +107,7 @@ public class WebSocketSendStrategy : ISendStrategy
     public async Task DisposeAsync()
     {
         // 关闭所有客户端连接
-        await _connectionManager.CloseAllAsync();
+        await _connectionManager.CloseTopicAsync(_subscribeTopic);
 
         _logger.LogInformation("WebSocket 服务端策略已停止");
     }

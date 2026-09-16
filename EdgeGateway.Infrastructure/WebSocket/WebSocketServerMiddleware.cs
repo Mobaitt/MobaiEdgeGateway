@@ -1,4 +1,4 @@
-﻿using System.Net.WebSockets;
+using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
 using EdgeGateway.Domain.Enums;
@@ -19,6 +19,7 @@ public class WebSocketServerMiddleware
     private readonly RequestDelegate _next;
     private readonly ILogger<WebSocketServerMiddleware> _logger;
     private readonly string _path;
+    private const int MaxClientMessageBytes = 64 * 1024;
 
     public WebSocketServerMiddleware(RequestDelegate next, ILogger<WebSocketServerMiddleware> logger)
     {
@@ -43,7 +44,7 @@ public class WebSocketServerMiddleware
                 "  Headers: {Headers}",
                 context.Request.Method,
                 context.WebSockets.IsWebSocketRequest,
-                string.Join(", ", context.Request.Headers.Select(h => $"{h.Key}: {h.Value}")));
+                $"{context.Request.Headers.Count} headers received");
 
             if (context.WebSockets.IsWebSocketRequest)
             {
@@ -131,7 +132,7 @@ public class WebSocketServerMiddleware
             connectionManager.AddClient(clientId, client);
 
             // 启动接收循环，处理客户端消息
-            await ReceiveLoopAsync(client, connectionManager, _logger);
+            await ReceiveLoopAsync(client, connectionManager, _logger, context);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -193,10 +194,10 @@ public class WebSocketServerMiddleware
     /// <summary>
     /// 接收循环 - 处理客户端发送的消息
     /// </summary>
-    private async Task ReceiveLoopAsync(WebSocketClient client, WebSocketConnectionManager connectionManager,
-        ILogger logger)
+    private async Task ReceiveLoopAsync(WebSocketClient client, WebSocketConnectionManager connectionManager, ILogger logger, HttpContext context)
     {
         var buffer = new byte[4096];
+        using var messageBuffer = new MemoryStream();
 
         try
         {
@@ -204,20 +205,26 @@ public class WebSocketServerMiddleware
             {
                 var result = await client.WebSocket.ReceiveAsync(
                     new ArraySegment<byte>(buffer),
-                    CancellationToken.None);
+                    context.RequestAborted);
 
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
                     logger.LogInformation("客户端 {ClientId} 发送关闭请求", client.ClientId);
                     break;
                 }
-
                 if (result.Count > 0)
+                    await messageBuffer.WriteAsync(buffer.AsMemory(0, result.Count), context.RequestAborted);
+                if (result.EndOfMessage)
                 {
-                    var message = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                    await HandleClientMessageAsync(client, message, connectionManager, logger);
+                    var message = Encoding.UTF8.GetString(messageBuffer.ToArray());
+                    messageBuffer.SetLength(0);
+                    await HandleClientMessageAsync(client, message, connectionManager, logger, context);
                 }
             }
+        }
+        catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+        {
+            logger.LogInformation("客户端 {ClientId} 请求已取消，连接关闭", client.ClientId);
         }
         catch (WebSocketException ex) when (ex.WebSocketErrorCode == WebSocketError.ConnectionClosedPrematurely)
         {
@@ -232,11 +239,7 @@ public class WebSocketServerMiddleware
     /// <summary>
     /// 处理客户端消息
     /// </summary>
-    private async Task HandleClientMessageAsync(
-        WebSocketClient client,
-        string message,
-        WebSocketConnectionManager connectionManager,
-        ILogger logger)
+    private async Task HandleClientMessageAsync(WebSocketClient client, string message, WebSocketConnectionManager connectionManager, ILogger logger, HttpContext context)
     {
         try
         {
@@ -264,6 +267,11 @@ public class WebSocketServerMiddleware
                             var topic = topicProp.GetString();
                             if (!string.IsNullOrEmpty(topic))
                             {
+                                if (!await ValidateSubscribeTopicAsync(context, topic))
+                                {
+                                    await client.SendAsync(JsonSerializer.Serialize(new { type = "error", message = "Topic is not configured or enabled" }));
+                                    break;
+                                }
                                 client.SetSubscribeTopic(topic);
                                 var ack = new { type = "ack", action = "subscribe", topic };
                                 await client.SendAsync(JsonSerializer.Serialize(ack));

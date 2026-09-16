@@ -14,10 +14,16 @@ namespace EdgeGateway.Infrastructure.Strategies.Collection;
 /// </summary>
 public class ModbusCollectionStrategy : ICollectionStrategy
 {
+    // Modbus 应用协议规定单次寄存器读取最多 125 个，线圈读取最多 2000 个。
+    private const int MaxRegisterReadCount = 125;
+    private const int MaxCoilReadCount = 2000;
     private readonly ILogger<ModbusCollectionStrategy> _logger;
     private TcpClient? _tcpClient;
     private IModbusMaster? _master;
     private bool _isConnected;
+    private readonly object _planLock = new();
+    private string? _planKey;
+    private List<ReadGroupPlan>? _readPlan;
 
     public ModbusCollectionStrategy(ILogger<ModbusCollectionStrategy> logger)
     {
@@ -46,9 +52,6 @@ public class ModbusCollectionStrategy : ICollectionStrategy
 
             await _tcpClient.ConnectAsync(device.Address, device.Port ?? 502, cancellationToken);
             _master = ModbusIpMaster.CreateIp(_tcpClient);
-
-            // 启动时做一次最小读取，验证连接可用
-            await _master.ReadHoldingRegistersAsync(1, 0, 1);
 
             _isConnected = true;
             _logger.LogInformation("Modbus device [{DeviceName}] connected", device.Name);
@@ -83,20 +86,15 @@ public class ModbusCollectionStrategy : ICollectionStrategy
         if (firstPoint == null)
             return;
 
-        // 按从站和功能码分组，减少无效请求次数
+        // 分组和地址排序计划在点位配置不变时复用。
         var deviceCode = firstPoint.Device?.Code ?? $"Device_{firstPoint.DeviceId}";
+        var readPlan = GetReadPlan(dataList);
 
-        var groupedPoints = dataList.GroupBy(dp => new
-        {
-            SlaveId = dp.ModbusSlaveId ?? 1,
-            FunctionCode = dp.ModbusFunctionCode ?? 3
-        });
-
-        foreach (var group in groupedPoints)
+        foreach (var group in readPlan)
         {
             try
             {
-                await ReadGroupAsync(group.ToList(), group.Key.SlaveId, group.Key.FunctionCode, deviceCode, callback);
+                await ReadGroupAsync(group.Points, group.SlaveId, group.FunctionCode, deviceCode, callback);
             }
             catch (Exception ex)
             {
@@ -109,10 +107,10 @@ public class ModbusCollectionStrategy : ICollectionStrategy
                 _logger.LogWarning(
                     ex,
                     "Failed to read Modbus group SlaveId={SlaveId}, FunctionCode={FunctionCode}",
-                    group.Key.SlaveId,
-                    group.Key.FunctionCode);
+                    group.SlaveId,
+                    group.FunctionCode);
 
-                foreach (var dp in group)
+                foreach (var dp in group.Points)
                 {
                     callback(CreateCollectedData(dp, deviceCode, null));
                 }
@@ -129,7 +127,7 @@ public class ModbusCollectionStrategy : ICollectionStrategy
         var slaveId = dataPoint.ModbusSlaveId ?? 1;
         var functionCode = dataPoint.ModbusFunctionCode ?? 3;
         var address = ParseAddress(dataPoint.Address);
-        var typedValue = NormalizeWriteValue(dataPoint, value);
+        var typedValue = DataPointWriteValueConverter.Normalize(dataPoint, value);
 
         switch (functionCode)
         {
@@ -160,6 +158,28 @@ public class ModbusCollectionStrategy : ICollectionStrategy
         }
     }
 
+    private List<ReadGroupPlan> GetReadPlan(List<DataPoint> dataPoints)
+    {
+        var key = string.Join("|", dataPoints
+            .Select(dp => $"{dp.Id}:{dp.Address}:{dp.RegisterLength}:{dp.ModbusSlaveId ?? 1}:{dp.ModbusFunctionCode ?? 3}")
+            .OrderBy(value => value, StringComparer.Ordinal));
+
+        lock (_planLock)
+        {
+            if (_readPlan != null && string.Equals(_planKey, key, StringComparison.Ordinal))
+                return _readPlan;
+
+            _readPlan = dataPoints
+                .GroupBy(dp => new { SlaveId = dp.ModbusSlaveId ?? 1, FunctionCode = dp.ModbusFunctionCode ?? 3 })
+                .Select(group => new ReadGroupPlan(
+                    group.Key.SlaveId,
+                    group.Key.FunctionCode,
+                    group.OrderBy(dp => ParseAddress(dp.Address)).ToList()))
+                .ToList();
+            _planKey = key;
+            return _readPlan;
+        }
+    }
     private async Task ReadGroupAsync(
         List<DataPoint> points,
         byte slaveId,
@@ -169,7 +189,8 @@ public class ModbusCollectionStrategy : ICollectionStrategy
     {
         // 将连续地址合并成批量读取区间，降低通信开销
         var sortedPoints = points.OrderBy(dp => ParseAddress(dp.Address)).ToList();
-        var addressRanges = MergeContinuousAddresses(sortedPoints);
+        var maxReadCount = functionCode == 1 ? MaxCoilReadCount : MaxRegisterReadCount;
+        var addressRanges = MergeContinuousAddresses(sortedPoints, maxReadCount);
 
         foreach (var range in addressRanges)
         {
@@ -179,9 +200,10 @@ public class ModbusCollectionStrategy : ICollectionStrategy
                 {
                     case 1:
                         var coils = await _master!.ReadCoilsAsync(slaveId, range.StartAddress, (ushort)range.Count);
-                        for (var i = 0; i < range.Points.Count; i++)
+                        foreach (var point in range.Points)
                         {
-                            callback(CreateCollectedData(range.Points[i], deviceCode, coils[i]));
+                            var offset = ParseAddress(point.Address) - range.StartAddress;
+                            callback(CreateCollectedData(point, deviceCode, offset < coils.Length ? coils[offset] : null));
                         }
                         continue;
 
@@ -196,12 +218,11 @@ public class ModbusCollectionStrategy : ICollectionStrategy
                             : await _master!.ReadHoldingRegistersAsync(slaveId, range.StartAddress, (ushort)range.Count);
 
                         // 按点位配置的寄存器长度依次解析结果
-                        var registerIndex = 0;
                         foreach (var point in range.Points)
                         {
+                            var registerIndex = ParseAddress(point.Address) - range.StartAddress;
                             var parsedValue = ParseRegisterValue(point, registers, registerIndex);
                             callback(CreateCollectedData(point, deviceCode, parsedValue));
-                            registerIndex += point.RegisterLength;
                         }
                         break;
                 }
@@ -247,7 +268,7 @@ public class ModbusCollectionStrategy : ICollectionStrategy
         return ex.InnerException != null && IsConnectionLevelException(ex.InnerException);
     }
 
-    private static List<AddressRange> MergeContinuousAddresses(List<DataPoint> points)
+    private static List<AddressRange> MergeContinuousAddresses(List<DataPoint> points, int maxReadCount)
     {
         var ranges = new List<AddressRange>();
         if (points.Count == 0) return ranges;
@@ -266,7 +287,7 @@ public class ModbusCollectionStrategy : ICollectionStrategy
             var expectedNext = currentRange.StartAddress + (ushort)currentRange.Count;
             var registerCount = points[i].RegisterLength;
 
-            if (currentAddress == expectedNext)
+            if (currentAddress == expectedNext && currentRange.Count + registerCount <= maxReadCount)
             {
                 currentRange.Count += registerCount;
                 currentRange.Points.Add(points[i]);
@@ -377,41 +398,12 @@ public class ModbusCollectionStrategy : ICollectionStrategy
     private static ushort ParseAddress(string addressStr)
     {
         if (!ushort.TryParse(addressStr, out var raw))
-            return 0;
+            throw new FormatException("Invalid Modbus address: " + addressStr);
 
         if (raw >= 40000) return (ushort)(raw - 40000);
         if (raw >= 30000) return (ushort)(raw - 30000);
         if (raw >= 10000) return (ushort)(raw - 10000);
         return raw;
-    }
-
-    private static object NormalizeWriteValue(DataPoint dataPoint, object? value)
-    {
-        if (value == null)
-            throw new InvalidOperationException("Write value cannot be null.");
-
-        // 统一把请求体里的值转换成点位配置的数据类型
-        return dataPoint.DataType switch
-        {
-            DataValueType.Bool => value switch
-            {
-                bool boolValue => boolValue,
-                string stringValue when bool.TryParse(stringValue, out var parsedBool) => parsedBool,
-                string stringValue when stringValue == "1" => true,
-                string stringValue when stringValue == "0" => false,
-                _ => throw new InvalidOperationException("Boolean writes only support true/false or 1/0.")
-            },
-            DataValueType.Int16 => Convert.ToInt16(value),
-            DataValueType.UInt16 => Convert.ToUInt16(value),
-            DataValueType.Int32 => Convert.ToInt32(value),
-            DataValueType.UInt32 => Convert.ToUInt32(value),
-            DataValueType.Float => Convert.ToSingle(value),
-            DataValueType.Int64 => Convert.ToInt64(value),
-            DataValueType.UInt64 => Convert.ToUInt64(value),
-            DataValueType.Double => Convert.ToDouble(value),
-            DataValueType.String => value.ToString() ?? string.Empty,
-            _ => throw new InvalidOperationException($"Unsupported write type: {dataPoint.DataType}")
-        };
     }
 
     private static ushort[] ConvertToRegisters(DataPoint dataPoint, object value)
@@ -456,6 +448,8 @@ public class ModbusCollectionStrategy : ICollectionStrategy
     }
 
     private static ushort ToRegister(byte high, byte low) => (ushort)((high << 8) | low);
+
+    private sealed record ReadGroupPlan(byte SlaveId, int FunctionCode, List<DataPoint> Points);
 
     private sealed class AddressRange
     {

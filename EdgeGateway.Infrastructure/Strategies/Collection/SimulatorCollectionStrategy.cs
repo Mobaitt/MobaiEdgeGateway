@@ -13,11 +13,13 @@ public class SimulatorCollectionStrategy : ICollectionStrategy
 {
     private readonly ILogger<SimulatorCollectionStrategy> _logger;
     private readonly Random _random = new();
+    private readonly SimulatorValueStore _values;
     private Device? _currentDevice;
 
-    public SimulatorCollectionStrategy(ILogger<SimulatorCollectionStrategy> logger)
+    public SimulatorCollectionStrategy(ILogger<SimulatorCollectionStrategy> logger, SimulatorValueStore values)
     {
         _logger = logger;
+        _values = values;
     }
 
     public string ProtocolName => "Simulator";
@@ -48,6 +50,7 @@ public class SimulatorCollectionStrategy : ICollectionStrategy
 
         foreach (var dp in dataPoints)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             // 模拟 10% 的坏质量数据，便于前端和规则链路联调
             var quality = _random.NextDouble() < 0.1 ? DataQuality.Bad : DataQuality.Good;
 
@@ -61,6 +64,13 @@ public class SimulatorCollectionStrategy : ICollectionStrategy
                 DataValueType.String => $"simulated_{_random.Next(1000)}",
                 _ => null
             };
+
+            // 已写入的模拟寄存器稳定回读；未写入点仍保留随机采集行为。
+            if (_values.TryRead(_currentDevice.Id, dp.Id, out var writtenValue))
+            {
+                value = writtenValue;
+                quality = DataQuality.Good;
+            }
 
             callback(new CollectedData
             {
@@ -84,7 +94,10 @@ public class SimulatorCollectionStrategy : ICollectionStrategy
         if (_currentDevice == null)
             throw new InvalidOperationException("Device is not connected. Call ConnectAsync first.");
 
-        // 模拟设备直接接受写入值，不额外做协议转换
+        cancellationToken.ThrowIfCancellationRequested();
+        value = DataPointWriteValueConverter.Normalize(dataPoint, value);
+        _values.Write(_currentDevice.Id, dataPoint.Id, value);
+        // 使用与真实协议相同的类型校验，并保存到共享模拟寄存器。
         _logger.LogInformation(
             "Simulator write succeeded: Device={DeviceName}, Tag={Tag}, Value={Value}",
             _currentDevice.Name,

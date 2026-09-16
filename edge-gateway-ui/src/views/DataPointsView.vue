@@ -152,7 +152,7 @@
                 :disabled="!row.isEnabled || !deviceEnabled"
                 @click="openControl(row)"
               >
-                控制
+                发送指令
               </el-button>
               <el-button v-if="row.isVirtual" size="small" text type="success" @click="openVirtualNodeEdit(row)">编辑</el-button>
               <el-button v-else size="small" text type="primary" @click="openEdit(row)">编辑</el-button>
@@ -510,6 +510,20 @@ const handleSubmit = async (data: DataPointForm) => {
 const handleControlSubmit = async (value: unknown) => {
   if (!controllingDataPoint.value) return
 
+  try {
+    await ElMessageBox.confirm(
+      '确认向点位 "' + controllingDataPoint.value.tag + '" 发送指令值 "' + String(value) + '" 吗？',
+      '确认发送指令',
+      {
+        type: 'warning',
+        confirmButtonText: '发送',
+        cancelButtonText: '取消'
+      }
+    )
+  } catch {
+    return
+  }
+
   controlSubmitting.value = true
   try {
     const res = await controlDataPoint(controllingDataPoint.value.tag, value)
@@ -526,9 +540,9 @@ const handleControlSubmit = async (value: unknown) => {
     }
 
     controlDialogVisible.value = false
-    ElMessage.success('点位控制成功')
+    ElMessage.success('指令发送成功，设备读回已确认')
   } catch (error: any) {
-    ElMessage.error(error.message || '控制失败')
+    ElMessage.error(error.message || '指令发送失败')
   } finally {
     controlSubmitting.value = false
   }

@@ -2,7 +2,6 @@ using System.Collections.Concurrent;
 using EdgeGateway.Domain.Entities;
 using EdgeGateway.Domain.Interfaces;
 using EdgeGateway.Domain.Options;
-using EdgeGateway.Infrastructure.Strategies.Send;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -28,6 +27,9 @@ public class DataSendService
     // 已初始化的发送策略实例缓存（通道 ID → 策略实例），避免重复连接
     private readonly ConcurrentDictionary<int, ISendStrategy> _strategyCache = new();
     private readonly SemaphoreSlim _initLock = new(1, 1);
+    // 配置切换和发送互斥，避免发送仍在使用的策略被释放，或旧快照重建已停用通道。
+    private readonly SemaphoreSlim _lifecycleLock = new(1, 1);
+    private bool _disposed;
 
     // 通道配置缓存（通道 ID → 通道配置），避免频繁查询数据库
     private List<Channel> _cachedChannels = new();
@@ -55,34 +57,36 @@ public class DataSendService
     /// </summary>
     public async Task EnableChannelAsync(int channelId, CancellationToken cancellationToken = default)
     {
+        await _lifecycleLock.WaitAsync(cancellationToken);
+        try { ObjectDisposedException.ThrowIf(_disposed, this); await EnableChannelCoreAsync(channelId, cancellationToken); }
+        finally { _lifecycleLock.Release(); }
+    }
+
+    private async Task EnableChannelCoreAsync(int channelId, CancellationToken cancellationToken = default)
+    {
         using var scope = _serviceProvider.CreateScope();
         var channelRepo = scope.ServiceProvider.GetRequiredService<IChannelRepository>();
 
         var channel = await channelRepo.GetByIdAsync(channelId);
-        if (channel == null)
+        if (channel == null || !channel.IsEnabled)
         {
-            _logger.LogWarning("启用通道失败：通道 ID={ChannelId} 不存在", channelId);
+            _logger.LogWarning("启用通道失败：通道 ID={ChannelId} 不存在或未启用", channelId);
             return;
         }
 
-        // 如果通道已在缓存中，重新初始化（用于 HTTP 服务端模式重新注册端点）
-        if (_strategyCache.TryGetValue(channelId, out var existingStrategy))
-        {
-            _logger.LogInformation("通道 [{ChannelName}] 已在启用状态，重新初始化", channel.Name);
-            await existingStrategy.InitializeAsync(channel, cancellationToken);
-            return;
-        }
-
+        if (_strategyCache.TryRemove(channelId, out var existingStrategy))
+            await existingStrategy.DisposeAsync();
         try
         {
-            var strategy = _strategyRegistry.Resolve(channel.Protocol);
-            await strategy.InitializeAsync(channel, cancellationToken);
+            var strategy = await CreateStrategyAsync(channel, cancellationToken);
             _strategyCache[channelId] = strategy;
+            await RefreshChannelsCacheAsync(force: true);
             _logger.LogInformation("发送通道已启用：{ChannelName} (ID={Id})", channel.Name, channelId);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "启用通道 [{ChannelName}] 失败", channel.Name);
+            throw;
         }
     }
 
@@ -91,6 +95,14 @@ public class DataSendService
     /// </summary>
     public async Task DisableChannelAsync(int channelId)
     {
+        await _lifecycleLock.WaitAsync(CancellationToken.None);
+        try { await DisableChannelCoreAsync(channelId); }
+        finally { _lifecycleLock.Release(); }
+    }
+
+    private async Task DisableChannelCoreAsync(int channelId)
+    {
+        _cachedChannels = _cachedChannels.Where(c => c.Id != channelId).ToList();
         if (_strategyCache.TryRemove(channelId, out var strategy))
         {
             try
@@ -110,6 +122,13 @@ public class DataSendService
     /// </summary>
     public async Task InitializeChannelsAsync(CancellationToken cancellationToken = default)
     {
+        await _lifecycleLock.WaitAsync(cancellationToken);
+        try { ObjectDisposedException.ThrowIf(_disposed, this); await InitializeChannelsCoreAsync(cancellationToken); }
+        finally { _lifecycleLock.Release(); }
+    }
+
+    private async Task InitializeChannelsCoreAsync(CancellationToken cancellationToken = default)
+    {
         using var scope = _serviceProvider.CreateScope();
         var channelRepo = scope.ServiceProvider.GetRequiredService<IChannelRepository>();
 
@@ -120,8 +139,7 @@ public class DataSendService
         {
             try
             {
-                var strategy = _strategyRegistry.Resolve(channel.Protocol);
-                await strategy.InitializeAsync(channel, cancellationToken);
+                var strategy = await CreateStrategyAsync(channel, cancellationToken);
                 _strategyCache[channel.Id] = strategy;
             }
             catch (Exception ex)
@@ -156,13 +174,13 @@ public class DataSendService
     /// <summary>
     /// 刷新通道配置缓存
     /// </summary>
-    private async Task RefreshChannelsCacheAsync()
+    private async Task RefreshChannelsCacheAsync(bool force = false)
     {
         await _cacheLock.WaitAsync();
         try
         {
             // 双重检查，避免重复刷新
-            if (DateTime.UtcNow - _cacheUpdateTime < _cacheExpiration)
+            if (!force && DateTime.UtcNow - _cacheUpdateTime < _cacheExpiration)
             {
                 return;
             }
@@ -184,8 +202,14 @@ public class DataSendService
     /// </summary>
     public async Task RefreshChannelsCacheForceAsync()
     {
-        _cacheUpdateTime = DateTime.MinValue; // 强制过期
-        await RefreshChannelsCacheAsync();
+        await _lifecycleLock.WaitAsync(CancellationToken.None);
+        try { await RefreshChannelsCacheForceCoreAsync(); }
+        finally { _lifecycleLock.Release(); }
+    }
+
+    private async Task RefreshChannelsCacheForceCoreAsync()
+    {
+        await RefreshChannelsCacheAsync(force: true);
     }
 
     /// <summary>
@@ -196,7 +220,14 @@ public class DataSendService
     /// </summary>
     /// <param name="collectedData">本次采集的数据列表（全量数据快照）</param>
     /// <param name="cancellationToken">取消令牌</param>
-    public async Task DispatchAsync(
+    public async Task DispatchAsync(IEnumerable<CollectedData> collectedData, CancellationToken cancellationToken = default)
+    {
+        await _lifecycleLock.WaitAsync(cancellationToken);
+        try { if (!_disposed) await DispatchCoreAsync(collectedData, cancellationToken); }
+        finally { _lifecycleLock.Release(); }
+    }
+
+    private async Task DispatchCoreAsync(
         IEnumerable<CollectedData> collectedData,
         CancellationToken cancellationToken = default)
     {
@@ -205,6 +236,7 @@ public class DataSendService
 
         // 将采集数据按 DataPointId 建立索引（全量快照）
         var dataIndex = collectedData.ToDictionary(d => d.DataPointId);
+        using var channelLimiter = new SemaphoreSlim(Math.Max(1, _options.Send.MaxConcurrentChannels));
 
         // 并行向各通道发送（各通道发送互不阻塞）
         var sendTasks = channels.Select(async channel =>
@@ -247,15 +279,20 @@ public class DataSendService
                     Mappings = enabledDataMappings.Concat(enabledVirtualMappings).ToList()
                 };
 
-                // 获取（或懒加载）该通道的发送策略
                 var strategy = await GetOrCreateStrategyAsync(channel, cancellationToken);
                 if (strategy == null) return;
 
-                // 执行发送
-                var result = await strategy.SendAsync(package, cancellationToken);
-
-                if (!result.IsSuccess)
-                    _logger.LogWarning("通道 [{ChannelName}] 发送失败：{Error}", channel.Name, result.ErrorMessage);
+                await channelLimiter.WaitAsync(cancellationToken);
+                try
+                {
+                    var result = await strategy.SendAsync(package, cancellationToken);
+                    if (!result.IsSuccess)
+                        _logger.LogWarning("通道 [{ChannelName}] 发送失败：{Error}", channel.Name, result.ErrorMessage);
+                }
+                finally
+                {
+                    channelLimiter.Release();
+                }
             }
             catch (Exception ex)
             {
@@ -301,29 +338,23 @@ public class DataSendService
     }
 
     /// <summary>
-    /// 重新配置通道的端点路径（用于 HTTP 服务端模式路径更新）
+    /// 创建策略，初始化失败时确保释放资源。
     /// </summary>
-    public async Task ReconfigureChannelEndpointAsync(int channelId, string? oldEndpoint)
+    private async Task<ISendStrategy> CreateStrategyAsync(Channel channel, CancellationToken cancellationToken)
     {
-        if (!_strategyCache.TryGetValue(channelId, out var strategy))
-            return;
-
-        if (strategy is HttpSendStrategy httpStrategy)
+        var strategy = _strategyRegistry.Resolve(channel.Protocol);
+        try
         {
-            using var scope = _serviceProvider.CreateScope();
-            var channelRepo = scope.ServiceProvider.GetRequiredService<IChannelRepository>();
-            var channel = await channelRepo.GetByIdAsync(channelId);
-
-            if (channel != null)
-            {
-                await httpStrategy.ReconfigureEndpointAsync(channel, oldEndpoint ?? string.Empty, CancellationToken.None);
-            }
+            await strategy.InitializeAsync(channel, cancellationToken);
+            return strategy;
+        }
+        catch
+        {
+            try { await strategy.DisposeAsync(); }
+            catch (Exception ex) { _logger.LogWarning(ex, "释放初始化失败的通道策略：{ChannelId}", channel.Id); }
+            throw;
         }
     }
-
-    /// <summary>
-    /// 获取或懒加载创建通道对应的发送策略实例（线程安全）
-    /// </summary>
     private async Task<ISendStrategy?> GetOrCreateStrategyAsync(
         Domain.Entities.Channel channel,
         CancellationToken cancellationToken)
@@ -338,8 +369,7 @@ public class DataSendService
             if (_strategyCache.TryGetValue(channel.Id, out cached))
                 return cached;
 
-            var strategy = _strategyRegistry.Resolve(channel.Protocol);
-            await strategy.InitializeAsync(channel, cancellationToken);
+            var strategy = await CreateStrategyAsync(channel, cancellationToken);
             _strategyCache[channel.Id] = strategy;
             return strategy;
         }
@@ -359,6 +389,15 @@ public class DataSendService
     /// </summary>
     public async Task DisposeAllAsync()
     {
+        await _lifecycleLock.WaitAsync(CancellationToken.None);
+        try { await DisposeAllCoreAsync(); }
+        finally { _lifecycleLock.Release(); }
+    }
+
+    private async Task DisposeAllCoreAsync()
+    {
+        if (_disposed) return;
+        _disposed = true;
         foreach (var (id, strategy) in _strategyCache.ToArray())
         {
             try { await strategy.DisposeAsync(); }

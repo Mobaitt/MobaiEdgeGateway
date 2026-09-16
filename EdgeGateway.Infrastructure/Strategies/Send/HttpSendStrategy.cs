@@ -36,6 +36,7 @@ public class HttpSendStrategy : ISendStrategy
     private string _mode = "client"; // "client" 或 "server"
     private string? _authToken;
     private int _timeoutMs = 5000;
+    private HttpMethod _httpMethod = HttpMethod.Post;
 
     public HttpSendStrategy(
         ILogger<HttpSendStrategy> logger,
@@ -57,6 +58,7 @@ public class HttpSendStrategy : ISendStrategy
         _mode = channel.HttpMode ?? "client";
         _authToken = channel.HttpToken;
         _timeoutMs = channel.HttpTimeout ?? 5000;
+        _httpMethod = ParseHttpMethod(channel.HttpMethod);
 
         if (_mode == "server")
         {
@@ -88,7 +90,7 @@ public class HttpSendStrategy : ISendStrategy
     public async Task ReconfigureEndpointAsync(Channel channel, string oldEndpoint, CancellationToken cancellationToken = default)
     {
         // 如果是服务端模式且路径发生变化，先注销旧路径
-        if (_mode == "server" && !string.IsNullOrEmpty(oldEndpoint) && oldEndpoint != channel.Endpoint)
+        if (_mode == "server" && !string.IsNullOrEmpty(oldEndpoint) && (oldEndpoint != channel.Endpoint || channel.HttpMode != "server"))
         {
             var oldPath = oldEndpoint.StartsWith("/api/http-data/", StringComparison.OrdinalIgnoreCase)
                 ? oldEndpoint
@@ -155,7 +157,8 @@ public class HttpSendStrategy : ISendStrategy
                     httpClient.DefaultRequestHeaders.Authorization =
                         new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _authToken);
 
-                var response = await httpClient.PostAsync(_endpoint, content, cancellationToken);
+                using var request = new HttpRequestMessage(_httpMethod, _endpoint) { Content = content };
+                var response = await httpClient.SendAsync(request, cancellationToken);
 
                 if (response.IsSuccessStatusCode)
                 {
@@ -176,12 +179,28 @@ public class HttpSendStrategy : ISendStrategy
         }
     }
 
+    private static HttpMethod ParseHttpMethod(string? method)
+    {
+        if (string.IsNullOrWhiteSpace(method)) return HttpMethod.Post;
+        return method.Trim().ToUpperInvariant() switch
+        {
+            "GET" => HttpMethod.Get,
+            "POST" => HttpMethod.Post,
+            "PUT" => HttpMethod.Put,
+            "PATCH" => HttpMethod.Patch,
+            "DELETE" => HttpMethod.Delete,
+            _ => throw new ArgumentException($"Unsupported HTTP method: {method}")
+        };
+    }
     /// <inheritdoc/>
     public async Task DisposeAsync()
     {
         if (_mode == "server")
         {
-            await _httpListenerService.StopAsync(_endpoint);
+            var endpointPath = _endpoint.StartsWith("/api/http-data/", StringComparison.OrdinalIgnoreCase)
+                ? _endpoint
+                : $"/api/http-data/{_endpoint.TrimStart('/')}";
+            await _httpListenerService.StopAsync(endpointPath);
         }
     }
 }

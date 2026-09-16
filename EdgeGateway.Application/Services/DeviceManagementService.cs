@@ -301,38 +301,22 @@ public class DeviceManagementService
     /// <summary>更新发送通道</summary>
     public async Task UpdateChannelAsync(Channel channel)
     {
-        // 在更新之前获取旧通道配置（用于对比 endpoint 变化）
-        // 使用 AsNoTracking 确保获取的是原始值，不受 EF Core 跟踪影响
-        var oldChannel = await _channelRepo.GetByIdNoTrackingAsync(channel.Id);
-        var oldEndpoint = oldChannel?.Endpoint;
-
         await _channelRepo.UpdateAsync(channel);
-        _logger.LogInformation("更新发送通道：{ChannelName} (ID={Id})", channel.Name, channel.Id);
-
-        // 如果通道已启用，重新初始化发送策略
+        // 无论协议或启用状态如何变化，都释放旧策略，再按最新配置创建。
+        await _sendService.DisableChannelAsync(channel.Id);
         if (channel.IsEnabled)
-        {
-            // 如果是 HTTP 服务端模式且路径变化，需要重新注册端点
-            if (channel.Protocol == Domain.Enums.SendProtocol.Http)
-            {
-                await _sendService.ReconfigureChannelEndpointAsync(channel.Id, oldEndpoint);
-            }
-            else
-            {
-                await _sendService.DisableChannelAsync(channel.Id);
-                await _sendService.EnableChannelAsync(channel.Id);
-            }
-        }
+            await _sendService.EnableChannelAsync(channel.Id);
+        await _sendService.RefreshChannelsCacheForceAsync();
+        _logger.LogInformation("更新发送通道：{ChannelName} (ID={Id})", channel.Name, channel.Id);
     }
 
     /// <summary>删除发送通道（级联删除映射关系）</summary>
     public async Task DeleteChannelAsync(int channelId)
     {
-        // 先停用通道
-        await _sendService.DisableChannelAsync(channelId);
-
-        // 删除通道（EF Core 会级联删除映射关系）
+        // 先删除配置，再等待在途发送结束并清理策略，防止旧配置被重新加载。
         await _channelRepo.DeleteAsync(channelId);
+        await _sendService.DisableChannelAsync(channelId);
+        await _sendService.RefreshChannelsCacheForceAsync();
 
         _logger.LogInformation("删除发送通道 ID={Id}", channelId);
     }

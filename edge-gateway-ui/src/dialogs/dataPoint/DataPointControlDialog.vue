@@ -5,7 +5,7 @@
     destroy-on-close
     align-center
     class="app-dialog"
-    title="点位控制"
+    title="发送指令"
     @update:model-value="$emit('update:modelValue', $event)"
     @close="handleClose"
   >
@@ -21,7 +21,7 @@
       </div>
 
       <el-form label-position="top">
-        <el-form-item label="目标值">
+        <el-form-item label="指令值">
           <el-switch
             v-if="isBoolPoint"
             v-model="boolValue"
@@ -42,7 +42,7 @@
 
     <template #footer>
       <el-button @click="$emit('update:modelValue', false)">取消</el-button>
-      <el-button type="primary" :loading="submitting" @click="handleSubmit">执行控制</el-button>
+      <el-button type="primary" :loading="submitting" @click="handleSubmit">发送指令</el-button>
     </template>
   </el-dialog>
 </template>
@@ -96,7 +96,7 @@ const formattedCurrentValue = computed(() => {
 })
 
 const inputPlaceholder = computed(() => {
-  if (!props.dataPoint) return '请输入目标值'
+  if (!props.dataPoint) return '请输入指令值'
   return `请输入 ${props.dataPoint.dataType} 类型值`
 })
 
@@ -123,7 +123,7 @@ const handleSubmit = () => {
   }
 
   if (!inputValue.value.trim()) {
-    ElMessage.warning('请输入目标值')
+    ElMessage.warning('请输入指令值')
     return
   }
 

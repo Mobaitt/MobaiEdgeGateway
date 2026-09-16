@@ -19,5 +19,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\EdgeGateway.Application\EdgeGateway.Application.csproj" />
+    <ProjectReference Include="..\EdgeGateway.Host\EdgeGateway.Host.csproj" />
   </ItemGroup>
 </Project>

@@ -211,7 +211,7 @@ public class DataCollectionService
     public List<CollectedData> GetDeviceSnapshotData(int deviceId) =>
         _dataSnapshot.Values.Where(x => x.Data.DeviceId == deviceId).Select(x => x.Data).ToList();
 
-    public Task OverrideDataPointValueAsync(DataPoint dataPoint, object? value, string deviceCode)
+    public Task OverrideDataPointValueAsync(DataPoint dataPoint, object? value, string deviceCode, DataQuality? quality = null)
     {
         var collectedData = new CollectedData
         {
@@ -221,11 +221,11 @@ public class DataCollectionService
             DeviceName = deviceCode,
             Value = value,
             Unit = dataPoint.Unit,
-            Quality = value != null ? DataQuality.Good : DataQuality.Bad,
+            Quality = quality ?? (value != null ? DataQuality.Good : DataQuality.Bad),
             Timestamp = DateTime.UtcNow
         };
 
-        return SetDataSnapshotAsync(collectedData);
+        return SetDataSnapshotAsync(collectedData, replaceExisting: true);
     }
 
     public async Task StartAllAsync(CancellationToken cancellationToken)
@@ -315,6 +315,8 @@ public class DataCollectionService
     private void StartDeviceTask(Device device, CancellationToken parentToken)
     {
         var cts = CancellationTokenSource.CreateLinkedTokenSource(parentToken);
+        if (_deviceTasks.TryGetValue(device.Id, out var previousCts))
+            previousCts.Cancel();
         _deviceTasks[device.Id] = cts;
 
         var state = _runtimeStateStore.GetOrAddState(device.Id, device.Name);
@@ -463,6 +465,11 @@ public class DataCollectionService
                 state.MarkDisconnected();
                 await strategy.DisconnectAsync();
                 _logger.LogInformation("设备 [{DeviceName}] 连接已断开", device.Name);
+                if (_deviceTasks.TryGetValue(device.Id, out var current) && ReferenceEquals(current, cts))
+                {
+                    _deviceTasks.TryRemove(device.Id, out _);
+                    cts.Dispose();
+                }
             }
         }, cts.Token);
     }
@@ -598,9 +605,9 @@ public class DataCollectionService
             _tagIndex.TryRemove(tagKey, out _);
     }
 
-    private async Task SetDataSnapshotAsync(CollectedData collectedData)
+    private async Task SetDataSnapshotAsync(CollectedData collectedData, bool replaceExisting = false)
     {
-        if (collectedData.DataPointId >= 0)
+        if (collectedData.DataPointId >= 0 && (!replaceExisting || collectedData.Quality == DataQuality.Good))
         {
             try
             {
@@ -629,7 +636,7 @@ public class DataCollectionService
         // 快照只保留每个数据点的最新有效值，并用时间戳控制过期清理。
         if (_dataSnapshot.TryGetValue(collectedData.DataPointId, out var existing))
         {
-            if (existing.IsExpired(_dataExpiration))
+            if (replaceExisting || existing.IsExpired(_dataExpiration))
             {
                 existing.Data = collectedData;
                 existing.LastUpdateTime = collectedData.Value != null ? DateTime.UtcNow : DateTime.MinValue;

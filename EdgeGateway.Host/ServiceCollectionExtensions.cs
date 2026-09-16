@@ -64,6 +64,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IChannelRepository, ChannelRepository>();
         services.AddScoped<IChannelMappingRepository, ChannelMappingRepository>();
 
+        services.AddSingleton<SimulatorValueStore>();
         services.AddTransient<SimulatorCollectionStrategy>();
         services.AddTransient<ModbusCollectionStrategy>();
 

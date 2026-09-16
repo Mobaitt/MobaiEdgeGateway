@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
@@ -93,6 +93,14 @@ public class WebSocketConnectionManager
     /// </summary>
     public int Count => _clients.Count;
 
+    /// <summary>关闭订阅指定主题的客户端连接。</summary>
+    public async Task CloseTopicAsync(string topic)
+    {
+        var clients = _clients.Values.Where(c => string.Equals(c.SubscribeTopic, topic, StringComparison.OrdinalIgnoreCase)).ToList();
+        await Task.WhenAll(clients.Select(c => c.CloseAsync()));
+        foreach (var client in clients)
+            _clients.TryRemove(client.ClientId, out _);
+    }
     /// <summary>
     /// 关闭所有连接
     /// </summary>
@@ -114,6 +122,8 @@ public class WebSocketClient
     private readonly string _clientId;
     private readonly ILogger _logger;
     private readonly CancellationTokenSource _cts;
+    private readonly SemaphoreSlim _sendLock = new(1, 1);
+    private static readonly TimeSpan SendTimeout = TimeSpan.FromSeconds(5);
     private bool _isClosed;
 
     public System.Net.WebSockets.WebSocket WebSocket => _webSocket;
@@ -141,7 +151,7 @@ public class WebSocketClient
     /// <summary>
     /// 发送消息给客户端
     /// </summary>
-    public async Task SendAsync(string message)
+    public async Task SendAsync(string message, CancellationToken cancellationToken = default)
     {
         if (_isClosed || _webSocket.State != WebSocketState.Open)
             return;
@@ -149,12 +159,15 @@ public class WebSocketClient
         try
         {
             var bytes = Encoding.UTF8.GetBytes(message);
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(SendTimeout);
             await _webSocket.SendAsync(
                 new ArraySegment<byte>(bytes),
                 WebSocketMessageType.Text,
                 true,
-                CancellationToken.None);
+                timeoutCts.Token);
         }
+        catch (OperationCanceledException) { _logger.LogWarning("向客户端 {ClientId} 发送消息超时或已取消，关闭连接", _clientId); _isClosed = true; _webSocket.Abort(); }
         catch (Exception ex)
         {
             _logger.LogError(ex, "向客户端 {ClientId} 发送消息失败", _clientId);
@@ -224,6 +237,7 @@ public class WebSocketClient
         {
             _webSocket.Dispose();
             _cts.Dispose();
+            _sendLock.Dispose();
         }
     }
 }
