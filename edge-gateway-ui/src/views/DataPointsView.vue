@@ -88,14 +88,16 @@
 
           <el-table-column prop="address" label="地址" width="120">
             <template #default="{ row }">
-              <span v-if="!row.isVirtual" class="mono addr-text">{{ row.address }}</span>
+              <span v-if="!row.isVirtual" class="mono addr-text">
+                {{ row.address }}<span v-if="row.modbusBitIndex !== null && row.modbusBitIndex !== undefined"> · Bit{{ row.modbusBitIndex }}</span>
+              </span>
               <span v-else class="addr-text">表达式</span>
             </template>
           </el-table-column>
 
-          <el-table-column prop="dataType" label="类型" width="110" align="center">
+          <el-table-column prop="dataType" label="类型" width="180" align="center">
             <template #default="{ row }">
-              <span class="badge info mono">{{ getDataTypeLabel(row.dataType) }}</span>
+              <span class="badge info mono">{{ getDataTypeLabel(row) }}</span>
             </template>
           </el-table-column>
 
@@ -230,7 +232,7 @@ import {
   updateVirtualDataPoint
 } from '@/api/virtualNode'
 import { getDataValueTypes, getModbusByteOrders } from '@/api/enums'
-import { formatDateTime } from '@/api/constants'
+import { CollectionProtocol, formatDateTime } from '@/api/constants'
 import type { DataPointItem, RealtimeDataItem } from '@/types'
 import type { VirtualDataPoint } from '@/types/virtualNode'
 import DataPointDialog from '@/dialogs/dataPoint/DataPointDialog.vue'
@@ -252,6 +254,7 @@ type DataPointForm = {
   modbusFunctionCode: number
   modbusByteOrder: number
   registerLength: number
+  modbusBitIndex: number | null
 }
 
 type VirtualNodeForm = {
@@ -441,18 +444,61 @@ const getQualityClass = (quality: string) => {
   return ''
 }
 
-const getDataTypeLabel = (dataType: string | number) => {
-  if (typeof dataType === 'number') {
-    const option = DataValueTypeOptions.value.find(item => item.value === dataType)
-    return option?.label || String(dataType)
-  }
-  return dataType
-}
-
 const getRowDataTypeValue = (item: DataPointWithVirtual) => {
   return 'dataTypeValue' in item && typeof item.dataTypeValue === 'number'
     ? item.dataTypeValue
     : Number(item.dataType)
+}
+
+const modbusByteOrderLabels: Record<number, string> = {
+  1: 'AB CD',
+  2: 'BA DC',
+  3: 'CD AB',
+  4: 'DC BA'
+}
+
+const modbusDoubleByteOrderLabels: Record<number, string> = {
+  1: 'AB CD EF GH',
+  2: 'BA DC FE HG',
+  3: 'GH EF CD AB',
+  4: 'HG FE BA DC'
+}
+
+/**
+ * Modbus 的 dataType 只是基础枚举，列表需要同时展示字节序，
+ * 否则 Int32/UInt32/Float/Double 的具体解析方式会被隐藏。
+ */
+const getDataTypeLabel = (row: DataPointWithVirtual) => {
+  const dataType = getRowDataTypeValue(row)
+
+  if (row.isVirtual || deviceProtocol.value !== CollectionProtocol.Modbus.value) {
+    if (typeof row.dataType === 'number') {
+      const option = DataValueTypeOptions.value.find(item => item.value === dataType)
+      return option?.label || String(dataType)
+    }
+    return String(row.dataType)
+  }
+
+  const byteOrder = 'modbusByteOrder' in row ? Number(row.modbusByteOrder) || 1 : 1
+  const orderLabel = modbusByteOrderLabels[byteOrder] || modbusByteOrderLabels[1]
+  const doubleOrderLabel = modbusDoubleByteOrderLabels[byteOrder] || modbusDoubleByteOrderLabels[1]
+
+  switch (dataType) {
+    case 1: return 'modbusBitIndex' in row && row.modbusBitIndex !== null && row.modbusBitIndex !== undefined
+      ? `Bit${row.modbusBitIndex} Boolean`
+      : 'Boolean'
+    case 2: return 'Signed'
+    case 3: return 'Unsigned'
+    case 4: return `Long ${orderLabel}`
+    case 5: return `Unsigned Long ${orderLabel}`
+    case 6: return `Float ${orderLabel}`
+    case 7: return `Int64 ${doubleOrderLabel}`
+    case 8: return `Unsigned Int64 ${doubleOrderLabel}`
+    case 9: return `Double ${doubleOrderLabel}`
+    case 11: return 'Hex'
+    case 12: return 'Binary'
+    default: return String(row.dataType ?? dataType)
+  }
 }
 
 const formatRowValue = (row: DataPointWithVirtual) => {
@@ -500,6 +546,7 @@ const handleSubmit = async (data: DataPointForm) => {
 
     dialogVisible.value = false
     await fetchDataPoints()
+    await fetchRealtimeData()
   } catch (error: any) {
     ElMessage.error(error.message || '操作失败')
   } finally {

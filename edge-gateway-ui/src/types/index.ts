@@ -54,6 +54,7 @@ export interface DataPointItem {
   modbusFunctionCode?: number
   modbusByteOrder?: number
   registerLength?: number
+  modbusBitIndex?: number | null
 }
 
 /** 虚拟数据点 */

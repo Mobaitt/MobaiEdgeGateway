@@ -50,11 +50,12 @@ public class DataPointControlService
         if (!device.IsEnabled)
             throw new InvalidOperationException("The target device is disabled");
 
-        var strategy = _strategyRegistry.Resolve(device.Protocol);
+        var strategy = _strategyRegistry.Resolve(device.Protocol, device.Id);
         object? actualValue = null;
 
         try
         {
+            // 采集任务运行时复用其策略实例和 TCP 连接；ConnectAsync 对已连接设备是幂等的。
             await strategy.ConnectAsync(device, cancellationToken);
             await strategy.WriteAsync(dataPoint, value, cancellationToken);
 
@@ -77,9 +78,12 @@ public class DataPointControlService
         }
         finally
         {
-            // 请求取消后仍释放连接，清理失败不能覆盖原始写入或回读异常。
-            try { await strategy.DisconnectAsync(CancellationToken.None); }
-            catch (Exception ex) { _logger.LogWarning(ex, "Failed to disconnect after point control: {Tag}", dataPoint.Tag); }
+            // 采集任务拥有连接生命周期。没有采集任务时，控制请求负责释放临时连接。
+            if (!_collectionService.IsDeviceCollecting(device.Id))
+            {
+                try { await strategy.DisconnectAsync(CancellationToken.None); }
+                catch (Exception ex) { _logger.LogWarning(ex, "Failed to disconnect after point control: {Tag}", dataPoint.Tag); }
+            }
         }
         _logger.LogInformation(
             "Point control succeeded: Device={DeviceCode}, Tag={Tag}, Value={Value}",

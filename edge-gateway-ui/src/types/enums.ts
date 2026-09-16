@@ -23,12 +23,18 @@ export enum SendProtocol {
  * 数据类型
  */
 export enum DataValueType {
-  Bool = 0,
-  Int16 = 1,
-  Int32 = 2,
-  Float = 3,
-  Double = 4,
-  String = 5
+  Bool = 1,
+  Int16 = 2,
+  UInt16 = 3,
+  Int32 = 4,
+  UInt32 = 5,
+  Float = 6,
+  Int64 = 7,
+  UInt64 = 8,
+  Double = 9,
+  String = 10,
+  Hex = 11,
+  Binary = 12
 }
 
 /**

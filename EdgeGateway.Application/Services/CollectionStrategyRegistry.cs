@@ -1,5 +1,6 @@
 using EdgeGateway.Domain.Enums;
 using EdgeGateway.Domain.Interfaces;
+using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -17,6 +18,10 @@ public class CollectionStrategyRegistry
 
     /// <summary>协议枚举 → 策略实现类型的映射表</summary>
     private readonly Dictionary<CollectionProtocol, Type> _strategyMap = new();
+
+    // 有状态策略按设备复用，保证采集和控制使用同一条设备连接。
+    private readonly ConcurrentDictionary<(CollectionProtocol Protocol, int DeviceId), ICollectionStrategy>
+        _deviceStrategies = new();
 
     public CollectionStrategyRegistry(
         IServiceProvider serviceProvider,
@@ -52,5 +57,17 @@ public class CollectionStrategyRegistry
                 $"不支持的采集协议: {protocol}，请在启动时通过 Register<T>() 注册对应的策略实现");
 
         return (ICollectionStrategy)_serviceProvider.GetRequiredService(strategyType);
+    }
+
+    /// <summary>获取指定设备的策略实例，采集和控制共享该实例。</summary>
+    public ICollectionStrategy Resolve(CollectionProtocol protocol, int deviceId)
+    {
+        if (!_strategyMap.TryGetValue(protocol, out var strategyType))
+            throw new NotSupportedException(
+                $"不支持的采集协议: {protocol}，请在启动时通过 Register&lt;T&gt;() 注册对应的采集策略");
+
+        return _deviceStrategies.GetOrAdd(
+            (protocol, deviceId),
+            _ => (ICollectionStrategy)_serviceProvider.GetRequiredService(strategyType));
     }
 }

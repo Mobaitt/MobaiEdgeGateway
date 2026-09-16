@@ -35,6 +35,7 @@ public class DataPointResponse
     public int? ModbusFunctionCode { get; set; }
     public byte? ModbusByteOrder { get; set; }
     public byte RegisterLength { get; set; }
+    public byte? ModbusBitIndex { get; set; }
 }
 
 /// <summary>数据点实时数据响应</summary>

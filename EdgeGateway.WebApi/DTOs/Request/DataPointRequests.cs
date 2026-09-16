@@ -60,6 +60,7 @@ public class CreateDataPointRequest
     public byte? ModbusFunctionCode { get; set; } = 3;
     public ModbusByteOrder? ModbusByteOrder { get; set; }
     public byte RegisterLength { get; set; } = 1;
+    public byte? ModbusBitIndex { get; set; }
     public bool IsEnabled { get; set; } = true;
     public bool IsControllable { get; set; }
 }
@@ -83,6 +84,7 @@ public class UpdateDataPointRequest
     public byte? ModbusFunctionCode { get; set; }
     public ModbusByteOrder? ModbusByteOrder { get; set; }
     public byte? RegisterLength { get; set; }
+    public byte? ModbusBitIndex { get; set; }
     public bool? IsEnabled { get; set; }
     public bool? IsControllable { get; set; }
 }

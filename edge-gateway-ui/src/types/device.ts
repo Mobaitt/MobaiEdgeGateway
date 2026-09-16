@@ -34,6 +34,7 @@ export interface DataPoint {
   modbusFunctionCode: number | null
   modbusByteOrder: number | null
   registerLength: number
+  modbusBitIndex: number | null
   isEnabled: boolean
   createdAt: string
 }
@@ -82,6 +83,7 @@ export interface CreateDataPointRequest {
   modbusFunctionCode?: number
   modbusByteOrder?: number
   registerLength?: number
+  modbusBitIndex?: number | null
   isEnabled?: boolean
 }
 
@@ -100,5 +102,6 @@ export interface UpdateDataPointRequest {
   modbusFunctionCode?: number
   modbusByteOrder?: number
   registerLength?: number
+  modbusBitIndex?: number | null
   isEnabled: boolean
 }

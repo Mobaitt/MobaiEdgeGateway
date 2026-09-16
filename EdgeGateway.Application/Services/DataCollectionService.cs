@@ -26,11 +26,16 @@ public class DataCollectionService
     private readonly GatewayOptions _options;
 
     private readonly ConcurrentDictionary<int, CancellationTokenSource> _deviceTasks = new();
+    private readonly ConcurrentDictionary<int, TaskCompletionSource<bool>> _deviceStopSignals = new();
+    // 点位配置可以在采集任务运行期间热替换，不需要重建设备连接。
+    private readonly ConcurrentDictionary<int, IReadOnlyList<DataPoint>> _deviceDataPoints = new();
+    private readonly ConcurrentDictionary<int, SemaphoreSlim> _deviceDataPointRefreshLocks = new();
     private readonly ConcurrentDictionary<int, TimestampedData> _dataSnapshot = new();
     private readonly ConcurrentDictionary<string, int> _tagIndex = new();
 
     private readonly int _aggregateWindowMs;
     private readonly TimeSpan _dataExpiration;
+    private CancellationToken _applicationCancellationToken;
     private CancellationTokenSource? _aggregatorCts;
     private Task? _aggregatorTask;
     private CancellationTokenSource? _virtualNodeCts;
@@ -70,6 +75,15 @@ public class DataCollectionService
     public Dictionary<int, RuntimeDeviceSnapshot> GetAllDeviceRuntimeStatuses()
     {
         return _runtimeStateStore.GetAllSnapshots();
+    }
+
+    public bool IsDeviceCollecting(int deviceId) => _deviceTasks.ContainsKey(deviceId);
+
+    private IReadOnlyList<DataPoint> GetEnabledDataPoints(int deviceId)
+    {
+        return _deviceDataPoints.TryGetValue(deviceId, out var dataPoints)
+            ? dataPoints
+            : Array.Empty<DataPoint>();
     }
 
     private object? GetSnapshotValue(string tag)
@@ -230,6 +244,7 @@ public class DataCollectionService
 
     public async Task StartAllAsync(CancellationToken cancellationToken)
     {
+        _applicationCancellationToken = cancellationToken;
         using var scope = _serviceProvider.CreateScope();
         var deviceRepo = scope.ServiceProvider.GetRequiredService<IDeviceRepository>();
 
@@ -239,7 +254,14 @@ public class DataCollectionService
         await StartAggregatorAsync(cancellationToken);
 
         foreach (var device in devices)
-            StartDeviceTask(device, cancellationToken);
+            StartDeviceTask(device, GetDeviceTaskCancellationToken(cancellationToken));
+    }
+
+    private CancellationToken GetDeviceTaskCancellationToken(CancellationToken fallbackToken)
+    {
+        return _applicationCancellationToken.CanBeCanceled
+            ? _applicationCancellationToken
+            : fallbackToken;
     }
 
     private static int NormalizeRetryCount(Device device) => Math.Max(1, device.ReconnectRetryCount);
@@ -319,9 +341,15 @@ public class DataCollectionService
             previousCts.Cancel();
         _deviceTasks[device.Id] = cts;
 
-        var state = _runtimeStateStore.GetOrAddState(device.Id, device.Name);
+        var stopSignal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _deviceStopSignals[device.Id] = stopSignal;
 
-        _ = Task.Run(async () =>
+        var state = _runtimeStateStore.GetOrAddState(device.Id, device.Name);
+        _deviceDataPoints[device.Id] = device.DataPoints
+            .Where(dp => dp.IsEnabled)
+            .ToList();
+
+        var runTask = Task.Run(async () =>
         {
             _logger.LogInformation(
                 "设备 [{DeviceName}] 采集任务启动，协议：{Protocol}，周期：{Interval}ms",
@@ -329,15 +357,7 @@ public class DataCollectionService
                 device.Protocol,
                 device.PollingIntervalMs);
 
-            var strategy = _strategyRegistry.Resolve(device.Protocol);
-            var enabledPoints = device.DataPoints.Where(dp => dp.IsEnabled).ToList();
-
-            if (!enabledPoints.Any())
-            {
-                state.SetStatus(DeviceRuntimeStatus.Warning, "未配置启用的数据点");
-                _logger.LogWarning("设备 [{DeviceName}] 没有启用的数据点，跳过采集", device.Name);
-                return;
-            }
+            var strategy = _strategyRegistry.Resolve(device.Protocol, device.Id);
 
             var reconnectIntervalMs = NormalizeReconnectIntervalMs(device);
             var readFailureThreshold = NormalizeReadFailureThreshold(device);
@@ -349,6 +369,14 @@ public class DataCollectionService
             {
                 while (!cts.Token.IsCancellationRequested)
                 {
+                    var enabledPoints = GetEnabledDataPoints(device.Id);
+                    if (enabledPoints.Count == 0)
+                    {
+                        state.SetStatus(DeviceRuntimeStatus.Warning, "未配置启用的数据点");
+                        await Task.Delay(Math.Max(500, device.PollingIntervalMs), cts.Token);
+                        continue;
+                    }
+
                     reconnectRound++;
                     // 每一轮先完成连接，成功后再进入稳定采集循环；失败则按设备策略等待重连。
                     var connected = await TryConnectWithRetryAsync(strategy, device, state, reconnectRound, cts.Token);
@@ -382,11 +410,21 @@ public class DataCollectionService
                         while (!cts.Token.IsCancellationRequested)
                         {
                             var cycleStart = DateTime.UtcNow;
+                            var currentPoints = GetEnabledDataPoints(device.Id);
+
+                            // 点位配置热更新后，从下一轮读取开始使用新快照；
+                            // 不停止当前策略，因此现有 TCP 连接继续复用。
+                            if (currentPoints.Count == 0)
+                            {
+                                state.SetStatus(DeviceRuntimeStatus.Warning, "未配置启用的数据点");
+                                await Task.Delay(Math.Max(500, device.PollingIntervalMs), cts.Token);
+                                continue;
+                            }
 
                             try
                             {
                                 // 采集策略内部负责协议读写，本层只接收结果并写入统一快照。
-                                await strategy.ReadAsync(enabledPoints, SetDataSnapshot, cts.Token);
+                                await strategy.ReadAsync(currentPoints, SetDataSnapshot, cts.Token);
                                 consecutiveReadFailures = 0;
                                 state.MarkReadSuccess();
                             }
@@ -472,6 +510,13 @@ public class DataCollectionService
                 }
             }
         }, cts.Token);
+
+        // 记录整个采集任务（包括 finally 中的 DisconnectAsync）何时真正结束。
+        _ = runTask.ContinueWith(
+            _ => stopSignal.TrySetResult(true),
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
     }
 
     public void StopDevice(int deviceId)
@@ -484,6 +529,18 @@ public class DataCollectionService
 
         _runtimeStateStore.MarkStopped(deviceId, "Device stopped");
         _logger.LogInformation("设备 ID [{DeviceId}] 采集任务已停止", deviceId);
+        _deviceDataPoints.TryRemove(deviceId, out _);
+    }
+
+    /// <summary>
+    /// 请求停止并等待旧采集任务完成断开连接，供配置热重载使用。
+    /// </summary>
+    public async Task StopDeviceAsync(int deviceId)
+    {
+        StopDevice(deviceId);
+
+        if (_deviceStopSignals.TryGetValue(deviceId, out var stopSignal))
+            await stopSignal.Task;
     }
 
     public void StopAll()
@@ -499,7 +556,7 @@ public class DataCollectionService
 
     public async Task ReloadDeviceAsync(int deviceId, CancellationToken cancellationToken)
     {
-        StopDevice(deviceId);
+        await StopDeviceAsync(deviceId);
 
         using var scope = _serviceProvider.CreateScope();
         var deviceRepo = scope.ServiceProvider.GetRequiredService<IDeviceRepository>();
@@ -512,8 +569,46 @@ public class DataCollectionService
             return;
         }
 
-        StartDeviceTask(device, cancellationToken);
+        StartDeviceTask(device, GetDeviceTaskCancellationToken(cancellationToken));
         _logger.LogInformation("设备 ID={DeviceId} 配置已重新加载", deviceId);
+    }
+
+    /// <summary>
+    /// 热刷新设备的数据点配置，保持已有的协议连接和采集任务不变。
+    /// </summary>
+    public async Task RefreshDeviceDataPointsAsync(int deviceId, CancellationToken cancellationToken = default)
+    {
+        var refreshLock = _deviceDataPointRefreshLocks.GetOrAdd(deviceId, _ => new SemaphoreSlim(1, 1));
+        await refreshLock.WaitAsync(cancellationToken);
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var deviceRepo = scope.ServiceProvider.GetRequiredService<IDeviceRepository>();
+            var device = await deviceRepo.GetByIdAsync(deviceId);
+
+            if (device == null)
+            {
+                _deviceDataPoints.TryRemove(deviceId, out _);
+                return;
+            }
+
+            var enabledPoints = device.DataPoints
+                .Where(dp => dp.IsEnabled)
+                .ToList();
+            _deviceDataPoints[deviceId] = enabledPoints;
+
+            if (device.IsEnabled && !IsDeviceCollecting(deviceId))
+                StartDeviceTask(device, GetDeviceTaskCancellationToken(cancellationToken));
+
+            _logger.LogInformation(
+                "设备 ID={DeviceId} 数据点配置已热刷新，启用点位数：{Count}，保持现有连接",
+                deviceId,
+                enabledPoints.Count);
+        }
+        finally
+        {
+            refreshLock.Release();
+        }
     }
 
     public async Task StopAggregatorAsync()

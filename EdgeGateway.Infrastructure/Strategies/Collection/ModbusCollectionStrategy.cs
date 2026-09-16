@@ -18,9 +18,12 @@ public class ModbusCollectionStrategy : ICollectionStrategy
     private const int MaxRegisterReadCount = 125;
     private const int MaxCoilReadCount = 2000;
     private readonly ILogger<ModbusCollectionStrategy> _logger;
+    private readonly SemaphoreSlim _connectionLock = new(1, 1);
     private TcpClient? _tcpClient;
     private IModbusMaster? _master;
     private bool _isConnected;
+    private string? _connectedAddress;
+    private int? _connectedPort;
     private readonly object _planLock = new();
     private string? _planKey;
     private List<ReadGroupPlan>? _readPlan;
@@ -36,25 +39,46 @@ public class ModbusCollectionStrategy : ICollectionStrategy
 
     public async Task ConnectAsync(Device device, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation(
-            "Connecting Modbus device [{DeviceName}] -> {Address}:{Port}",
-            device.Name,
-            device.Address,
-            device.Port ?? 502);
-
+        await _connectionLock.WaitAsync(cancellationToken);
         try
         {
-            _tcpClient = new TcpClient
+            var port = device.Port ?? 502;
+            if (_isConnected &&
+                string.Equals(_connectedAddress, device.Address, StringComparison.OrdinalIgnoreCase) &&
+                _connectedPort == port)
+            {
+                _logger.LogDebug("Modbus device [{DeviceName}] connection reused", device.Name);
+                return;
+            }
+
+            DisconnectCore();
+            _logger.LogInformation(
+                "Connecting Modbus device [{DeviceName}] -> {Address}:{Port}",
+                device.Name,
+                device.Address,
+                port);
+
+            var tcpClient = new TcpClient
             {
                 SendTimeout = 5000,
                 ReceiveTimeout = 5000
             };
 
-            await _tcpClient.ConnectAsync(device.Address, device.Port ?? 502, cancellationToken);
-            _master = ModbusIpMaster.CreateIp(_tcpClient);
-
-            _isConnected = true;
-            _logger.LogInformation("Modbus device [{DeviceName}] connected", device.Name);
+            try
+            {
+                await tcpClient.ConnectAsync(device.Address, port, cancellationToken);
+                _tcpClient = tcpClient;
+                _master = ModbusIpMaster.CreateIp(tcpClient);
+                _connectedAddress = device.Address;
+                _connectedPort = port;
+                _isConnected = true;
+                _logger.LogInformation("Modbus device [{DeviceName}] connected", device.Name);
+            }
+            catch
+            {
+                tcpClient.Dispose();
+                throw;
+            }
         }
         catch (Exception ex)
         {
@@ -62,21 +86,45 @@ public class ModbusCollectionStrategy : ICollectionStrategy
             _logger.LogError(ex, "Failed to connect Modbus device [{DeviceName}]", device.Name);
             throw;
         }
+        finally
+        {
+            _connectionLock.Release();
+        }
     }
 
-    public Task DisconnectAsync(CancellationToken cancellationToken = default)
+    public async Task DisconnectAsync(CancellationToken cancellationToken = default)
     {
-        _master?.Dispose();
-        _tcpClient?.Dispose();
-        _isConnected = false;
-        _logger.LogInformation("Modbus connection closed");
-        return Task.CompletedTask;
+        await _connectionLock.WaitAsync(cancellationToken);
+        try
+        {
+            DisconnectCore();
+            _logger.LogInformation("Modbus connection closed");
+        }
+        finally
+        {
+            _connectionLock.Release();
+        }
     }
 
     public async Task ReadAsync(
         IEnumerable<DataPoint> dataPoints,
         Action<CollectedData> callback,
         CancellationToken cancellationToken = default)
+    {
+        await _connectionLock.WaitAsync(cancellationToken);
+        try
+        {
+            await ReadCoreAsync(dataPoints, callback);
+        }
+        finally
+        {
+            _connectionLock.Release();
+        }
+    }
+
+    private async Task ReadCoreAsync(
+        IEnumerable<DataPoint> dataPoints,
+        Action<CollectedData> callback)
     {
         if (!_isConnected || _master == null)
             throw new InvalidOperationException("Modbus device is not connected.");
@@ -120,6 +168,24 @@ public class ModbusCollectionStrategy : ICollectionStrategy
 
     public async Task<object?> WriteAsync(DataPoint dataPoint, object? value, CancellationToken cancellationToken = default)
     {
+        await _connectionLock.WaitAsync(cancellationToken);
+        try
+        {
+            return await WriteCoreAsync(dataPoint, value);
+        }
+        catch (Exception ex) when (IsConnectionLevelException(ex))
+        {
+            _isConnected = false;
+            throw;
+        }
+        finally
+        {
+            _connectionLock.Release();
+        }
+    }
+
+    private async Task<object?> WriteCoreAsync(DataPoint dataPoint, object? value)
+    {
         if (!_isConnected || _master == null)
             throw new InvalidOperationException("Modbus device is not connected.");
 
@@ -128,6 +194,28 @@ public class ModbusCollectionStrategy : ICollectionStrategy
         var functionCode = dataPoint.ModbusFunctionCode ?? 3;
         var address = ParseAddress(dataPoint.Address);
         var typedValue = DataPointWriteValueConverter.Normalize(dataPoint, value);
+
+        if (dataPoint.ModbusBitIndex.HasValue)
+        {
+            if (dataPoint.ModbusBitIndex.Value > 15)
+                throw new InvalidOperationException("Modbus bit index must be between 0 and 15.");
+
+            if (functionCode != 3)
+                throw new InvalidOperationException("Register bit writes require function code 03.");
+
+            if (typedValue is not bool bitValue)
+                throw new InvalidOperationException("Register bit writes only support boolean values.");
+
+            // 位写入采用读-改-写，保留同一寄存器中其他位的当前状态。
+            var current = await _master!.ReadHoldingRegistersAsync(slaveId, address, 1);
+            var mask = (ushort)(1 << dataPoint.ModbusBitIndex.Value);
+            var updated = bitValue
+                ? (ushort)(current[0] | mask)
+                : (ushort)(current[0] & ~mask);
+
+            await _master.WriteSingleRegisterAsync(slaveId, address, updated);
+            return bitValue;
+        }
 
         switch (functionCode)
         {
@@ -158,10 +246,21 @@ public class ModbusCollectionStrategy : ICollectionStrategy
         }
     }
 
+    private void DisconnectCore()
+    {
+        _master?.Dispose();
+        _tcpClient?.Dispose();
+        _master = null;
+        _tcpClient = null;
+        _connectedAddress = null;
+        _connectedPort = null;
+        _isConnected = false;
+    }
+
     private List<ReadGroupPlan> GetReadPlan(List<DataPoint> dataPoints)
     {
         var key = string.Join("|", dataPoints
-            .Select(dp => $"{dp.Id}:{dp.Address}:{dp.RegisterLength}:{dp.ModbusSlaveId ?? 1}:{dp.ModbusFunctionCode ?? 3}")
+            .Select(dp => $"{dp.Id}:{dp.Address}:{dp.DataType}:{dp.RegisterLength}:{dp.ModbusSlaveId ?? 1}:{dp.ModbusFunctionCode ?? 3}:{dp.ModbusByteOrder ?? ModbusByteOrder.ABCD}:{dp.ModbusBitIndex?.ToString() ?? "-"}:{dp.Unit ?? "-"}")
             .OrderBy(value => value, StringComparer.Ordinal));
 
         lock (_planLock)
@@ -213,7 +312,7 @@ public class ModbusCollectionStrategy : ICollectionStrategy
                     case 3:
                     case 4:
                     default:
-                        var registers = functionCode == 4
+                var registers = functionCode == 4
                             ? await _master!.ReadInputRegistersAsync(slaveId, range.StartAddress, (ushort)range.Count)
                             : await _master!.ReadHoldingRegistersAsync(slaveId, range.StartAddress, (ushort)range.Count);
 
@@ -284,12 +383,14 @@ public class ModbusCollectionStrategy : ICollectionStrategy
         for (var i = 1; i < points.Count; i++)
         {
             var currentAddress = ParseAddress(points[i].Address);
-            var expectedNext = currentRange.StartAddress + (ushort)currentRange.Count;
+            var currentEnd = currentRange.StartAddress + currentRange.Count;
             var registerCount = points[i].RegisterLength;
+            var pointEnd = currentAddress + registerCount;
 
-            if (currentAddress == expectedNext && currentRange.Count + registerCount <= maxReadCount)
+            // 支持同一寄存器的多个位点共用一次读取，同时保留连续地址合并。
+            if (currentAddress <= currentEnd && pointEnd - currentRange.StartAddress <= maxReadCount)
             {
-                currentRange.Count += registerCount;
+                currentRange.Count = Math.Max(currentRange.Count, pointEnd - currentRange.StartAddress);
                 currentRange.Points.Add(points[i]);
             }
             else
@@ -311,6 +412,20 @@ public class ModbusCollectionStrategy : ICollectionStrategy
     private static object? ParseRegisterValue(DataPoint dp, ushort[] registers, int index)
     {
         if (index >= registers.Length) return null;
+
+        if (dp.ModbusBitIndex.HasValue)
+        {
+            if (dp.ModbusBitIndex.Value > 15)
+                throw new InvalidOperationException("Modbus bit index must be between 0 and 15.");
+
+            return (registers[index] & (1 << dp.ModbusBitIndex.Value)) != 0;
+        }
+
+        if (dp.DataType == DataValueType.Hex)
+            return registers[index].ToString("X4");
+
+        if (dp.DataType == DataValueType.Binary)
+            return Convert.ToString(registers[index], 2).PadLeft(16, '0');
 
         return dp.RegisterLength switch
         {
@@ -351,10 +466,7 @@ public class ModbusCollectionStrategy : ICollectionStrategy
     {
         if (index + 3 >= registers.Length) return null;
 
-        var allBytes = new List<byte>();
-        allBytes.AddRange(GetBytes(registers[index], registers[index + 1], byteOrder));
-        allBytes.AddRange(GetBytes(registers[index + 2], registers[index + 3], byteOrder));
-        var bytes = allBytes.ToArray();
+        var bytes = Get64BitBytes(registers, index, byteOrder);
 
         return dataType switch
         {
@@ -378,6 +490,22 @@ public class ModbusCollectionStrategy : ICollectionStrategy
             ModbusByteOrder.DCBA => [highBytes[1], highBytes[0], lowBytes[1], lowBytes[0]],
             _ => [highBytes[0], highBytes[1], lowBytes[0], lowBytes[1]]
         };
+    }
+
+    private static byte[] Get64BitBytes(ushort[] registers, int index, ModbusByteOrder byteOrder)
+    {
+        var wireBytes = new byte[8];
+        for (var wordIndex = 0; wordIndex < 4; wordIndex++)
+        {
+            var register = registers[index + wordIndex];
+            wireBytes[wordIndex * 2] = (byte)(register >> 8);
+            wireBytes[wordIndex * 2 + 1] = (byte)register;
+        }
+
+        // 64 位排列按参考界面中的四个 16 位字处理：
+        // ABCD=AB CD EF GH，CDAB=GH EF CD AB，BADC=BA DC FE HG，DCBA=HG FE BA DC。
+        var logicalBytes = Reorder64BitWords(wireBytes, byteOrder);
+        return logicalBytes.Reverse().ToArray();
     }
 
     private static CollectedData CreateCollectedData(DataPoint dp, string deviceCode, object? value)
@@ -414,6 +542,8 @@ public class ModbusCollectionStrategy : ICollectionStrategy
             DataValueType.Bool => [Convert.ToBoolean(value) ? (ushort)1 : (ushort)0],
             DataValueType.Int16 => [(ushort)Convert.ToInt16(value)],
             DataValueType.UInt16 => [Convert.ToUInt16(value)],
+            DataValueType.Hex => [Convert.ToUInt16(value)],
+            DataValueType.Binary => [Convert.ToUInt16(value)],
             DataValueType.Int32 => FromBytes(BitConverter.GetBytes(Convert.ToInt32(value)), dataPoint.ModbusByteOrder ?? ModbusByteOrder.ABCD),
             DataValueType.UInt32 => FromBytes(BitConverter.GetBytes(Convert.ToUInt32(value)), dataPoint.ModbusByteOrder ?? ModbusByteOrder.ABCD),
             DataValueType.Float => FromBytes(BitConverter.GetBytes(Convert.ToSingle(value)), dataPoint.ModbusByteOrder ?? ModbusByteOrder.ABCD),
@@ -429,22 +559,42 @@ public class ModbusCollectionStrategy : ICollectionStrategy
         if (bytes.Length != 4 && bytes.Length != 8)
             throw new InvalidOperationException("Only 32-bit and 64-bit values can be converted to Modbus registers.");
 
-        // 根据字节序重排寄存器，高低字顺序由点位配置决定
-        if (bytes.Length == 4)
+        if (bytes.Length == 8)
         {
-            return byteOrder switch
-            {
-                ModbusByteOrder.ABCD => [ToRegister(bytes[3], bytes[2]), ToRegister(bytes[1], bytes[0])],
-                ModbusByteOrder.CDAB => [ToRegister(bytes[1], bytes[0]), ToRegister(bytes[3], bytes[2])],
-                ModbusByteOrder.BADC => [ToRegister(bytes[2], bytes[3]), ToRegister(bytes[0], bytes[1])],
-                ModbusByteOrder.DCBA => [ToRegister(bytes[0], bytes[1]), ToRegister(bytes[2], bytes[3])],
-                _ => [ToRegister(bytes[3], bytes[2]), ToRegister(bytes[1], bytes[0])]
-            };
+            var logicalBytes = bytes.Reverse().ToArray();
+            return ToRegisters(Reorder64BitWords(logicalBytes, byteOrder));
         }
 
-        var high = FromBytes(bytes[..4], byteOrder);
-        var low = FromBytes(bytes[4..], byteOrder);
-        return [.. high, .. low];
+        // 根据字节序重排寄存器，高低字顺序由点位配置决定
+        return byteOrder switch
+        {
+            ModbusByteOrder.ABCD => [ToRegister(bytes[3], bytes[2]), ToRegister(bytes[1], bytes[0])],
+            ModbusByteOrder.CDAB => [ToRegister(bytes[1], bytes[0]), ToRegister(bytes[3], bytes[2])],
+            ModbusByteOrder.BADC => [ToRegister(bytes[2], bytes[3]), ToRegister(bytes[0], bytes[1])],
+            ModbusByteOrder.DCBA => [ToRegister(bytes[0], bytes[1]), ToRegister(bytes[2], bytes[3])],
+            _ => [ToRegister(bytes[3], bytes[2]), ToRegister(bytes[1], bytes[0])]
+        };
+    }
+
+    private static byte[] Reorder64BitWords(byte[] bytes, ModbusByteOrder byteOrder)
+    {
+        return byteOrder switch
+        {
+            ModbusByteOrder.ABCD => [.. bytes],
+            ModbusByteOrder.CDAB => [.. bytes[6..8], .. bytes[4..6], .. bytes[2..4], .. bytes[0..2]],
+            ModbusByteOrder.BADC => [bytes[1], bytes[0], bytes[3], bytes[2], bytes[5], bytes[4], bytes[7], bytes[6]],
+            ModbusByteOrder.DCBA => [bytes[7], bytes[6], bytes[5], bytes[4], bytes[3], bytes[2], bytes[1], bytes[0]],
+            _ => [.. bytes]
+        };
+    }
+
+    private static ushort[] ToRegisters(byte[] bytes)
+    {
+        var registers = new ushort[bytes.Length / 2];
+        for (var index = 0; index < registers.Length; index++)
+            registers[index] = ToRegister(bytes[index * 2], bytes[index * 2 + 1]);
+
+        return registers;
     }
 
     private static ushort ToRegister(byte high, byte low) => (ushort)((high << 8) | low);

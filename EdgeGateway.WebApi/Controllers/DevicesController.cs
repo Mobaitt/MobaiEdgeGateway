@@ -1,6 +1,7 @@
 using System.Text.Json;
 using EdgeGateway.Application.Services;
 using EdgeGateway.Domain.Entities;
+using EdgeGateway.Domain.Enums;
 using EdgeGateway.WebApi.DTOs.Request;
 using EdgeGateway.WebApi.DTOs.Response;
 using Microsoft.AspNetCore.Mvc;
@@ -253,16 +254,26 @@ public class DevicesController : ControllerBase
             ModbusFunctionCode = req.ModbusFunctionCode,
             ModbusByteOrder = req.ModbusByteOrder,
             RegisterLength = req.RegisterLength,
+            ModbusBitIndex = req.ModbusBitIndex,
             IsEnabled = req.IsEnabled,
             IsControllable = req.IsControllable
         };
+
+        if (dataPoint.ModbusBitIndex is > 15)
+            return BadRequest(ApiResponse.Fail("Modbus bit index must be between 0 and 15"));
+
+        if (dataPoint.ModbusBitIndex.HasValue &&
+            (dataPoint.DataType != DataValueType.Bool ||
+             dataPoint.ModbusFunctionCode is not (3 or 4) ||
+             dataPoint.RegisterLength != 1))
+            return BadRequest(ApiResponse.Fail("Register bit points must use Bool, one register, and function code 03 or 04"));
 
         var created = await _deviceService.CreateDataPointAsync(dataPoint);
 
         if (device.IsEnabled)
         {
-            await _collectionService.ReloadDeviceAsync(deviceId, HttpContext.RequestAborted);
-            _logger.LogInformation("Created data point ID={DataPointId}, reloaded device ID={DeviceId}", created.Id, deviceId);
+            await _collectionService.RefreshDeviceDataPointsAsync(deviceId, HttpContext.RequestAborted);
+            _logger.LogInformation("Created data point ID={DataPointId}, refreshed device points without reconnecting, device ID={DeviceId}", created.Id, deviceId);
         }
 
         return CreatedAtAction(
@@ -290,6 +301,7 @@ public class DevicesController : ControllerBase
                             req.ModbusFunctionCode.HasValue ||
                             req.ModbusByteOrder.HasValue ||
                             req.RegisterLength.HasValue ||
+                            req.ModbusBitIndex.HasValue ||
                             req.IsEnabled.HasValue;
 
         if (req.Name != null) dataPoint.Name = req.Name;
@@ -301,15 +313,28 @@ public class DevicesController : ControllerBase
         if (req.ModbusFunctionCode.HasValue) dataPoint.ModbusFunctionCode = req.ModbusFunctionCode.Value;
         if (req.ModbusByteOrder.HasValue) dataPoint.ModbusByteOrder = req.ModbusByteOrder.Value;
         if (req.RegisterLength.HasValue) dataPoint.RegisterLength = req.RegisterLength.Value;
+        if (req.ModbusBitIndex.HasValue) dataPoint.ModbusBitIndex = req.ModbusBitIndex.Value;
+        else if ((req.DataType.HasValue && req.DataType.Value != DataValueType.Bool) ||
+                 (req.ModbusFunctionCode.HasValue && req.ModbusFunctionCode.Value is (1 or 2)))
+            dataPoint.ModbusBitIndex = null;
         if (req.IsEnabled.HasValue) dataPoint.IsEnabled = req.IsEnabled.Value;
         if (req.IsControllable.HasValue) dataPoint.IsControllable = req.IsControllable.Value;
+
+        if (dataPoint.ModbusBitIndex is > 15)
+            return BadRequest(ApiResponse.Fail("Modbus bit index must be between 0 and 15"));
+
+        if (dataPoint.ModbusBitIndex.HasValue &&
+            (dataPoint.DataType != DataValueType.Bool ||
+             dataPoint.ModbusFunctionCode is not (3 or 4) ||
+             dataPoint.RegisterLength != 1))
+            return BadRequest(ApiResponse.Fail("Register bit points must use Bool, one register, and function code 03 or 04"));
 
         await _deviceService.UpdateDataPointAsync(dataPoint);
 
         if (configChanged && device.IsEnabled)
         {
-            await _collectionService.ReloadDeviceAsync(deviceId, HttpContext.RequestAborted);
-            _logger.LogInformation("Updated data point ID={DataPointId}, reloaded device ID={DeviceId}", dataPointId, deviceId);
+            await _collectionService.RefreshDeviceDataPointsAsync(deviceId, HttpContext.RequestAborted);
+            _logger.LogInformation("Updated data point ID={DataPointId}, refreshed device points without reconnecting, device ID={DeviceId}", dataPointId, deviceId);
         }
 
         return Ok(ApiResponse.Ok("Data point updated"));
@@ -325,8 +350,8 @@ public class DevicesController : ControllerBase
 
         if (device != null && device.IsEnabled)
         {
-            await _collectionService.ReloadDeviceAsync(deviceId, HttpContext.RequestAborted);
-            _logger.LogInformation("Deleted data point ID={DataPointId}, reloaded device ID={DeviceId}", dataPointId, deviceId);
+            await _collectionService.RefreshDeviceDataPointsAsync(deviceId, HttpContext.RequestAborted);
+            _logger.LogInformation("Deleted data point ID={DataPointId}, refreshed device points without reconnecting, device ID={DeviceId}", dataPointId, deviceId);
         }
 
         return Ok(ApiResponse.Ok("Data point deleted"));
@@ -470,7 +495,8 @@ public class DevicesController : ControllerBase
         ModbusSlaveId = dp.ModbusSlaveId,
         ModbusFunctionCode = dp.ModbusFunctionCode,
         ModbusByteOrder = dp.ModbusByteOrder.HasValue ? (byte)dp.ModbusByteOrder.Value : (byte?)null,
-        RegisterLength = dp.RegisterLength
+        RegisterLength = dp.RegisterLength,
+        ModbusBitIndex = dp.ModbusBitIndex
     };
 
     private static object? ConvertJsonValue(JsonElement value)

@@ -14,5 +14,9 @@ public enum DataValueType
     Int64  = 7,
     UInt64 = 8,
     Double = 9,
-    String = 10
+    String = 10,
+    /// <summary>16 位无符号寄存器，以十六进制字符串展示。</summary>
+    Hex = 11,
+    /// <summary>16 位无符号寄存器，以二进制字符串展示。</summary>
+    Binary = 12
 }

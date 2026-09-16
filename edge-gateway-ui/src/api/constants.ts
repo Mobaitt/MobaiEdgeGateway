@@ -34,11 +34,16 @@ export const SendProtocolOptions = Object.values(SendProtocol).map(p => ({
 export const DataValueType = {
   Bool:   { value: 1, label: 'Bool' },
   Int16:  { value: 2, label: 'Int16' },
-  Int32:  { value: 3, label: 'Int32' },
-  Int64:  { value: 4, label: 'Int64' },
-  Float:  { value: 5, label: 'Float' },
-  Double: { value: 6, label: 'Double' },
-  String: { value: 7, label: 'String' }
+  UInt16: { value: 3, label: 'UInt16' },
+  Int32:  { value: 4, label: 'Int32' },
+  UInt32: { value: 5, label: 'UInt32' },
+  Float:  { value: 6, label: 'Float' },
+  Int64:  { value: 7, label: 'Int64' },
+  UInt64: { value: 8, label: 'UInt64' },
+  Double: { value: 9, label: 'Double' },
+  String: { value: 10, label: 'String' },
+  Hex:    { value: 11, label: 'Hex' },
+  Binary: { value: 12, label: 'Binary' }
 }
 
 export const DataValueTypeOptions = Object.values(DataValueType).map(t => ({

@@ -43,6 +43,9 @@ public class DataPoint
     /// <summary>寄存器长度（1=16 位，2=32 位，4=64 位）</summary>
     public byte RegisterLength { get; set; } = 1;
 
+    /// <summary>Modbus 寄存器位索引（0=最低位，15=最高位；为空表示整寄存器）</summary>
+    public byte? ModbusBitIndex { get; set; }
+
     /// <summary>是否启用采集</summary>
     public bool IsEnabled { get; set; } = true;
 
