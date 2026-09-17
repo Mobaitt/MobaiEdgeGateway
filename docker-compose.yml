@@ -1,0 +1,24 @@
+services:
+  edge-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mobai-edge-gateway:latest
+    container_name: mobai-edge-gateway
+    ports:
+      - "${EDGE_GATEWAY_PORT:-5000}:5000"
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_URLS: http://+:5000
+      Database__ConnectionString: "Data Source=/data/gateway.db"
+      DemoMode__Enabled: ${DEMO_MODE_ENABLED:-false}
+    volumes:
+      - gateway-data:/data
+      - gateway-output:/app/output
+    restart: unless-stopped
+
+volumes:
+  gateway-data:
+    name: mobai-edge-gateway-data
+  gateway-output:
+    name: mobai-edge-gateway-output

@@ -24,6 +24,37 @@
 - `SQLite` 本地配置数据库
 - 基于策略模式的采集协议与发送协议扩展体系
 
+## 🐳 Docker 一键部署
+
+已提供 `Dockerfile` 和 `docker-compose.yml`，需要安装 Docker Desktop 或 Docker Engine + Compose Plugin。
+
+在项目根目录执行：
+
+```bash
+docker compose up -d --build
+```
+
+启动完成后访问：
+
+- 管理后台：http://localhost:5000
+- API 文档：http://localhost:5000/swagger
+
+SQLite 数据库和本地文件输出分别保存在 Docker 命名卷 `mobai-edge-gateway-data`、`mobai-edge-gateway-output` 中，容器重建不会丢失配置。
+
+可通过环境变量修改 Web 端口或演示模式：
+
+```bash
+EDGE_GATEWAY_PORT=8080 DEMO_MODE_ENABLED=false docker compose up -d --build
+```
+
+停止服务：
+
+```bash
+docker compose down
+```
+
+Modbus 设备连接是从容器主动发起的。设备在局域网内时，点位配置填写容器可访问的设备 IP；如果设备服务运行在宿主机上，Docker Desktop 可使用 `host.docker.internal`。
+
 ---
 
 ## 🧱 项目结构
