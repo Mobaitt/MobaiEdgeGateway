@@ -4,6 +4,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+$ProjectRoot = Split-Path -Parent $PSCommandPath
+Set-Location $ProjectRoot
+
 $ImageName = 'mobai-edge-gateway:latest'
 $ContainerName = 'mobai-edge-gateway'
 $DataVolume = 'mobai-edge-gateway-data'
@@ -21,6 +24,16 @@ function Invoke-Docker {
     if ($LASTEXITCODE -ne 0) {
         throw "Docker 命令执行失败：docker $($Arguments -join ' ')"
     }
+}
+
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    throw '未找到 Git，请先安装 Git。'
+}
+
+Write-Host '拉取最新代码：origin/master' -ForegroundColor Cyan
+& git pull --ff-only origin master
+if ($LASTEXITCODE -ne 0) {
+    throw '拉取代码失败，已停止部署。请检查 Git 凭据、本地改动和网络连接。'
 }
 
 Write-Host '检查 Docker 环境...' -ForegroundColor Cyan

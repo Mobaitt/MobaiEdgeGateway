@@ -2,12 +2,26 @@
 
 set -Eeuo pipefail
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+cd "${SCRIPT_DIR}"
+
 IMAGE_NAME="mobai-edge-gateway:latest"
 CONTAINER_NAME="mobai-edge-gateway"
 DATA_VOLUME="mobai-edge-gateway-data"
 OUTPUT_VOLUME="mobai-edge-gateway-output"
 PORT="${EDGE_GATEWAY_PORT:-5000}"
 DEMO_MODE_ENABLED="${DEMO_MODE_ENABLED:-true}"
+
+if ! command -v git >/dev/null 2>&1; then
+  echo "错误：未找到 Git，请先安装 Git。" >&2
+  exit 1
+fi
+
+echo "拉取最新代码：origin/master"
+if ! git pull --ff-only origin master; then
+  echo "错误：拉取代码失败，已停止部署。请检查 Git 凭据、本地改动和网络连接。" >&2
+  exit 1
+fi
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "错误：未找到 Docker，请先安装并启动 Docker。" >&2
