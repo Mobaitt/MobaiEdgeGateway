@@ -41,6 +41,7 @@ FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
 ENV ASPNETCORE_URLS=http://+:5000
 ENV Database__ConnectionString="Data Source=/data/gateway.db"
+ENV DemoMode__Enabled=true
 
 # curl 用于容器健康检查。
 RUN apt-get update \

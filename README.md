@@ -26,13 +26,21 @@
 
 ## 🐳 Docker 一键部署
 
-已提供 `Dockerfile` 和 `docker-compose.yml`，需要安装 Docker Desktop 或 Docker Engine + Compose Plugin。
+已提供 `Dockerfile`、`deploy.ps1` 和 `deploy.sh`，需要安装 Docker Desktop 或 Docker Engine。
 
-在项目根目录执行：
+Windows PowerShell 在项目根目录执行：
+
+```powershell
+.\deploy.ps1
+```
+
+Linux 在项目根目录执行：
 
 ```bash
-docker compose up -d --build
+bash ./deploy.sh
 ```
+
+脚本会依次停止并移除旧容器、删除旧镜像、构建新镜像并启动服务；数据库和输出文件使用 Docker 命名卷持久化。脚本默认启用演示模式。
 
 启动完成后访问：
 
@@ -43,14 +51,32 @@ SQLite 数据库和本地文件输出分别保存在 Docker 命名卷 `mobai-edg
 
 可通过环境变量修改 Web 端口或演示模式：
 
-```bash
-EDGE_GATEWAY_PORT=8080 DEMO_MODE_ENABLED=false docker compose up -d --build
+```powershell
+$env:EDGE_GATEWAY_PORT = '8080'
+$env:DEMO_MODE_ENABLED = 'true'
+.\deploy.ps1
 ```
 
-停止服务：
+Linux：
 
 ```bash
-docker compose down
+EDGE_GATEWAY_PORT=8080 DEMO_MODE_ENABLED=true bash ./deploy.sh
+```
+
+强制完全重新构建（不使用 Docker 构建缓存）：
+
+```powershell
+.\deploy.ps1 -NoCache
+```
+
+```bash
+bash ./deploy.sh --no-cache
+```
+
+只停止服务：
+
+```powershell
+docker stop mobai-edge-gateway
 ```
 
 Modbus 设备连接是从容器主动发起的。设备在局域网内时，点位配置填写容器可访问的设备 IP；如果设备服务运行在宿主机上，Docker Desktop 可使用 `host.docker.internal`。
