@@ -92,7 +92,17 @@
         <div v-if="form.protocol === 5" class="protocol-hint protocol-hint-inline">
           <el-icon class="hint-icon"><InfoFilled /></el-icon>
           <span>WebSocket 服务端，数据推送给订阅客户端。</span>
-          <code class="hint-code">ws://localhost:5000/ws?topic=device/data</code>
+          <code v-if="channelLink" class="hint-code">{{ channelLink }}</code>
+          <el-button
+            v-if="channelLink"
+            size="small"
+            text
+            class="copy-link-button"
+            @click="copyChannelLink"
+          >
+            <el-icon><CopyDocument /></el-icon>
+            复制链接
+          </el-button>
         </div>
         <div v-else-if="form.protocol === 2 && form.httpMode === 'client'" class="protocol-hint protocol-hint-inline">
           <el-icon class="hint-icon"><InfoFilled /></el-icon>
@@ -101,7 +111,17 @@
         <div v-else-if="form.protocol === 2 && form.httpMode === 'server'" class="protocol-hint protocol-hint-inline">
           <el-icon class="hint-icon"><InfoFilled /></el-icon>
           <span>HTTP 服务端，GET 获取数据。</span>
-          <code class="hint-code">http://localhost:5000/api/http-data/xxx</code>
+          <code v-if="channelLink" class="hint-code">{{ channelLink }}</code>
+          <el-button
+            v-if="channelLink"
+            size="small"
+            text
+            class="copy-link-button"
+            @click="copyChannelLink"
+          >
+            <el-icon><CopyDocument /></el-icon>
+            复制链接
+          </el-button>
         </div>
         <div v-else-if="form.protocol === 1" class="protocol-hint protocol-hint-inline">
           <el-icon class="hint-icon"><InfoFilled /></el-icon>
@@ -191,8 +211,7 @@
         <!-- HTTP 服务端提示 -->
         <div v-if="form.protocol === 2 && form.httpMode === 'server'" class="protocol-hint protocol-hint-inline">
           <el-icon class="hint-icon"><InfoFilled /></el-icon>
-          <span>服务端复用端口 5000。</span>
-          <code class="hint-code">http://localhost:5000/api/http-data/xxx</code>
+          <span>服务端复用当前访问地址和端口。</span>
         </div>
 
         <!-- WebSocket 配置 -->
@@ -258,11 +277,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { InfoFilled, Upload, Download, MagicStick } from '@element-plus/icons-vue'
+import { CopyDocument, InfoFilled, Upload, Download, MagicStick } from '@element-plus/icons-vue'
 import FormSection from '@/components/FormSection.vue'
 import { generateCodeWithTimestamp } from '@/utils/codeGenerate'
+import { copyText, getChannelLink } from '@/utils/channelLink'
 import type { ChannelItem } from '@/types'
 
 interface ChannelForm {
@@ -331,6 +351,19 @@ const form = ref<ChannelForm>({
   filePath: './output/data.json',
   isEnabled: true
 })
+
+const channelLink = computed(() => getChannelLink(form.value))
+
+const copyChannelLink = async () => {
+  if (!channelLink.value) return
+
+  try {
+    await copyText(channelLink.value)
+    ElMessage.success('订阅链接已复制')
+  } catch (error: any) {
+    ElMessage.error(`复制失败：${error?.message || '浏览器不支持复制'}`)
+  }
+}
 
 const rules = {
   name: [{ required: true, message: '请输入通道名称' }],
@@ -401,7 +434,7 @@ watch(
 const getEndpointPlaceholder = (protocol: number | null) => {
   if (protocol === 1) return 'mqtt://host:1883'
   if (protocol === 2) return 'https://api.example.com/data/upload'
-  if (protocol === 5) return 'ws://localhost:8080/ws 或 wss://api.example.com/ws'
+  if (protocol === 5) return '当前访问地址/ws 或 wss://api.example.com/ws'
   if (protocol === 4) return './output/data.json'
   return '请输入端点地址'
 }
@@ -440,6 +473,11 @@ const handleClose = () => {
 .channel-form {
   .compact {
     margin-bottom: 16px;
+  }
+
+  .copy-link-button {
+    color: var(--cyan);
+    padding: 2px 6px;
   }
 }
 </style>

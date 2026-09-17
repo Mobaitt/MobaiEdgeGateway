@@ -47,6 +47,16 @@
             <el-button size="small" text @click="goMappings(ch)">
               绑定数据点
             </el-button>
+            <el-button
+              v-if="getChannelLink(ch)"
+              size="small"
+              text
+              class="copy-link-action"
+              @click="copyChannelLink(ch)"
+            >
+              <el-icon><CopyDocument /></el-icon>
+              复制链接
+            </el-button>
             <el-button size="small" text @click="openEdit(ch)">
               编辑
             </el-button>
@@ -76,7 +86,7 @@
 import {onMounted, ref} from 'vue'
 import {useRouter} from 'vue-router'
 import {ElMessage, ElMessageBox} from 'element-plus'
-import {Connection, Link, Plus} from '@element-plus/icons-vue'
+import {Connection, CopyDocument, Link, Plus} from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
 import AddCard from '@/components/AddCard.vue'
 import ChannelDialog from '@/dialogs/channel/ChannelDialog.vue'
@@ -84,6 +94,7 @@ import {useConfirmDelete} from '@/composables/useConfirmDelete'
 import {createChannel, deleteChannel, getChannels, toggleChannel, updateChannel} from '@/api/channel'
 import {getSendProtocols} from '@/api/enums'
 import type {ChannelItem} from '@/types'
+import {copyText, getChannelLink} from '@/utils/channelLink'
 
 const router = useRouter()
 const { confirm: confirmDeleteFn } = useConfirmDelete()
@@ -172,6 +183,18 @@ const handleDelete = async (channel: ChannelItem) => {
 
 const goMappings = (channel: ChannelItem) => {
   router.push({ name: 'Mappings', params: { id: channel.id }, query: { channelName: channel.name } })
+}
+
+const copyChannelLink = async (channel: ChannelItem) => {
+  const link = getChannelLink(channel)
+  if (!link) return
+
+  try {
+    await copyText(link)
+    ElMessage.success('订阅链接已复制')
+  } catch (error: any) {
+    ElMessage.error(`复制失败：${error?.message || '浏览器不支持复制'}`)
+  }
 }
 
 const handleToggle = async (channel: ChannelItem) => {
@@ -366,6 +389,10 @@ onMounted(() => {
   .el-button {
     font-size: 12px;
     padding: 4px 8px;
+  }
+
+  .copy-link-action {
+    color: var(--cyan);
   }
 }
 
