@@ -78,7 +78,9 @@ const limitConfigExample = `{
 
 const calculationConfigExample = `{
   "CalculationType": 0,     // 0=Custom 自定义计算
-  "Expression": "a + b * c" // 自定义表达式
+  "Expression": "a + b * c", // 自定义表达式
+  "SourceDataPointTags": ["a", "b", "c"],
+  "DecimalPlaces": 2
 }
 
 // 求和计算
@@ -103,6 +105,12 @@ const calculationConfigExample = `{
 {
   "CalculationType": 4,     // 4=Min
   "SourceDataPointTags": ["pressure1", "pressure2"]
+}
+
+// 标准差
+{
+  "CalculationType": 6,     // 6=StandardDeviation
+  "SourceDataPointTags": ["value1", "value2", "value3"]
 }
 
 // 加权平均计算

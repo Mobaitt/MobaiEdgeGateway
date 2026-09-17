@@ -19,6 +19,7 @@ public class DevicesController : ControllerBase
     private readonly DeviceManagementService _deviceService;
     private readonly DataCollectionService _collectionService;
     private readonly DataPointControlService _dataPointControlService;
+    private readonly DataPointTemplateService _templateService;
     private readonly VirtualNodeManagementService _virtualNodeService;
     private readonly ILogger<DevicesController> _logger;
 
@@ -26,12 +27,14 @@ public class DevicesController : ControllerBase
         DeviceManagementService deviceService,
         DataCollectionService collectionService,
         DataPointControlService dataPointControlService,
+        DataPointTemplateService templateService,
         VirtualNodeManagementService virtualNodeService,
         ILogger<DevicesController> logger)
     {
         _deviceService = deviceService;
         _collectionService = collectionService;
         _dataPointControlService = dataPointControlService;
+        _templateService = templateService;
         _virtualNodeService = virtualNodeService;
         _logger = logger;
     }
@@ -114,6 +117,19 @@ public class DevicesController : ControllerBase
         if (device == null)
             return NotFound(ApiResponse.Fail($"Device ID={id} was not found"));
 
+        var wasEnabled = device.IsEnabled;
+        var connectionConfigChanged =
+            !string.Equals(device.Address, req.Address, StringComparison.OrdinalIgnoreCase) ||
+            device.Port != req.Port ||
+            device.PollingIntervalMs != req.PollingIntervalMs ||
+            device.ReconnectEnabled != req.ReconnectEnabled ||
+            device.ReconnectRetryCount != req.ReconnectRetryCount ||
+            device.ReconnectRetryDelayMs != req.ReconnectRetryDelayMs ||
+            device.ReconnectIntervalMs != req.ReconnectIntervalMs ||
+            device.MaxConsecutiveReadFailures != req.MaxConsecutiveReadFailures ||
+            device.ReadFailureWindowSize != req.ReadFailureWindowSize ||
+            Math.Abs(device.ReadFailureRateThresholdPercent - req.ReadFailureRateThresholdPercent) > double.Epsilon;
+
         device.Name = req.Name;
         device.Description = req.Description;
         device.Address = req.Address;
@@ -129,6 +145,14 @@ public class DevicesController : ControllerBase
         device.ReadFailureRateThresholdPercent = req.ReadFailureRateThresholdPercent;
 
         await _deviceService.UpdateDeviceAsync(device);
+
+        if (wasEnabled && !device.IsEnabled)
+            await _collectionService.StopDeviceAsync(id);
+        else if (!wasEnabled && device.IsEnabled)
+            await _deviceService.StartDeviceCollectionAsync(id);
+        else if (device.IsEnabled && connectionConfigChanged)
+            await _collectionService.ReloadDeviceAsync(id, HttpContext.RequestAborted);
+
         return Ok(ApiResponse.Ok("Device updated"));
     }
 
@@ -216,11 +240,25 @@ public class DevicesController : ControllerBase
         return Ok(ApiResponse<List<DataPointResponse>>.Ok(result, $"Loaded {result.Count} data points"));
     }
 
+    [HttpPost("{deviceId:int}/datapoints/templates/{templateId:int}/apply")]
+    public async Task<IActionResult> ApplyDataPointTemplate(
+        int deviceId,
+        int templateId,
+        [FromBody] ApplyDataPointTemplateRequest? request = null)
+    {
+        var result = await _templateService.ApplyAsync(
+            deviceId,
+            templateId,
+            request?.OverwriteExisting ?? false,
+            HttpContext.RequestAborted);
+        return Ok(ApiResponse<ApplyTemplateResult>.Ok(result, "Template applied"));
+    }
+
     [HttpGet("{deviceId:int}/datapoints/realtime")]
     [ProducesResponseType(typeof(ApiResponse<List<DataPointRealtimeResponse>>), 200)]
     public IActionResult GetDeviceRealtimeData(int deviceId)
     {
-        var realtimeData = _collectionService.GetDeviceSnapshotData(deviceId);
+        var realtimeData = _collectionService.GetDeviceRealtimeData(deviceId);
         var result = realtimeData.Select(d => new DataPointRealtimeResponse
         {
             DataPointId = d.DataPointId,
@@ -268,6 +306,10 @@ public class DevicesController : ControllerBase
              dataPoint.RegisterLength != 1))
             return BadRequest(ApiResponse.Fail("Register bit points must use Bool, one register, and function code 03 or 04"));
 
+        if (device.Protocol == CollectionProtocol.Modbus && dataPoint.IsControllable &&
+            dataPoint.ModbusFunctionCode is 2 or 4)
+            return BadRequest(ApiResponse.Fail("Modbus function codes 02 and 04 are read-only and cannot be controllable"));
+
         var created = await _deviceService.CreateDataPointAsync(dataPoint);
 
         if (device.IsEnabled)
@@ -295,7 +337,8 @@ public class DevicesController : ControllerBase
         if (dataPoint == null || dataPoint.DeviceId != deviceId)
             return NotFound(ApiResponse.Fail($"Data point ID={dataPointId} was not found"));
 
-        var configChanged = req.Address != null ||
+        var configChanged = req.Tag != null ||
+                            req.Address != null ||
                             req.DataType.HasValue ||
                             req.ModbusSlaveId.HasValue ||
                             req.ModbusFunctionCode.HasValue ||
@@ -306,6 +349,7 @@ public class DevicesController : ControllerBase
 
         if (req.Name != null) dataPoint.Name = req.Name;
         if (req.Description != null) dataPoint.Description = req.Description;
+        if (req.Tag != null) dataPoint.Tag = req.Tag;
         if (req.Address != null) dataPoint.Address = req.Address;
         if (req.DataType.HasValue) dataPoint.DataType = req.DataType.Value;
         if (req.Unit != null) dataPoint.Unit = req.Unit;
@@ -328,6 +372,10 @@ public class DevicesController : ControllerBase
              dataPoint.ModbusFunctionCode is not (3 or 4) ||
              dataPoint.RegisterLength != 1))
             return BadRequest(ApiResponse.Fail("Register bit points must use Bool, one register, and function code 03 or 04"));
+
+        if (device.Protocol == CollectionProtocol.Modbus && dataPoint.IsControllable &&
+            dataPoint.ModbusFunctionCode is 2 or 4)
+            return BadRequest(ApiResponse.Fail("Modbus function codes 02 and 04 are read-only and cannot be controllable"));
 
         await _deviceService.UpdateDataPointAsync(dataPoint);
 

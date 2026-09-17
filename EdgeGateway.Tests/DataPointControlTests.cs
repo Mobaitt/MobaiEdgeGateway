@@ -55,6 +55,33 @@ public class DataPointControlTests
         Assert.True(strategy.Disconnected);
     }
 
+    [Fact]
+    public async Task RejectedSampleIsNullAndRejectedWithoutReplacingAcceptedSnapshot()
+    {
+        await using var context = await GatewayTestContext.CreateAsync();
+        var point = await context.AddPointAsync();
+        context.Db.DataPointRules.Add(new DataPointRule
+        {
+            DataPointIds = [point.Id],
+            Name = "Range check",
+            RuleType = RuleType.Validation,
+            RuleConfig = "{\"ValidationType\":1,\"MinValue\":0,\"MaxValue\":100}",
+            OnFailure = FailureAction.Reject
+        });
+        await context.Db.SaveChangesAsync();
+
+        await context.Collection.OverrideDataPointValueAsync(point, (short)20, point.Device.Code);
+        await context.Collection.OverrideDataPointValueAsync(point, (short)131, point.Device.Code);
+
+        var accepted = Assert.Single(context.Collection.GetDeviceSnapshotData(point.DeviceId));
+        Assert.Equal((short)20, accepted.Value);
+        Assert.Equal(DataQuality.Good, accepted.Quality);
+
+        var observed = Assert.Single(context.Collection.GetDeviceRealtimeData(point.DeviceId));
+        Assert.Null(observed.Value);
+        Assert.Equal(DataQuality.Rejected, observed.Quality);
+    }
+
     public sealed class FailedReadBackStrategy : ICollectionStrategy
     {
         public bool ThrowOnRead { get; init; }

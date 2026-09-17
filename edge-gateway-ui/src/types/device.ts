@@ -36,6 +36,7 @@ export interface DataPoint {
   registerLength: number
   modbusBitIndex: number | null
   isEnabled: boolean
+  isControllable?: boolean
   createdAt: string
 }
 
@@ -85,6 +86,7 @@ export interface CreateDataPointRequest {
   registerLength?: number
   modbusBitIndex?: number | null
   isEnabled?: boolean
+  isControllable?: boolean
 }
 
 /**
@@ -104,4 +106,5 @@ export interface UpdateDataPointRequest {
   registerLength?: number
   modbusBitIndex?: number | null
   isEnabled: boolean
+  isControllable?: boolean
 }

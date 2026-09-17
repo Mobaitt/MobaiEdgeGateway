@@ -31,6 +31,8 @@ public class DataCollectionService
     private readonly ConcurrentDictionary<int, IReadOnlyList<DataPoint>> _deviceDataPoints = new();
     private readonly ConcurrentDictionary<int, SemaphoreSlim> _deviceDataPointRefreshLocks = new();
     private readonly ConcurrentDictionary<int, TimestampedData> _dataSnapshot = new();
+    // 页面展示最近一次采样结果（包含被规则拒绝的值）；下发仍只使用 _dataSnapshot 中的有效快照。
+    private readonly ConcurrentDictionary<int, TimestampedData> _latestObservedSnapshot = new();
     private readonly ConcurrentDictionary<string, int> _tagIndex = new();
 
     private readonly int _aggregateWindowMs;
@@ -65,6 +67,8 @@ public class DataCollectionService
 
         if (virtualNodeEngine is VirtualNodeEngine engine)
             engine.SetDataSnapshotGetter(GetSnapshotValue);
+
+        _ruleEngine.SetDataSnapshotGetter(GetSnapshotValue);
     }
 
     public RuntimeDeviceSnapshot GetDeviceRuntimeStatus(int deviceId)
@@ -224,6 +228,13 @@ public class DataCollectionService
 
     public List<CollectedData> GetDeviceSnapshotData(int deviceId) =>
         _dataSnapshot.Values.Where(x => x.Data.DeviceId == deviceId).Select(x => x.Data).ToList();
+
+    /// <summary>
+    /// 获取页面实时展示数据。该结果包含最近一次采样的质量结果；被规则拒绝时值为 null、质量为 Rejected，
+    /// 而不会污染用于通道下发和虚拟节点计算的有效快照。
+    /// </summary>
+    public List<CollectedData> GetDeviceRealtimeData(int deviceId) =>
+        _latestObservedSnapshot.Values.Where(x => x.Data.DeviceId == deviceId).Select(x => x.Data).ToList();
 
     public Task OverrideDataPointValueAsync(DataPoint dataPoint, object? value, string deviceCode, DataQuality? quality = null)
     {
@@ -405,6 +416,44 @@ public class DataCollectionService
                     var consecutiveReadFailures = 0;
                     state.ResetReadFailureWindow();
 
+                    bool HandleReadFailure(Exception error)
+                    {
+                        consecutiveReadFailures++;
+                        state.MarkReadFailure(error.Message, consecutiveReadFailures);
+
+                        _logger.LogError(
+                            error,
+                            "设备 [{DeviceName}] 读取失败，第 {FailureCount}/{FailureThreshold} 次连续失败",
+                            device.Name,
+                            consecutiveReadFailures,
+                            readFailureThreshold);
+
+                        if (consecutiveReadFailures >= readFailureThreshold)
+                        {
+                            state.SetStatus(
+                                DeviceRuntimeStatus.Reconnecting,
+                                $"连续读取失败达到阈值 {readFailureThreshold}，准备重连");
+
+                            _logger.LogWarning("设备 [{DeviceName}] 读取失败达到阈值，准备重连", device.Name);
+                            return true;
+                        }
+
+                        if (state.ShouldReconnectByFailureRate(readFailureWindowSize, readFailureRateThreshold))
+                        {
+                            state.SetStatus(
+                                DeviceRuntimeStatus.Reconnecting,
+                                $"读取失败比例达到 {state.ReadFailureRatePercent:F0}% ，准备重连");
+
+                            _logger.LogWarning(
+                                "设备 [{DeviceName}] 读取失败比例达到阈值，当前失败率：{FailureRate:F2}%",
+                                device.Name,
+                                state.ReadFailureRatePercent);
+                            return true;
+                        }
+
+                        return false;
+                    }
+
                     try
                     {
                         while (!cts.Token.IsCancellationRequested)
@@ -421,12 +470,37 @@ public class DataCollectionService
                                 continue;
                             }
 
+                            CancellationTokenSource? readTimeoutCts = null;
                             try
                             {
                                 // 采集策略内部负责协议读写，本层只接收结果并写入统一快照。
-                                await strategy.ReadAsync(currentPoints, SetDataSnapshot, cts.Token);
+                                var readPoints = currentPoints.ToList();
+                                var readTimeoutMs = await _ruleEngine.GetReadTimeoutMsAsync(
+                                    device.Id,
+                                    readPoints.Select(point => point.Id).ToArray());
+                                readTimeoutCts = readTimeoutMs.HasValue
+                                    ? CancellationTokenSource.CreateLinkedTokenSource(cts.Token)
+                                    : null;
+                                if (readTimeoutCts != null)
+                                    readTimeoutCts.CancelAfter(readTimeoutMs!.Value);
+
+                                var readCancellationToken = readTimeoutCts?.Token ?? cts.Token;
+                                await strategy.ReadAsync(
+                                    readPoints,
+                                    collectedData =>
+                                    {
+                                        collectedData.ReadBatchSize = readPoints.Count;
+                                        SetDataSnapshot(collectedData);
+                                    },
+                                    readCancellationToken);
                                 consecutiveReadFailures = 0;
                                 state.MarkReadSuccess();
+                            }
+                            catch (OperationCanceledException ex)
+                                when (!cts.Token.IsCancellationRequested && readTimeoutCts?.IsCancellationRequested == true)
+                            {
+                                if (HandleReadFailure(new TimeoutException("规则配置的读取超时", ex)))
+                                    break;
                             }
                             catch (OperationCanceledException)
                             {
@@ -434,38 +508,12 @@ public class DataCollectionService
                             }
                             catch (Exception ex)
                             {
-                                consecutiveReadFailures++;
-                                state.MarkReadFailure(ex.Message, consecutiveReadFailures);
-
-                                _logger.LogError(
-                                    ex,
-                                    "设备 [{DeviceName}] 读取失败，第 {FailureCount}/{FailureThreshold} 次连续失败",
-                                    device.Name,
-                                    consecutiveReadFailures,
-                                    readFailureThreshold);
-
-                                if (consecutiveReadFailures >= readFailureThreshold)
-                                {
-                                    state.SetStatus(
-                                        DeviceRuntimeStatus.Reconnecting,
-                                        $"连续读取失败达到阈值 {readFailureThreshold}，准备重连");
-
-                                    _logger.LogWarning("设备 [{DeviceName}] 连续读取失败达到阈值，准备重连", device.Name);
+                                if (HandleReadFailure(ex))
                                     break;
-                                }
-
-                                if (state.ShouldReconnectByFailureRate(readFailureWindowSize, readFailureRateThreshold))
-                                {
-                                    state.SetStatus(
-                                        DeviceRuntimeStatus.Reconnecting,
-                                        $"读取失败比例达到 {state.ReadFailureRatePercent:F0}% ，准备重连");
-
-                                    _logger.LogWarning(
-                                        "设备 [{DeviceName}] 读取失败比例达到阈值，当前失败率：{FailureRate:F2}%",
-                                        device.Name,
-                                        state.ReadFailureRatePercent);
-                                    break;
-                                }
+                            }
+                            finally
+                            {
+                                readTimeoutCts?.Dispose();
                             }
 
                             var elapsed = (DateTime.UtcNow - cycleStart).TotalMilliseconds;
@@ -589,12 +637,14 @@ public class DataCollectionService
             if (device == null)
             {
                 _deviceDataPoints.TryRemove(deviceId, out _);
+                ClearDeviceSnapshotData(deviceId);
                 return;
             }
 
             var enabledPoints = device.DataPoints
                 .Where(dp => dp.IsEnabled)
                 .ToList();
+            ReconcileDeviceDataPoints(deviceId, enabledPoints);
             _deviceDataPoints[deviceId] = enabledPoints;
 
             if (device.IsEnabled && !IsDeviceCollecting(deviceId))
@@ -689,6 +739,14 @@ public class DataCollectionService
         foreach (var key in keysToRemove)
             _dataSnapshot.TryRemove(key, out _);
 
+        var observedKeysToRemove = _latestObservedSnapshot
+            .Where(kvp => kvp.Value.Data.DeviceId == deviceId)
+            .Select(kvp => kvp.Key)
+            .ToList();
+
+        foreach (var key in observedKeysToRemove)
+            _latestObservedSnapshot.TryRemove(key, out _);
+
         _logger.LogDebug("设备 ID={DeviceId} 的快照数据已清理，移除 {Count} 个数据点", deviceId, keysToRemove.Count);
 
         var tagKeysToRemove = _tagIndex
@@ -700,8 +758,43 @@ public class DataCollectionService
             _tagIndex.TryRemove(tagKey, out _);
     }
 
+    private void ReconcileDeviceDataPoints(int deviceId, IReadOnlyList<DataPoint> currentPoints)
+    {
+        if (!_deviceDataPoints.TryGetValue(deviceId, out var previousPoints))
+            return;
+
+        var currentById = currentPoints.ToDictionary(point => point.Id);
+        foreach (var previous in previousPoints)
+        {
+            if (!currentById.TryGetValue(previous.Id, out var current) || HasSamplingConfigurationChanged(previous, current))
+                RemoveDataPointSnapshot(previous.Id);
+        }
+    }
+
+    private static bool HasSamplingConfigurationChanged(DataPoint previous, DataPoint current) =>
+        !string.Equals(previous.Tag, current.Tag, StringComparison.Ordinal) ||
+        !string.Equals(previous.Address, current.Address, StringComparison.Ordinal) ||
+        previous.DataType != current.DataType ||
+        previous.RegisterLength != current.RegisterLength ||
+        previous.ModbusSlaveId != current.ModbusSlaveId ||
+        previous.ModbusFunctionCode != current.ModbusFunctionCode ||
+        previous.ModbusByteOrder != current.ModbusByteOrder ||
+        previous.ModbusBitIndex != current.ModbusBitIndex ||
+        !string.Equals(previous.Unit, current.Unit, StringComparison.Ordinal);
+
+    private void RemoveDataPointSnapshot(int dataPointId)
+    {
+        _dataSnapshot.TryRemove(dataPointId, out _);
+        _latestObservedSnapshot.TryRemove(dataPointId, out _);
+
+        foreach (var tag in _tagIndex.Where(pair => pair.Value == dataPointId).Select(pair => pair.Key).ToList())
+            _tagIndex.TryRemove(tag, out _);
+    }
+
     private async Task SetDataSnapshotAsync(CollectedData collectedData, bool replaceExisting = false)
     {
+        var observedData = CloneCollectedData(collectedData);
+
         if (collectedData.DataPointId >= 0 && (!replaceExisting || collectedData.Quality == DataQuality.Good))
         {
             try
@@ -711,6 +804,10 @@ public class DataCollectionService
 
                 if (ruleResult.ShouldReject)
                 {
+                    // 拒绝只阻止下发，页面保留该点位的质量状态，但不展示未经允许使用的值。
+                    observedData.Value = null;
+                    observedData.Quality = ruleResult.Quality;
+                    SetLatestObservedSnapshot(observedData);
                     _logger.LogDebug("数据点 {Tag} 被规则拒绝：{Error}", collectedData.Tag, ruleResult.ErrorMessage);
                     return;
                 }
@@ -718,13 +815,18 @@ public class DataCollectionService
                 if (ruleResult.Value != null)
                     collectedData.Value = ruleResult.Value;
 
-                collectedData.Quality = ruleResult.Quality;
+                // 规则只处理值和规则结果质量；采集本身已经标记为 Bad/Uncertain 时，
+                // 不能因为规则执行成功就把原始质量提升为 Good。
+                if (collectedData.Quality == DataQuality.Good)
+                    collectedData.Quality = ruleResult.Quality;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "规则执行失败，数据点：{Tag}", collectedData.Tag);
             }
         }
+
+        SetLatestObservedSnapshot(collectedData);
 
         _tagIndex[collectedData.Tag] = collectedData.DataPointId;
 
@@ -751,6 +853,28 @@ public class DataCollectionService
             };
         }
     }
+
+    private void SetLatestObservedSnapshot(CollectedData collectedData)
+    {
+        _latestObservedSnapshot[collectedData.DataPointId] = new TimestampedData
+        {
+            Data = CloneCollectedData(collectedData),
+            LastUpdateTime = collectedData.Value != null ? DateTime.UtcNow : DateTime.MinValue
+        };
+    }
+
+    private static CollectedData CloneCollectedData(CollectedData data) => new()
+    {
+        Tag = data.Tag,
+        DataPointId = data.DataPointId,
+        DeviceId = data.DeviceId,
+        DeviceName = data.DeviceName,
+        Value = data.Value,
+        Unit = data.Unit,
+        Quality = data.Quality,
+        Timestamp = data.Timestamp,
+        ReadBatchSize = data.ReadBatchSize
+    };
 
     private void SetDataSnapshot(CollectedData collectedData)
     {

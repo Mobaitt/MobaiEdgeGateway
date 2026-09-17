@@ -2,7 +2,7 @@
   <div class="datapoints-view page-content page-enter">
     <div class="page-header">
       <div class="header-left">
-        <el-button text :icon="ArrowLeft" class="back-btn" @click="router.back()">返回设备列表</el-button>
+        <el-button :icon="ArrowLeft" class="back-btn" @click="router.back()">返回设备列表</el-button>
         <div class="title-block">
           <h1 class="page-title">数据点管理</h1>
           <div class="device-tag mono">{{ route.query.deviceName || `设备 #${route.params.id}` }}</div>
@@ -48,6 +48,7 @@
             <el-option label="Good" value="Good" />
             <el-option label="Bad" value="Bad" />
             <el-option label="Uncertain" value="Uncertain" />
+            <el-option label="Rejected" value="Rejected" />
           </el-select>
           <el-select v-model="filterType" clearable placeholder="点位类型" style="width: 140px">
             <el-option label="全部" value="" />
@@ -57,12 +58,15 @@
         </div>
         <div class="toolbar-right">
           <el-button class="eg-circle-action" :icon="Refresh" circle :loading="refreshing" @click="refreshData" />
-          <el-dropdown class="eg-split-action" split-button type="primary" @click="openCreate">
+          <el-dropdown class="eg-split-action" popper-class="datapoints-dropdown-popper" split-button type="primary" @click="openCreate">
             <el-icon><Plus /></el-icon>
             新增数据点
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item @click="openCreate">普通数据点</el-dropdown-item>
+                <el-dropdown-item @click="openCreate">
+                  <el-icon><DataLine /></el-icon>
+                  普通数据点
+                </el-dropdown-item>
                 <el-dropdown-item @click="openVirtualNodeCreate">
                   <el-icon><Cpu /></el-icon>
                   虚拟节点
@@ -70,110 +74,45 @@
               </el-dropdown-menu>
             </template>
           </el-dropdown>
+          <el-button class="template-action" @click="saveAsTemplate" :disabled="normalDataPointCount === 0">保存为模板</el-button>
+          <el-select
+            v-model="selectedTemplateId"
+            class="template-select"
+            placeholder="套用模板"
+            :disabled="templates.length === 0"
+            popper-class="datapoints-dropdown-popper"
+            @change="handleTemplateSelection"
+          >
+            <el-option v-for="template in templates" :key="template.id" :label="template.name" :value="template.id">
+              <span class="template-option-name">{{ template.name }}</span>
+              <span class="template-option-count">{{ template.pointCount }} 点</span>
+            </el-option>
+          </el-select>
         </div>
       </div>
 
       <div class="table-wrap">
-        <el-table :data="filteredDataPoints" v-loading="loading" row-key="id">
-          <el-table-column type="index" label="#" width="50" align="center" />
-
-          <el-table-column prop="tag" label="Tag" min-width="220">
-            <template #default="{ row }">
-              <span class="mono tag-text">{{ row.tag }}</span>
-              <el-tag v-if="row.isVirtual" size="small" type="warning" style="margin-left: 6px">虚拟</el-tag>
-            </template>
-          </el-table-column>
-
-          <el-table-column prop="name" label="名称" width="140" />
-
-          <el-table-column prop="address" label="地址" width="120">
-            <template #default="{ row }">
-              <span v-if="!row.isVirtual" class="mono addr-text">
-                {{ row.address }}<span v-if="row.modbusBitIndex !== null && row.modbusBitIndex !== undefined"> · Bit{{ row.modbusBitIndex }}</span>
-              </span>
-              <span v-else class="addr-text">表达式</span>
-            </template>
-          </el-table-column>
-
-          <el-table-column prop="dataType" label="类型" width="180" align="center">
-            <template #default="{ row }">
-              <span class="badge info mono">{{ getDataTypeLabel(row) }}</span>
-            </template>
-          </el-table-column>
-
-          <el-table-column prop="unit" label="单位" width="80" align="center" />
-
-          <el-table-column label="实时值" width="150" align="center">
-            <template #default="{ row }">
-              <span
-                v-if="getRealtimeData(row)"
-                class="mono realtime-value"
-                :class="getQualityClass(getRealtimeData(row)!.quality)"
-              >
-                {{ formatRowValue(row) }}
-                <span v-if="row.unit" class="value-unit">{{ row.unit }}</span>
-              </span>
-              <span v-else class="empty-text">-</span>
-            </template>
-          </el-table-column>
-
-          <el-table-column label="质量" width="100" align="center">
-            <template #default="{ row }">
-              <span v-if="getRealtimeData(row)" class="badge mono" :class="getQualityClass(getRealtimeData(row)!.quality)">
-                {{ getRealtimeData(row)!.quality }}
-              </span>
-              <span v-else class="empty-text">-</span>
-            </template>
-          </el-table-column>
-
-          <el-table-column label="启用" width="80" align="center">
-            <template #default="{ row }">
-              <el-switch
-                v-model="row.isEnabled"
-                size="small"
-                active-color="#38dcc4"
-                inactive-color="#999"
-                @change="row.isVirtual ? toggleVirtualNode(row) : toggleDataPoint(row)"
-              />
-            </template>
-          </el-table-column>
-
-          <el-table-column prop="createdAt" label="创建时间" width="180">
-            <template #default="{ row }">
-              <span class="mono time-text">{{ formatDateTime(row.createdAt) }}</span>
-            </template>
-          </el-table-column>
-
-          <el-table-column label="操作" width="240" align="right" fixed="right">
-            <template #default="{ row }">
-              <el-button
-                v-if="!row.isVirtual && row.isControllable"
-                size="small"
-                text
-                type="warning"
-                :disabled="!row.isEnabled || !deviceEnabled"
-                @click="openControl(row)"
-              >
-                发送指令
-              </el-button>
-              <el-button v-if="row.isVirtual" size="small" text type="success" @click="openVirtualNodeEdit(row)">编辑</el-button>
-              <el-button v-else size="small" text type="primary" @click="openEdit(row)">编辑</el-button>
-              <el-button size="small" text type="danger" @click="row.isVirtual ? confirmDeleteVirtualNode(row) : confirmDelete(row)">删除</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-
-        <div class="pagination-bar eg-pagination-bar">
-          <el-pagination
-            v-model:current-page="pagination.page"
-            v-model:page-size="pagination.pageSize"
-            :page-sizes="[20, 50, 100, 200]"
-            :total="pagination.total"
-            layout="total, sizes, prev, pager, next, jumper"
-            @size-change="fetchDataPoints"
-            @current-change="fetchDataPoints"
-          />
-        </div>
+        <DataPointTable
+          :data="filteredDataPoints"
+          :loading="loading"
+          :device-enabled="deviceEnabled"
+          :realtime-data="realtimeData"
+          :page="pagination.page"
+          :page-size="pagination.pageSize"
+          :total="pagination.total"
+          :get-data-type-label="getDataTypeLabel"
+          :format-row-value="formatRowValue"
+          :get-quality-class="getQualityClass"
+          @toggle-data-point="handleTableToggleDataPoint"
+          @toggle-virtual="handleTableToggleVirtual"
+          @control="openControl"
+          @edit="handleTableEdit"
+          @edit-virtual="openVirtualNodeEdit"
+          @delete="handleTableDelete"
+          @delete-virtual="confirmDeleteVirtualNode"
+          @size-change="handleTableSizeChange"
+          @page-change="handleTablePageChange"
+        />
       </div>
     </div>
 
@@ -214,7 +153,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Cpu, Plus, Refresh } from '@element-plus/icons-vue'
+import { ArrowLeft, Cpu, DataLine, Plus, Refresh } from '@element-plus/icons-vue'
 import {
   createDataPoint,
   controlDataPoint,
@@ -233,11 +172,13 @@ import {
 } from '@/api/virtualNode'
 import { getDataValueTypes, getModbusByteOrders } from '@/api/enums'
 import { CollectionProtocol, formatDateTime } from '@/api/constants'
-import type { DataPointItem, RealtimeDataItem } from '@/types'
+import type { DataPointItem, DataPointTemplateItem, RealtimeDataItem } from '@/types'
+import { applyDataPointTemplate, createDataPointTemplateFromDevice, getDataPointTemplates } from '@/api/dataPointTemplate'
 import type { VirtualDataPoint } from '@/types/virtualNode'
 import DataPointDialog from '@/dialogs/dataPoint/DataPointDialog.vue'
 import DataPointControlDialog from '@/dialogs/dataPoint/DataPointControlDialog.vue'
 import VirtualNodeDialog from '@/dialogs/dataPoint/VirtualNodeDialog.vue'
+import DataPointTable from '@/components/DataPointTable.vue'
 
 type DataPointWithVirtual = (DataPointItem | VirtualDataPoint) & { isVirtual?: boolean }
 
@@ -306,8 +247,11 @@ const virtualNodeSubmitting = ref(false)
 const controlDialogVisible = ref(false)
 const controllingDataPoint = ref<DataPointItem | null>(null)
 const controlSubmitting = ref(false)
+const templates = ref<DataPointTemplateItem[]>([])
+const selectedTemplateId = ref<number | null>(null)
 
 const enabledCount = computed(() => dataPoints.value.filter(item => item.isEnabled).length)
+const normalDataPointCount = computed(() => dataPoints.value.filter(item => !item.isVirtual).length)
 
 const filteredDataPoints = computed(() => {
   return dataPoints.value.filter(item => {
@@ -350,6 +294,12 @@ const fetchDevice = async () => {
   deviceEnabled.value = device.isEnabled
   deviceProtocol.value = device.protocolValue ?? device.protocol ?? null
   deviceCode.value = device.code ?? ''
+  await fetchTemplates()
+}
+
+const fetchTemplates = async () => {
+  const res = await getDataPointTemplates(deviceProtocol.value ?? undefined)
+  templates.value = ((res as { data?: DataPointTemplateItem[] }).data || [])
 }
 
 const fetchDataPoints = async () => {
@@ -388,15 +338,15 @@ const fetchRealtimeData = async () => {
   const snapshot = { ...realtimeData.value }
   let changed = false
 
-  dataList.forEach(item => {
-    if (!item.tag) return
+  for (const item of dataList) {
+    if (!item.tag) continue
 
     const old = snapshot[item.tag]
     if (!old || old.value !== item.value || old.quality !== item.quality || old.timestamp !== item.timestamp) {
       snapshot[item.tag] = item
       changed = true
     }
-  })
+  }
 
   if (changed) {
     realtimeData.value = snapshot
@@ -435,12 +385,55 @@ const handleFilterChange = () => {
   void fetchDataPoints()
 }
 
+const saveAsTemplate = async () => {
+  try {
+    const { value: name } = await ElMessageBox.prompt('模板会保存当前设备的全部普通数据点配置。', '保存点位模板', {
+      confirmButtonText: '保存',
+      cancelButtonText: '取消',
+      inputPlaceholder: '例如：标准水泵点位',
+      inputValidator: value => value.trim().length > 0 || '请输入模板名称'
+    })
+    await createDataPointTemplateFromDevice(deviceId.value, { name: name.trim() })
+    await fetchTemplates()
+    ElMessage.success('模板已保存')
+  } catch {
+    // 用户取消时不提示错误。
+  }
+}
+
+const applyTemplate = async (templateId: number) => {
+  const template = templates.value.find(item => item.id === templateId)
+  if (!template) return
+
+  try {
+    await ElMessageBox.confirm(
+      `将套用模板“${template.name}”，同名 Tag 会跳过，是否继续？`,
+      '套用点位模板',
+      { confirmButtonText: '套用', cancelButtonText: '取消', type: 'warning' }
+    )
+    const res = await applyDataPointTemplate(deviceId.value, templateId)
+    const result = (res as { data?: { created: number; overwritten: number; skipped: number } }).data
+    await fetchDataPoints()
+    await fetchRealtimeData()
+    ElMessage.success(`模板已套用：新增 ${result?.created ?? 0}，跳过 ${result?.skipped ?? 0}`)
+  } catch {
+    // 用户取消时不提示错误。
+  }
+}
+
+const handleTemplateSelection = async (templateId: number | null) => {
+  if (templateId === null || templateId === undefined) return
+  selectedTemplateId.value = null
+  await applyTemplate(templateId)
+}
+
 const getRealtimeData = (row: DataPointWithVirtual): RealtimeDataItem | null => realtimeData.value[row.tag] || null
 
 const getQualityClass = (quality: string) => {
   if (quality === 'Good') return 'good'
   if (quality === 'Bad') return 'bad'
   if (quality === 'Uncertain') return 'uncertain'
+  if (quality === 'Rejected') return 'rejected'
   return ''
 }
 
@@ -681,6 +674,33 @@ const toggleVirtualNode = async (row: DataPointWithVirtual) => {
   }
 }
 
+const handleTableToggleDataPoint = (row: DataPointWithVirtual) => {
+  if (!row.isVirtual) void toggleDataPoint(row as DataPointItem)
+}
+
+const handleTableToggleVirtual = (row: DataPointWithVirtual) => {
+  if (row.isVirtual) void toggleVirtualNode(row)
+}
+
+const handleTableEdit = (row: DataPointWithVirtual) => {
+  if (!row.isVirtual) openEdit(row as DataPointItem)
+}
+
+const handleTableDelete = (row: DataPointWithVirtual) => {
+  if (!row.isVirtual) confirmDelete(row as DataPointItem)
+}
+
+const handleTableSizeChange = (value: number) => {
+  pagination.value.pageSize = value
+  pagination.value.page = 1
+  void fetchDataPoints()
+}
+
+const handleTablePageChange = (value: number) => {
+  pagination.value.page = value
+  void fetchDataPoints()
+}
+
 const handleDialogClose = () => {
   editingDataPoint.value = null
 }
@@ -748,7 +768,20 @@ onUnmounted(() => {
 }
 
 .back-btn {
-  padding: 0 !important;
+  height: 34px;
+  padding: 0 11px !important;
+  border: 1px solid rgba(120, 155, 190, .2) !important;
+  border-radius: 9px;
+  background: var(--action-bg) !important;
+  color: var(--action-text) !important;
+  transition: all .2s ease;
+}
+
+.back-btn:hover {
+  border-color: var(--action-border-hover) !important;
+  background: var(--action-bg-hover) !important;
+  color: var(--action-text-hover) !important;
+  transform: translateX(-1px);
 }
 
 .page-title {
@@ -801,11 +834,7 @@ onUnmounted(() => {
   font-size: 14px;
 }
 
-.s-label,
-.addr-text,
-.time-text,
-.empty-text,
-.value-unit {
+.s-label {
   color: var(--text-muted);
 }
 
@@ -825,43 +854,77 @@ onUnmounted(() => {
   gap: 10px;
 }
 
+.template-action.el-button {
+  height: 38px;
+  padding: 0 14px;
+  border: 1px solid rgba(120, 155, 190, .22) !important;
+  border-radius: 10px;
+  background: var(--action-bg) !important;
+  color: var(--action-text) !important;
+  box-shadow: none !important;
+  transition: all .2s ease;
+}
+
+.template-action.el-button:hover:not(:disabled) {
+  border-color: var(--action-border-hover) !important;
+  background: var(--action-bg-hover) !important;
+  color: var(--action-text-hover) !important;
+  transform: translateY(-1px);
+}
+
+.template-action.el-button:disabled {
+  opacity: .45;
+}
+
+.template-select {
+  width: 126px;
+}
+
+.template-select :deep(.el-select__wrapper) {
+  min-height: 38px;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid rgba(120, 155, 190, .22) !important;
+  border-radius: 10px;
+  background: var(--action-bg) !important;
+  box-shadow: none !important;
+  transition: all .2s ease;
+}
+
+.template-select :deep(.el-select__wrapper:hover),
+.template-select :deep(.el-select__wrapper.is-focused) {
+  border-color: var(--action-border-hover) !important;
+  background: var(--action-bg-hover) !important;
+  box-shadow: 0 0 0 2px rgba(56, 220, 196, .04) !important;
+}
+
+.template-select :deep(.el-select__placeholder) {
+  color: var(--text-secondary);
+}
+
+.template-select :deep(.el-select__caret) {
+  color: var(--text-muted);
+}
+
+.template-option-name {
+  color: var(--text-primary);
+}
+
+.template-option-count {
+  float: right;
+  margin-left: 24px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
 .table-wrap {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-
-.pagination-bar {
-  padding: 0;
-}
-
-.tag-text {
-  color: var(--cyan);
-}
-
-.realtime-value {
-  font-weight: 600;
-}
-
-.realtime-value.good,
-.badge.good {
-  color: var(--text-success);
-}
-
-.realtime-value.bad,
-.badge.bad {
-  color: var(--text-danger);
-}
-
-.realtime-value.uncertain,
-.badge.uncertain {
-  color: var(--text-warn);
-}
-
-.badge.info {
-  color: var(--text-secondary);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .12);
 }
 
 </style>

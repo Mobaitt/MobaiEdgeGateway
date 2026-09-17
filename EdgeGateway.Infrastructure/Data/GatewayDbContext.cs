@@ -28,6 +28,8 @@ public class GatewayDbContext : DbContext
     /// <summary>虚拟数据点表</summary>
     public DbSet<VirtualDataPoint> VirtualDataPoints => Set<VirtualDataPoint>();
 
+    public DbSet<DataPointTemplate> DataPointTemplates => Set<DataPointTemplate>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -155,6 +157,16 @@ public class GatewayDbContext : DbContext
                   .WithOne(m => m.VirtualDataPoint)
                   .HasForeignKey(m => m.VirtualDataPointId)
                   .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<DataPointTemplate>(entity =>
+        {
+            entity.ToTable("DataPointTemplates");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Description).HasMaxLength(500);
+            entity.Property(e => e.PointsJson).IsRequired();
+            entity.HasIndex(e => e.Name).IsUnique();
         });
 
         // ============ 种子数据（测试用）============

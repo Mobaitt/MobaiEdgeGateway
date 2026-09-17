@@ -4,7 +4,7 @@
       <el-button class="eg-primary-action" type="primary" :icon="Plus" @click="openCreate">新增设备</el-button>
     </PageHeader>
 
-    <div class="toolbar">
+    <div class="toolbar eg-toolbar-surface">
       <el-input
         v-model="searchText"
         placeholder="搜索设备名称 / 编码..."
@@ -20,7 +20,7 @@
           :value="o.value"
         />
       </el-select>
-      <el-button :icon="Refresh" circle title="刷新数据" @click="manualRefresh" />
+      <el-button class="eg-circle-action" :icon="Refresh" circle title="刷新数据" @click="manualRefresh" />
       <span class="total-hint mono">共 {{ filteredDevices.length }} 台设备</span>
     </div>
 
@@ -357,7 +357,9 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-height: 58px;
   margin-bottom: 20px;
+  padding: 10px 14px;
 }
 
 .total-hint {

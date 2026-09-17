@@ -12,6 +12,7 @@
         clearable
         style="width: 160px"
         @change="loadRules"
+        @clear="clearRuleTypeFilter"
       >
         <el-option label="限制规则" :value="0" />
         <el-option label="转换规则" :value="1" />
@@ -22,7 +23,7 @@
     </div>
 
     <div class="table-wrap">
-      <el-table :data="rules" v-loading="loading" stripe>
+      <AppTable :data="rules" :loading="loading" stripe>
         <el-table-column prop="id" label="ID" width="60" />
         <el-table-column prop="name" label="规则名称" min-width="150" />
         <el-table-column prop="ruleType" label="类型" width="100">
@@ -40,7 +41,7 @@
                 :key="row.dataPointIds[index]"
                 size="small"
               >
-                {{ name }}
+                {{ getDataPointLabel(row.dataPointIds[index], name) }}
               </el-tag>
             </div>
             <span v-else style="color: var(--text-muted);">全局规则</span>
@@ -72,7 +73,7 @@
             </el-button>
           </template>
         </el-table-column>
-      </el-table>
+      </AppTable>
     </div>
 
     <!-- 创建/编辑规则弹窗 -->
@@ -83,6 +84,7 @@
       :data-points="dataPoints"
       :submitting="submitting"
       @submit="handleSubmit"
+      @device-change="handleRuleDeviceChange"
       @close="handleDialogClose"
       @show-help="showConfigHelp"
     />
@@ -96,26 +98,30 @@
 </template>
 
 <script setup lang="ts">
-import {onMounted, reactive, ref} from 'vue'
+import {computed, onMounted, reactive, ref} from 'vue'
 import {ElMessage, ElMessageBox} from 'element-plus'
 import {Delete, Edit, Plus} from '@element-plus/icons-vue'
 import PageHeader from '@/components/PageHeader.vue'
+import AppTable from '@/components/AppTable.vue'
 import RuleDialog from '@/dialogs/rule/RuleDialog.vue'
 import RuleHelpDialog from '@/dialogs/rule/RuleHelpDialog.vue'
 import type {CreateRuleRequest, Rule, RuleType, UpdateRuleRequest} from '@/types/rule'
 import type {DataPoint, Device} from '@/types/device'
 import {createRule, deleteRule as deleteRuleApi, getRules, toggleRule, updateRule} from '@/api/rule'
-import {getAllDataPoints, getDevices} from '@/api/device'
+import {getDataPoints, getDevices} from '@/api/device'
 
 const loading = ref(false)
 const submitting = ref(false)
-const rules = ref<Rule[]>([])
+const allRules = ref<Rule[]>([])
 const devices = ref<Device[]>([])
 const dataPoints = ref<DataPoint[]>([])
 const filterType = ref<RuleType | null>(null)
 const dialogVisible = ref(false)
 const helpDialogVisible = ref(false)
 const editingRule = ref<Rule | null>(null)
+const rules = computed(() => filterType.value == null
+  ? allRules.value
+  : allRules.value.filter(rule => rule.ruleType === filterType.value))
 
 const form = reactive<CreateRuleRequest>({
   name: '',
@@ -140,18 +146,19 @@ const getRuleTypeText = (type: RuleType) => {
   return texts[type] || '未知'
 }
 
+const getDataPointLabel = (dataPointId: number, fallbackName?: string) => {
+  const point = dataPoints.value.find(item => item.id === dataPointId)
+  if (!point) return fallbackName || `数据点 #${dataPointId}`
+
+  const device = devices.value.find(item => item.id === point.deviceId)
+  return device ? `${device.name}.${point.name}` : point.name
+}
+
 const loadRules = async () => {
   loading.value = true
   try {
-    let allRules: Rule[]
-    if (filterType.value !== null) {
-      const response = await getRules()
-      allRules = response.data.filter(r => r.ruleType === filterType.value)
-    } else {
-      const response = await getRules()
-      allRules = response.data
-    }
-    rules.value = allRules
+    const response = await getRules()
+    allRules.value = response.data
   } catch (error) {
     ElMessage.error('加载规则失败')
   } finally {
@@ -163,19 +170,44 @@ const loadDevicesAndPoints = async () => {
   try {
     const devicesRes = await getDevices()
     devices.value = devicesRes.data
-    const pointsRes = await getAllDataPoints()
-    dataPoints.value = pointsRes.data
   } catch (error) {
-    console.error('加载设备和数据点失败', error)
+    console.error('加载设备失败', error)
   }
+}
+
+const loadDataPointsForDevice = async (deviceId: number | null) => {
+  if (deviceId === null) {
+    dataPoints.value = []
+    return
+  }
+
+  try {
+    const response = await getDataPoints(deviceId)
+    dataPoints.value = response.data
+  } catch (error) {
+    dataPoints.value = []
+    ElMessage.error('加载设备数据点失败')
+  }
+}
+
+const handleRuleDeviceChange = (deviceId: number | null) => {
+  void loadDataPointsForDevice(deviceId)
+}
+
+const clearRuleTypeFilter = () => {
+  // Element Plus 清空时可能将 v-model 设为 undefined，统一归一化为 null，
+  // 确保计算列表回到完整规则集合。
+  filterType.value = null
 }
 
 const openCreateDialog = () => {
   editingRule.value = null
+  dataPoints.value = []
   dialogVisible.value = true
 }
 
-const openEditDialog = (rule: Rule) => {
+const openEditDialog = async (rule: Rule) => {
+  await loadDataPointsForDevice(rule.deviceId)
   editingRule.value = rule
   dialogVisible.value = true
 }
@@ -245,6 +277,10 @@ onMounted(() => {
 
 <style scoped lang="scss">
 .rules-view {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+
   .toolbar {
     display: flex;
     align-items: center;
@@ -262,10 +298,20 @@ onMounted(() => {
   }
 
   .table-wrap {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
     background: var(--bg-card);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-lg);
     overflow: hidden;
   }
+
+  .table-wrap :deep(.app-table) {
+    flex: 1;
+    min-height: 0;
+  }
 }
+
 </style>

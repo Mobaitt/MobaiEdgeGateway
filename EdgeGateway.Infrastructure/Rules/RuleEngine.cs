@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
+using NCalc;
 
 namespace EdgeGateway.Infrastructure.Rules;
 
@@ -44,6 +45,7 @@ public class RuleEngine : IRuleEngine
 
     // 上一次的值（用于变化率校验）
     private readonly ConcurrentDictionary<int, (object? Value, DateTime Timestamp)> _lastValues = new();
+    private Func<string, object?>? _getDataSnapshot;
 
     public RuleEngine(
         IDbContextFactory<GatewayDbContext> dbContextFactory,
@@ -56,6 +58,43 @@ public class RuleEngine : IRuleEngine
 
         // 从配置读取规则引擎参数
         _cacheExpiration = TimeSpan.FromMinutes(_options.Rules.CacheExpirationMinutes);
+    }
+
+    public void SetDataSnapshotGetter(Func<string, object?> getDataSnapshot)
+    {
+        _getDataSnapshot = getDataSnapshot ?? throw new ArgumentNullException(nameof(getDataSnapshot));
+    }
+
+    public async Task<int?> GetReadTimeoutMsAsync(int deviceId, IReadOnlyCollection<int> dataPointIds)
+    {
+        await LoadRulesCacheAsync();
+
+        var rules = new List<DataPointRule>(_globalRulesCache);
+        if (_deviceRulesCache.TryGetValue(deviceId, out var deviceRules))
+            rules.AddRange(deviceRules);
+
+        foreach (var dataPointId in dataPointIds)
+        {
+            if (_dataPointRulesCache.TryGetValue(dataPointId, out var pointRules))
+                rules.AddRange(pointRules);
+        }
+
+        var timeouts = new List<int>();
+        foreach (var rule in rules.Where(rule => rule.RuleType == Domain.Enums.RuleType.Limit))
+        {
+            try
+            {
+                var timeout = JsonConvert.DeserializeObject<LimitRuleConfig>(rule.RuleConfig)?.ReadTimeoutMs ?? 0;
+                if (timeout > 0)
+                    timeouts.Add(timeout);
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogWarning(ex, "规则 [{RuleName}] 的限制配置无效，忽略读取超时设置", rule.Name);
+            }
+        }
+
+        return timeouts.Count > 0 ? timeouts.Min() : null;
     }
 
     /// <summary>
@@ -218,7 +257,10 @@ public class RuleEngine : IRuleEngine
                         _logger.LogWarning("规则 [{RuleName}] 拒绝数据：{Tag}, 值：{Value}, 原因：{Reason}",
                             rule.Name, data.Tag, currentValue, result.ErrorMessage);
 
-                        return RuleExecutionResult.Fail(result.ErrorMessage ?? "规则执行失败", shouldReject: true);
+                        return RuleExecutionResult.Fail(
+                            result.ErrorMessage ?? "规则执行失败",
+                            shouldReject: true,
+                            quality: DataQuality.Rejected);
                     }
 
                     if (rule.OnFailure == FailureAction.DefaultValue)
@@ -301,6 +343,29 @@ public class RuleEngine : IRuleEngine
         var config = JsonConvert.DeserializeObject<LimitRuleConfig>(rule.RuleConfig);
         if (config == null)
             return RuleExecutionResult.Ok(currentValue);
+
+        // MaxPollingRateMs 表示同一数据点两次通过规则的最小间隔。
+        if (config.MaxPollingRateMs > 0 && _lastValues.TryGetValue(data.DataPointId, out var lastValue))
+        {
+            var elapsedMs = (DateTime.UtcNow - lastValue.Timestamp).TotalMilliseconds;
+            if (elapsedMs < config.MaxPollingRateMs)
+            {
+                return RuleExecutionResult.Fail(
+                    $"采集间隔 {elapsedMs:F0}ms 小于限制 {config.MaxPollingRateMs}ms",
+                    shouldReject: rule.OnFailure == FailureAction.Reject,
+                    defaultValue: rule.OnFailure == FailureAction.DefaultValue ? GetDefaultValue(rule) : currentValue);
+            }
+        }
+
+        if (config.MaxDataPointsPerRead > 0 &&
+            data.ReadBatchSize.HasValue &&
+            data.ReadBatchSize.Value > config.MaxDataPointsPerRead)
+        {
+            return RuleExecutionResult.Fail(
+                $"本次读取包含 {data.ReadBatchSize.Value} 个数据点，超过限制 {config.MaxDataPointsPerRead}",
+                shouldReject: rule.OnFailure == FailureAction.Reject,
+                defaultValue: rule.OnFailure == FailureAction.DefaultValue ? GetDefaultValue(rule) : currentValue);
+        }
 
         // 数值范围限制
         if (config.MinValue.HasValue || config.MaxValue.HasValue)
@@ -393,11 +458,152 @@ public class RuleEngine : IRuleEngine
         CancellationToken cancellationToken)
     {
         var config = JsonConvert.DeserializeObject<CalculationRuleConfig>(rule.RuleConfig);
-        if (config == null)
+        if (config == null || config.CalculationType == Domain.Enums.CalculationType.Custom && string.IsNullOrWhiteSpace(config.Expression))
             return RuleExecutionResult.Ok(data.Value);
 
-        // 计算类规则目前保留扩展点，跨点位计算由虚拟节点引擎承担，避免两套计算职责重叠。
-        return RuleExecutionResult.Ok(data.Value);
+        var tags = config.SourceDataPointTags
+            .Where(tag => !string.IsNullOrWhiteSpace(tag))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        if (tags.Count == 0 && config.CalculationType == Domain.Enums.CalculationType.Custom)
+            tags = ParseCalculationDependencies(config.Expression);
+
+        if (tags.Count == 0)
+            return CalculationFailure(rule, "计算规则未配置参与计算的数据点");
+
+        var values = new Dictionary<string, object?>(StringComparer.Ordinal);
+        foreach (var tag in tags)
+        {
+            values[tag] = string.Equals(tag, data.Tag, StringComparison.Ordinal)
+                ? data.Value
+                : _getDataSnapshot?.Invoke(tag);
+        }
+
+        var missing = values.Where(item => item.Value == null).Select(item => item.Key).ToList();
+        if (missing.Count > 0 && config.CalculationType != Domain.Enums.CalculationType.Count)
+            return CalculationFailure(rule, $"计算依赖数据未就绪：{string.Join(", ", missing)}");
+
+        try
+        {
+            var numericValues = values.Values
+                .Where(value => value != null)
+                .Select(value => Convert.ToDouble(value))
+                .ToList();
+
+            object? result = config.CalculationType switch
+            {
+                Domain.Enums.CalculationType.Sum => numericValues.Sum(),
+                Domain.Enums.CalculationType.Average => numericValues.Count == 0 ? null : numericValues.Average(),
+                Domain.Enums.CalculationType.Max => numericValues.Count == 0 ? null : numericValues.Max(),
+                Domain.Enums.CalculationType.Min => numericValues.Count == 0 ? null : numericValues.Min(),
+                Domain.Enums.CalculationType.Count => numericValues.Count,
+                Domain.Enums.CalculationType.StandardDeviation => CalculateStandardDeviation(numericValues),
+                Domain.Enums.CalculationType.WeightedAverage => CalculateWeightedAverage(numericValues, config.Weights),
+                Domain.Enums.CalculationType.Custom => EvaluateCalculationExpression(config.Expression!, values),
+                _ => data.Value
+            };
+
+            if (result is null)
+                return CalculationFailure(rule, "计算结果为空");
+
+            if (result is double doubleResult)
+            {
+                var decimalPlaces = Math.Clamp(config.DecimalPlaces, 0, 12);
+                result = Math.Round(doubleResult, decimalPlaces);
+            }
+
+            return RuleExecutionResult.Ok(ConvertCalculationResult(result, config.ResultDataType));
+        }
+        catch (Exception ex)
+        {
+            return CalculationFailure(rule, $"计算规则执行失败：{ex.Message}");
+        }
+    }
+
+    private static RuleExecutionResult CalculationFailure(DataPointRule rule, string message)
+    {
+        return RuleExecutionResult.Fail(
+            message,
+            shouldReject: rule.OnFailure == FailureAction.Reject,
+            defaultValue: rule.OnFailure == FailureAction.DefaultValue ? GetDefaultValue(rule) : null);
+    }
+
+    private static List<string> ParseCalculationDependencies(string? expression)
+    {
+        if (string.IsNullOrWhiteSpace(expression))
+            return new List<string>();
+
+        var excluded = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "Math", "Abs", "Sqrt", "Sin", "Cos", "Tan", "Max", "Min", "Average", "Avg",
+            "Sum", "Count", "Round", "Floor", "Ceiling", "Pow", "Exp", "Log", "Log10",
+            "Sign", "true", "false", "null", "and", "or", "not", "if", "then", "else"
+        };
+
+        return System.Text.RegularExpressions.Regex.Matches(
+                expression,
+                @"\b([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\b")
+            .Select(match => match.Value)
+            .Where(tag => !excluded.Contains(tag))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static double CalculateStandardDeviation(IReadOnlyList<double> values)
+    {
+        if (values.Count == 0) return 0;
+        var average = values.Average();
+        return Math.Sqrt(values.Sum(value => Math.Pow(value - average, 2)) / values.Count);
+    }
+
+    private static object? ConvertCalculationResult(object? result, Domain.Enums.DataValueType dataType)
+    {
+        if (result is null)
+            return null;
+
+        return dataType switch
+        {
+            Domain.Enums.DataValueType.Bool => Convert.ToBoolean(result),
+            Domain.Enums.DataValueType.Int16 => Convert.ToInt16(result),
+            Domain.Enums.DataValueType.UInt16 => Convert.ToUInt16(result),
+            Domain.Enums.DataValueType.Int32 => Convert.ToInt32(result),
+            Domain.Enums.DataValueType.UInt32 => Convert.ToUInt32(result),
+            Domain.Enums.DataValueType.Float => Convert.ToSingle(result),
+            Domain.Enums.DataValueType.Int64 => Convert.ToInt64(result),
+            Domain.Enums.DataValueType.UInt64 => Convert.ToUInt64(result),
+            Domain.Enums.DataValueType.String => Convert.ToString(result),
+            _ => Convert.ToDouble(result)
+        };
+    }
+
+    private static double CalculateWeightedAverage(IReadOnlyList<double> values, IReadOnlyList<double> weights)
+    {
+        if (values.Count == 0 || values.Count != weights.Count)
+            throw new ArgumentException("权重数量必须与数据点数量一致");
+        var totalWeight = weights.Sum();
+        if (Math.Abs(totalWeight) < double.Epsilon)
+            throw new ArgumentException("权重总和不能为 0");
+        return values.Zip(weights, (value, weight) => value * weight).Sum() / totalWeight;
+    }
+
+    private static double EvaluateCalculationExpression(string expression, IReadOnlyDictionary<string, object?> values)
+    {
+        var processedExpression = expression;
+        foreach (var tag in values.Keys.OrderByDescending(tag => tag.Length))
+        {
+            var escapedTag = System.Text.RegularExpressions.Regex.Escape(tag);
+            processedExpression = System.Text.RegularExpressions.Regex.Replace(
+                processedExpression,
+                $"(?<!\\[)(?<!\\w){escapedTag}(?!\\w)(?!\\])",
+                $"[{tag}]");
+        }
+
+        var expressionObject = new Expression(processedExpression);
+        foreach (var item in values)
+            expressionObject.Parameters[item.Key] = Convert.ToDouble(item.Value ?? 0);
+
+        return Convert.ToDouble(expressionObject.Evaluate());
     }
 
     #region 辅助方法
@@ -610,12 +816,64 @@ public class RuleEngine : IRuleEngine
         if (value == null)
             return false;
 
+        if (value is string text)
+        {
+            text = text.Trim();
+            if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase) &&
+                ulong.TryParse(text[2..], System.Globalization.NumberStyles.AllowHexSpecifier,
+                    System.Globalization.CultureInfo.InvariantCulture, out var prefixedHex))
+            {
+                result = prefixedHex;
+                return true;
+            }
+
+            // Modbus Hex 点位以字符串返回（例如 "307C"），范围/变化率校验仍应按数值执行。
+            var hasHexLetter = text.Any(char.IsLetter);
+            var hasDigit = text.Any(char.IsDigit);
+            if (hasHexLetter && hasDigit &&
+                ulong.TryParse(text, System.Globalization.NumberStyles.AllowHexSpecifier,
+                    System.Globalization.CultureInfo.InvariantCulture, out var hexValue))
+            {
+                result = hexValue;
+                return true;
+            }
+
+            if (text.StartsWith("0b", StringComparison.OrdinalIgnoreCase) &&
+                ConvertBinaryToDouble(text[2..], out result))
+                return true;
+
+            if (text.Length > 2 && text.All(character => character is '0' or '1') &&
+                ConvertBinaryToDouble(text, out result))
+                return true;
+        }
+
         try
         {
             result = Convert.ToDouble(value);
             return true;
         }
         catch
+        {
+            return false;
+        }
+    }
+
+    private static bool ConvertBinaryToDouble(string text, out double result)
+    {
+        result = 0;
+        if (string.IsNullOrEmpty(text) || text.Any(character => character is not ('0' or '1')))
+            return false;
+
+        try
+        {
+            result = Convert.ToInt64(text, 2);
+            return true;
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+        catch (OverflowException)
         {
             return false;
         }

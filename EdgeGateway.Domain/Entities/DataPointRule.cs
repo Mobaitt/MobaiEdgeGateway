@@ -67,6 +67,10 @@ public class DataPointRule
         set => DataPointIdsJson = value != null && value.Count > 0 ? JsonSerializer.Serialize(value) : null;
     }
 
+    /// <summary>由规则查询服务填充的数据点显示名称（不持久化）。</summary>
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public List<string> DataPointDisplayNames { get; set; } = new();
+
     /// <summary>创建时间</summary>
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

@@ -20,6 +20,29 @@
 
     <!-- 主内容区域 -->
     <div class="main-content">
+      <!-- 搜索工具栏 -->
+      <div class="mapping-toolbar eg-toolbar-surface">
+        <div class="toolbar-left">
+          <el-input
+            v-model="searchText"
+            class="eg-search-input"
+            placeholder="搜索 Tag / 名称..."
+            prefix-icon="Search"
+            clearable
+            style="width: 280px"
+            @input="handleSearch"
+          />
+          <el-select v-model="filterIsEnabled" placeholder="启用状态" clearable style="width: 120px" @change="handleFilterChange">
+            <el-option label="启用" :value="true" />
+            <el-option label="禁用" :value="false" />
+          </el-select>
+          <el-select v-model="filterIsVirtual" placeholder="数据类型" clearable style="width: 120px" @change="handleFilterChange">
+            <el-option label="普通数据点" :value="false" />
+            <el-option label="虚拟数据点" :value="true" />
+          </el-select>
+        </div>
+      </div>
+
       <!-- 已绑定映射列表 -->
       <div class="table-wrap">
         <!-- 批量操作工具栏 -->
@@ -30,29 +53,7 @@
           </el-button>
         </div>
 
-        <!-- 搜索工具栏 -->
-        <div class="mapping-toolbar">
-          <div class="toolbar-left">
-            <el-input
-              v-model="searchText"
-              placeholder="搜索 Tag / 名称..."
-              prefix-icon="Search"
-              clearable
-              style="width: 280px"
-              @input="handleSearch"
-            />
-            <el-select v-model="filterIsEnabled" placeholder="启用状态" clearable style="width: 120px" @change="handleFilterChange">
-              <el-option label="启用" :value="true" />
-              <el-option label="禁用" :value="false" />
-            </el-select>
-            <el-select v-model="filterIsVirtual" placeholder="数据类型" clearable style="width: 120px" @change="handleFilterChange">
-              <el-option label="普通数据点" :value="false" />
-              <el-option label="虚拟数据点" :value="true" />
-            </el-select>
-          </div>
-        </div>
-
-        <el-table :data="mappings" v-loading="loading" row-key="id" @selection-change="handleSelectionChange">
+        <AppTable :data="mappings" :loading="loading" row-key="id" @selection-change="handleSelectionChange">
           <el-table-column type="selection" width="55" :reserve-selection="true" />
 
           <el-table-column label="数据点 Tag" min-width="220">
@@ -85,7 +86,7 @@
               </el-button>
             </template>
           </el-table-column>
-        </el-table>
+        </AppTable>
 
         <!-- 分页 -->
         <div class="pagination-bar eg-pagination-bar">
@@ -126,6 +127,7 @@ import {useRoute, useRouter} from 'vue-router'
 import {ElMessage, ElMessageBox} from 'element-plus'
 import {ArrowLeft, Delete, InfoFilled, Plus, Search} from '@element-plus/icons-vue'
 import EmptyState from '@/components/EmptyState.vue'
+import AppTable from '@/components/AppTable.vue'
 import BindDataPointDialog from '@/dialogs/mapping/BindDataPointDialog.vue'
 import {bindDataPoints, bindVirtualDataPoints, deleteMapping, getMappings, getMappingsPaged} from '@/api/channel'
 import {getDataPoints, getDevices} from '@/api/device'
@@ -428,8 +430,10 @@ onMounted(fetchMappings)
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--bg-base);
+  margin-bottom: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
   flex-shrink: 0;
 }
 

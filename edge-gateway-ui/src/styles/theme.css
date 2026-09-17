@@ -29,6 +29,16 @@
   --theme-button-shadow: 0 10px 28px rgba(11, 18, 32, 0.28);
   --theme-button-highlight: linear-gradient(135deg, rgba(56, 220, 196, 0.96) 0%, rgba(46, 189, 170, 0.96) 100%);
   --theme-button-highlight-hover: linear-gradient(135deg, rgba(60, 231, 209, 1) 0%, rgba(48, 195, 176, 1) 100%);
+  --action-bg: rgba(17, 31, 55, .94);
+  --action-bg-hover: rgba(25, 45, 76, .98);
+  --action-border: rgba(66, 153, 225, .28);
+  --action-border-hover: rgba(90, 165, 230, .48);
+  --action-text: #9bb4d5;
+  --action-text-hover: #c2d5ee;
+  --action-shadow: 0 5px 14px rgba(0, 0, 0, .16);
+  --dropdown-bg: rgba(18, 31, 54, .98);
+  --dropdown-shadow: 0 16px 36px rgba(0, 0, 0, .34);
+  --loading-mask-bg: rgba(10, 14, 26, .7);
 
   --font-ui: 'Syne', sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
@@ -91,6 +101,16 @@
   --theme-button-shadow: 0 12px 24px rgba(15, 168, 148, 0.18);
   --theme-button-highlight: linear-gradient(135deg, #18d2bb 0%, #0fa894 100%);
   --theme-button-highlight-hover: linear-gradient(135deg, #22ddc5 0%, #12b39e 100%);
+  --action-bg: #eef4fc;
+  --action-bg-hover: #e2edf9;
+  --action-border: rgba(57, 119, 216, .26);
+  --action-border-hover: rgba(57, 119, 216, .46);
+  --action-text: #49627f;
+  --action-text-hover: #275aa4;
+  --action-shadow: 0 5px 14px rgba(39, 87, 164, .1);
+  --dropdown-bg: rgba(255, 255, 255, .98);
+  --dropdown-shadow: 0 16px 36px rgba(39, 87, 164, .16);
+  --loading-mask-bg: rgba(244, 247, 251, .72);
 
   --el-color-primary: #0fa894;
   --el-color-primary-dark-2: #0c907f;
