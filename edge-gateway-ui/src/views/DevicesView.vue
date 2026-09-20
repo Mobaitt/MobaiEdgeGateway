@@ -358,8 +358,10 @@ onUnmounted(() => {
   align-items: center;
   gap: 12px;
   min-height: 58px;
+  min-width: 0;
   margin-bottom: 20px;
   padding: 10px 14px;
+  flex-wrap: wrap;
 }
 
 .total-hint {
@@ -370,8 +372,9 @@ onUnmounted(() => {
 
 .devices-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr));
   gap: 20px;
+  min-width: 0;
 }
 
 .device-card {
@@ -385,6 +388,8 @@ onUnmounted(() => {
   transition: all 0.25s ease;
   position: relative;
   overflow: hidden;
+  min-width: 0;
+  min-height: 360px;
 
   &::before {
     content: '';
@@ -467,6 +472,7 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 8px;
   padding: 8px 0;
+  flex: 1 1 auto;
 }
 
 .device-name {
@@ -536,17 +542,22 @@ onUnmounted(() => {
 
 .card-foot {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 10px;
   border-top: 1px solid var(--border-subtle);
   padding-top: 12px;
   margin-top: 4px;
 }
 
+.card-foot { margin-top: auto; }
+
 .stats-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 16px;
+  min-width: 0;
 }
 
 .stat-item {
@@ -577,6 +588,8 @@ onUnmounted(() => {
 .foot-actions {
   display: flex;
   align-items: center;
+  margin-left: auto;
+  flex-shrink: 0;
   gap: 4px;
 
   .el-button {
@@ -586,6 +599,16 @@ onUnmounted(() => {
 }
 
 .device-card.add-card {
-  min-height: 200px;
+  min-height: 360px;
+}
+
+@media (max-width: 640px) {
+  .toolbar > .el-input,
+  .toolbar > .el-select { width: 100% !important; }
+  .total-hint { width: 100%; margin-left: 0; }
+  .devices-grid { gap: 14px; }
+  .device-card { padding: 16px; }
+  .card-foot { flex-direction: column; }
+  .foot-actions { margin-left: 0; }
 }
 </style>

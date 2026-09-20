@@ -1,18 +1,18 @@
 <template>
   <div class="data-point-table">
-    <AppTable :data="data" :loading="loading" row-key="id">
-      <el-table-column type="index" label="#" width="50" align="center" />
+    <AppTable :data="data" :loading="loading" row-key="id" table-layout="auto">
+      <el-table-column type="index" label="#" min-width="50" align="center" header-align="left" />
 
-      <el-table-column prop="tag" label="Tag" min-width="220">
+      <el-table-column prop="tag" label="Tag" min-width="180" header-align="left" show-overflow-tooltip>
         <template #default="{ row }">
           <span class="mono tag-text">{{ row.tag }}</span>
           <el-tag v-if="row.isVirtual" size="small" type="warning" class="virtual-tag">虚拟</el-tag>
         </template>
       </el-table-column>
 
-      <el-table-column prop="name" label="名称" width="140" />
+      <el-table-column prop="name" label="名称" min-width="120" header-align="left" show-overflow-tooltip />
 
-      <el-table-column prop="address" label="地址" width="120">
+      <el-table-column prop="address" label="地址" min-width="100" header-align="left">
         <template #default="{ row }">
           <span v-if="!row.isVirtual" class="mono addr-text">
             {{ row.address }}<span v-if="row.modbusBitIndex !== null && row.modbusBitIndex !== undefined"> · Bit{{ row.modbusBitIndex }}</span>
@@ -21,15 +21,15 @@
         </template>
       </el-table-column>
 
-      <el-table-column prop="dataType" label="类型" width="180" align="center">
+      <el-table-column prop="dataType" label="类型" min-width="120" align="center" header-align="left">
         <template #default="{ row }">
           <span class="badge info mono">{{ getDataTypeLabel(row) }}</span>
         </template>
       </el-table-column>
 
-      <el-table-column prop="unit" label="单位" width="80" align="center" />
+      <el-table-column prop="unit" label="单位" min-width="80" align="center" header-align="left" />
 
-      <el-table-column label="实时值" width="150" align="center">
+      <el-table-column label="实时值" min-width="120" align="center" header-align="left">
         <template #default="{ row }">
           <span v-if="getRealtimeData(row)" class="badge mono realtime-value">
             {{ formatRowValue(row) }}
@@ -39,7 +39,7 @@
         </template>
       </el-table-column>
 
-      <el-table-column label="质量" width="140" align="center">
+      <el-table-column label="质量" min-width="100" align="center" header-align="left">
         <template #default="{ row }">
           <span v-if="getRealtimeData(row)" class="badge mono" :class="getQualityClass(getRealtimeData(row)!.quality)">
             {{ getRealtimeData(row)!.quality }}
@@ -48,7 +48,7 @@
         </template>
       </el-table-column>
 
-      <el-table-column label="启用" width="80" align="center">
+      <el-table-column label="启用" min-width="80" align="center" header-align="left">
         <template #default="{ row }">
           <el-switch
             v-model="row.isEnabled"
@@ -60,13 +60,13 @@
         </template>
       </el-table-column>
 
-      <el-table-column prop="createdAt" label="创建时间" width="180">
+      <el-table-column prop="createdAt" label="创建时间" min-width="160" header-align="left">
         <template #default="{ row }">
           <span class="mono time-text">{{ formatDateTime(row.createdAt) }}</span>
         </template>
       </el-table-column>
 
-      <el-table-column label="操作" width="240" align="right" fixed="right">
+      <el-table-column label="操作" min-width="190" align="left" header-align="left" class-name="data-point-actions-column">
         <template #default="{ row }">
           <el-button
             v-if="!row.isVirtual && row.isControllable"
@@ -144,6 +144,7 @@ const getRealtimeData = (row: DataPointRow) => props.realtimeData[row.tag] || nu
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
 }
 
 .virtual-tag { margin-left: 6px; }
@@ -164,6 +165,23 @@ const getRealtimeData = (row: DataPointRow) => props.realtimeData[row.tag] || nu
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
+}
+
+:deep(.app-table .data-point-actions-column .cell) {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+  gap: 4px;
+  overflow: visible;
+  white-space: nowrap;
+}
+
+:deep(.app-table .data-point-actions-column .el-button) {
+  flex: 0 0 auto;
+  margin-left: 0;
+  white-space: nowrap;
 }
 
 :deep(.app-table .el-table__inner-wrapper) {

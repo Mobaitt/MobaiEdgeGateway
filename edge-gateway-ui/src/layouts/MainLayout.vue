@@ -290,6 +290,8 @@ onUnmounted(() => {
 /* ===== 主内容区 ===== */
 .main-content {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
   display: flex; flex-direction: column;
   overflow: hidden;
 }
@@ -355,8 +357,27 @@ onUnmounted(() => {
 /* 页面区 */
 .page-body {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 24px 28px;
+}
+
+@media (max-width: 900px) {
+  .topbar { padding: 0 16px; }
+  .topbar-right { gap: 8px; }
+  .theme-toggle span, .sys-time, .version-tag { display: none; }
+  .page-body { padding: 18px 16px; }
+}
+
+@media (max-width: 640px) {
+  .sidebar { width: 64px; min-width: 64px; }
+  .sidebar-logo { justify-content: center; padding-inline: 0; }
+  .status-badge, .nav-label, .nav-count { display: none; }
+  .nav-menu { padding-inline: 8px; }
+  .nav-item { justify-content: center; padding-inline: 10px; }
+  .nav-item.active { border-left: 0; box-shadow: inset 2px 0 var(--cyan); }
 }
 
 /* 过渡动画 */

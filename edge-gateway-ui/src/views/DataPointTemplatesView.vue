@@ -33,7 +33,7 @@
         <el-table-column label="更新时间" width="190">
           <template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="220" align="right" fixed="right">
+        <el-table-column label="操作" width="220" align="right">
           <template #default="{ row }">
             <el-button text type="primary" @click="openTemplate(row.id)">查看点位</el-button>
             <el-button text type="danger" @click="removeTemplate(row)">删除</el-button>

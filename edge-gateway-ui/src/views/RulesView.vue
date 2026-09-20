@@ -57,7 +57,7 @@
           </template>
         </el-table-column>
         <el-table-column prop="description" label="描述" min-width="150" show-overflow-tooltip />
-        <el-table-column label="操作" width="280" fixed="right">
+        <el-table-column label="操作" width="280">
           <template #default="{ row }">
             <el-button size="small" text @click="openEditDialog(row)">
               <el-icon><Edit /></el-icon> 编辑

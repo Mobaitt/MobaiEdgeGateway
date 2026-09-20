@@ -27,23 +27,29 @@ defineProps<{
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px 24px;
   margin-bottom: 24px;
 }
 .header-left {
   display: flex;
   align-items: center;
   gap: 14px;
+  min-width: 0;
 }
 .title-block {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
 }
 .page-title {
   font-size: 22px;
   font-weight: 800;
   color: var(--text-primary);
   letter-spacing: -0.01em;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 .page-desc {
   font-size: 13px;
@@ -52,5 +58,12 @@ defineProps<{
 }
 .header-actions {
   flex-shrink: 0;
+  margin-left: auto;
+}
+
+@media (max-width: 640px) {
+  .page-header { margin-bottom: 18px; }
+  .header-actions { width: 100%; margin-left: 0; }
+  .header-actions > * { max-width: 100%; }
 }
 </style>

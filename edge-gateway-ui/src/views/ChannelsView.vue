@@ -235,8 +235,9 @@ onMounted(() => {
 /* 卡片网格 */
 .channels-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
   gap: 20px;
+  min-width: 0;
 }
 
 .channel-card {
@@ -250,6 +251,7 @@ onMounted(() => {
   transition: all 0.25s ease;
   position: relative;
   overflow: hidden;
+  min-width: 0;
 
   &::before {
     content: '';
@@ -361,8 +363,9 @@ onMounted(() => {
 /* 卡片底部 */
 .card-foot {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
   border-top: 1px solid var(--border-subtle);
   padding-top: 12px;
   margin-top: 4px;
@@ -384,6 +387,8 @@ onMounted(() => {
 .foot-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 4px;
 
   .el-button {
@@ -398,5 +403,11 @@ onMounted(() => {
 
 .channel-card.add-card {
   min-height: 180px;
+}
+
+@media (max-width: 640px) {
+  .channels-grid { gap: 14px; }
+  .channel-card { padding: 16px; }
+  .foot-actions { justify-content: flex-start; }
 }
 </style>
